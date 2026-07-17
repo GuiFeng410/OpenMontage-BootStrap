@@ -1,0 +1,47 @@
+{
+  // Merge into OpenClaw openclaw.json — P0 least privilege
+  tools: {
+    profile: "messaging",
+    allow: [
+      "bundle-mcp",
+      "openmontage-doctor__*"
+    ],
+    deny: [
+      "group:runtime",
+      "browser",
+      "gateway"
+    ],
+    sandbox: {
+      tools: {
+        allow: [
+          "bundle-mcp",
+          "openmontage-doctor__*"
+        ]
+      }
+    }
+  },
+  agents: {
+    defaults: {
+      sandbox: {
+        mode: "all",
+        workspaceAccess: "none"
+      },
+      skills: [
+        "openmontage-router",
+        "openmontage-gates-intro"
+      ]
+    }
+  },
+  skills: {
+    load: {
+      extraDirs: [
+        "<OPENMONTAGE_REPO_ROOT>/openmontage/skills"
+      ],
+      watch: true
+    },
+    entries: {
+      "openmontage-router": { enabled: true },
+      "openmontage-gates-intro": { enabled: true }
+    }
+  }
+}

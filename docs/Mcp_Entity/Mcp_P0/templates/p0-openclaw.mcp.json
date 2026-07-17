@@ -1,0 +1,29 @@
+{
+  "mcp": {
+    "servers": {
+      "openmontage-doctor": {
+        "command": "python",
+        "args": ["-m", "openmontage.mcp.doctor"],
+        "cwd": "<OPENMONTAGE_REPO_ROOT>",
+        "env": {
+          "OPENMONTAGE_PROJECTS_DIR": "<PROJECTS_DIR>",
+          "PYTHONUTF8": "1"
+        },
+        "toolFilter": {
+          "include": [
+            "doctor",
+            "provider_menu_summary",
+            "list_pipelines",
+            "list_projects",
+            "get_project_state",
+            "get_next_stage",
+            "validate_artifact",
+            "validate_checkpoint",
+            "estimate_cost"
+          ],
+          "exclude": ["init_project"]
+        }
+      }
+    }
+  }
+}
