@@ -1,4 +1,4 @@
-"""OpenMontage doctor MCP server (stdio) — P0 read-only diagnosis."""
+"""OpenMontage doctor MCP server (stdio) — P0 diagnosis + P1 sandboxed project API."""
 
 from __future__ import annotations
 
@@ -12,8 +12,11 @@ from openmontage.mcp.doctor import tools as T
 mcp = FastMCP(
     "openmontage-doctor",
     instructions=(
-        "OpenMontage P0 doctor: environment diagnosis, capability menu, "
-        "and sandboxed project state. No media generation. No default write access."
+        "OpenMontage doctor: environment diagnosis, capability menu, "
+        "sandboxed project state. Default Agent is read-only. "
+        "Production Agent may set OPENMONTAGE_P1_ALLOW_WRITES=true for "
+        "checkpoint/artifact writes under OPENMONTAGE_PROJECTS_DIR only. "
+        "No media generation here — use openmontage-media."
     ),
 )
 
@@ -31,7 +34,7 @@ def _wrap(fn, *args, **kwargs) -> dict[str, Any]:
 
 @mcp.tool()
 def doctor(deep: bool = False) -> dict[str, Any]:
-    """Probe local binaries, Remotion/Piper, and tool registry. Read-only."""
+    """Probe local binaries, Remotion/Piper, and tool registry."""
     return _wrap(T.run_doctor, deep=deep)
 
 
@@ -84,10 +87,71 @@ def estimate_cost(tool_name: str, inputs_json: str = "{}") -> dict[str, Any]:
 
 
 @mcp.tool()
+def read_artifact(path: str) -> dict[str, Any]:
+    """Read a JSON/text artifact inside the projects sandbox."""
+    return _wrap(T.run_read_artifact, path)
+
+
+@mcp.tool()
+def write_artifact(path: str, content_json: str) -> dict[str, Any]:
+    """Write JSON artifact under sandbox (requires OPENMONTAGE_P1_ALLOW_WRITES)."""
+    return _wrap(T.run_write_artifact, path, content_json)
+
+
+@mcp.tool()
+def write_checkpoint(
+    project_id: str,
+    stage: str,
+    status: str,
+    artifacts_json: str = "{}",
+    pipeline_type: str = "",
+    human_approval_required: bool = False,
+    human_approved: bool = False,
+    approval_note: str = "",
+) -> dict[str, Any]:
+    """Write a stage checkpoint under sandbox (requires P1 write flag)."""
+    return _wrap(
+        T.run_write_checkpoint,
+        project_id,
+        stage,
+        status,
+        artifacts_json,
+        pipeline_type,
+        human_approval_required,
+        human_approved,
+        approval_note,
+    )
+
+
+@mcp.tool()
+def approve_checkpoint(
+    project_id: str,
+    stage: str,
+    approval_text: str,
+    artifacts_json: str = "{}",
+    pipeline_type: str = "",
+) -> dict[str, Any]:
+    """Mark a gated stage completed using the user's approval text (required)."""
+    return _wrap(
+        T.run_approve_checkpoint,
+        project_id,
+        stage,
+        approval_text,
+        artifacts_json,
+        pipeline_type,
+    )
+
+
+@mcp.tool()
+def append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
+    """Append a decision_log entry (sandbox; requires P1 write flag)."""
+    return _wrap(T.run_append_decision, project_id, decision_json)
+
+
+@mcp.tool()
 def init_project(project_id: str, title: str, pipeline_type: str) -> dict[str, Any]:
-    """Disabled for default P0 Agent — always returns a policy error."""
-    _ = (project_id, title, pipeline_type)
-    return _wrap(T.run_init_project_denied)
+    """Create project layout under sandbox (requires OPENMONTAGE_P1_ALLOW_WRITES)."""
+    return _wrap(T.run_init_project, project_id, title, pipeline_type)
 
 
 def main() -> None:

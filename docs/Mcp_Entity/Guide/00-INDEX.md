@@ -27,6 +27,12 @@
 7. P0 交付：[../Mcp_P0/00-INDEX.md](../Mcp_P0/00-INDEX.md)  
    doctor MCP + router/gates Skill 的安装模板与验收清单。
 
+8. P1 交付：[../Mcp_P1/00-INDEX.md](../Mcp_P1/00-INDEX.md)  
+   media MCP + animated-explainer / production-contract Skills 的安装模板与验收清单。
+
+8. P1 交付：[../Mcp_P1/00-INDEX.md](../Mcp_P1/00-INDEX.md)  
+   media MCP + animated-explainer / production-contract Skills 的安装模板与验收清单。
+
 ## 一页结论
 
 - **Skill 是文件夹，不是单个 RPC。** 最小结构为 `<skill>/SKILL.md`，正文是 Markdown，顶部是 YAML frontmatter。

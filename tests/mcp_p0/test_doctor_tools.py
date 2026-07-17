@@ -16,13 +16,14 @@ def test_envelope_has_versions() -> None:
     assert payload["openmontage_version"]
 
 
-def test_doctor_marks_no_video_production() -> None:
+def test_doctor_default_write_policy() -> None:
     data = run_doctor(deep=False)
-    assert data["can_produce_video_now"] is False
     assert data["p0_write_policy"]["default_agent_writes"] is False
+    assert isinstance(data["can_produce_video_now"], bool)
     assert "binaries" in data
     assert "registry" in data
     assert isinstance(data["registry"].get("tool_count"), int)
+    assert "openmontage-animated-explainer" in data["installed_skill_packs"]
 
 
 def test_list_pipelines_sees_animated_explainer() -> None:
@@ -31,6 +32,8 @@ def test_list_pipelines_sees_animated_explainer() -> None:
     packs = data["skill_packs_present"]
     assert "openmontage-router" in packs
     assert "openmontage-gates-intro" in packs
+    assert "openmontage-animated-explainer" in packs
+    assert "openmontage-production-contract" in packs
 
 
 def test_validate_artifact_under_sandbox(monkeypatch, tmp_path: Path) -> None:

@@ -239,8 +239,22 @@ def run_doctor(*, deep: bool = False) -> dict[str, Any]:
         summary=summary,
     )
 
-    # P0 never claims video production is available — media MCP is P1.
-    can_produce = False
+    skill_packs = []
+    skills_root = REPO_ROOT / "openmontage" / "skills"
+    if skills_root.exists():
+        for child in sorted(skills_root.iterdir()):
+            if (child / "SKILL.md").exists() or (child / "skill.md").exists():
+                skill_packs.append(child.name)
+
+    media_module = (REPO_ROOT / "openmontage" / "mcp" / "media" / "server.py").exists()
+    explainer_skill = "openmontage-animated-explainer" in skill_packs
+    can_produce = bool(
+        media_module
+        and explainer_skill
+        and piper.get("ok")
+        and remotion.get("ok")
+        and ffmpeg_ok
+    )
     next_p1 = []
     if not piper.get("ok"):
         next_p1.append("piper-tts + Chinese voice model")
@@ -248,14 +262,12 @@ def run_doctor(*, deep: bool = False) -> dict[str, Any]:
         next_p1.append("remotion-composer npm install")
     if not ffmpeg_ok:
         next_p1.append("ffmpeg on PATH")
-    next_p1.append("P1 openmontage-media MCP + explainer Skill Pack")
-
-    skill_packs = []
-    skills_root = REPO_ROOT / "openmontage" / "skills"
-    if skills_root.exists():
-        for child in sorted(skills_root.iterdir()):
-            if (child / "SKILL.md").exists() or (child / "skill.md").exists():
-                skill_packs.append(child.name)
+    if not media_module:
+        next_p1.append("P1 openmontage-media MCP")
+    if not explainer_skill:
+        next_p1.append("openmontage-animated-explainer Skill Pack")
+    if can_produce:
+        next_p1 = ["Ready for zero-key animated-explainer (register media MCP + production agent)"]
 
     return {
         "tier": tier,
@@ -281,7 +293,12 @@ def run_doctor(*, deep: bool = False) -> dict[str, Any]:
         "next_install_for_p1": next_p1,
         "p0_write_policy": {
             "default_agent_writes": False,
-            "note": "init_project and host writes are denied for the default Agent; isolate files under OPENMONTAGE_PROJECTS_DIR sandbox only when an elevated agent is explicitly configured.",
+            "p1_sandbox_writes": p1_writes_enabled(),
+            "note": (
+                "Default Agent: no host writes. Production Agent: enable "
+                "OPENMONTAGE_P1_ALLOW_WRITES=true and keep all paths under "
+                "OPENMONTAGE_PROJECTS_DIR sandbox; attach openmontage-media MCP."
+            ),
         },
         "_warnings": warnings,
     }
@@ -482,11 +499,157 @@ def writes_enabled() -> bool:
     }
 
 
+def p1_writes_enabled() -> bool:
+    flag = os.environ.get("OPENMONTAGE_P1_ALLOW_WRITES", "").strip().lower()
+    return flag in {"1", "true", "yes", "on"} or writes_enabled()
+
+
+def require_p1_writes() -> None:
+    if not p1_writes_enabled():
+        raise ConfigError(
+            "Sandbox project writes require OPENMONTAGE_P1_ALLOW_WRITES=true "
+            "on the production Agent (default Agent remains read-only)."
+        )
+
+
 def run_init_project_denied() -> dict[str, Any]:
     """Default Agent: refuse host writes (P0 policy)."""
     raise ConfigError(
-        "init_project is disabled for the default P0 Agent. "
-        "File writes stay inside an elevated sandbox agent only "
-        "(set OPENMONTAGE_P0_ALLOW_WRITES=true on a non-default agent). "
-        "P0 itself is diagnosis-only."
+        "init_project is disabled for the default Agent. "
+        "Use the production Agent with OPENMONTAGE_P1_ALLOW_WRITES=true; "
+        "files stay under OPENMONTAGE_PROJECTS_DIR only."
     )
+
+
+def run_init_project(project_id: str, title: str, pipeline_type: str) -> dict[str, Any]:
+    require_p1_writes()
+    _ensure_repo_on_path()
+    from lib.checkpoint import init_project
+
+    root = require_projects_root()
+    # Validate id via sandbox helper
+    target = project_dir(project_id)
+    path = init_project(
+        project_id,
+        title=title,
+        pipeline_type=pipeline_type,
+        pipeline_dir=root,
+    )
+    return {
+        "project_id": project_id,
+        "project_dir": str(path),
+        "title": title,
+        "pipeline_type": pipeline_type,
+        "sandbox_root": str(root),
+        "resolved": str(target),
+    }
+
+
+def run_read_artifact(path: str) -> dict[str, Any]:
+    resolved = resolve_under_projects(path)
+    if not resolved.exists():
+        raise DoctorError(f"Artifact not found: {resolved}", code="not_found")
+    text = resolved.read_text(encoding="utf-8")
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError:
+        data = None
+    return {"path": str(resolved), "json": data, "text": text if data is None else None}
+
+
+def run_write_artifact(path: str, content_json: str) -> dict[str, Any]:
+    require_p1_writes()
+    resolved = resolve_under_projects(path)
+    try:
+        payload = json.loads(content_json)
+    except json.JSONDecodeError as exc:
+        raise DoctorError(f"content_json invalid: {exc}", code="bad_request") from exc
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    resolved.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"path": str(resolved), "bytes": resolved.stat().st_size}
+
+
+def run_write_checkpoint(
+    project_id: str,
+    stage: str,
+    status: str,
+    artifacts_json: str = "{}",
+    pipeline_type: str = "",
+    human_approval_required: bool = False,
+    human_approved: bool = False,
+    approval_note: str = "",
+) -> dict[str, Any]:
+    require_p1_writes()
+    _ensure_repo_on_path()
+    from lib.checkpoint import write_checkpoint
+
+    root = require_projects_root()
+    project_dir(project_id)  # validate id
+    try:
+        artifacts = json.loads(artifacts_json) if artifacts_json else {}
+    except json.JSONDecodeError as exc:
+        raise DoctorError(f"artifacts_json invalid: {exc}", code="bad_request") from exc
+    if not isinstance(artifacts, dict):
+        raise DoctorError("artifacts_json must be an object", code="bad_request")
+    metadata = {}
+    if approval_note:
+        metadata["approval_note"] = approval_note
+    path = write_checkpoint(
+        root,
+        project_id,
+        stage,
+        status,
+        artifacts,
+        pipeline_type=pipeline_type or None,
+        human_approval_required=human_approval_required,
+        human_approved=human_approved,
+        metadata=metadata or None,
+    )
+    return {"checkpoint_path": str(path), "stage": stage, "status": status}
+
+
+def run_approve_checkpoint(
+    project_id: str,
+    stage: str,
+    approval_text: str,
+    artifacts_json: str = "{}",
+    pipeline_type: str = "",
+) -> dict[str, Any]:
+    """Complete a gated stage only with explicit user approval text from the Agent."""
+    if not approval_text or not approval_text.strip():
+        raise ConfigError(
+            "approve_checkpoint requires approval_text from the user's chat reply; "
+            "MCP cannot invent approval."
+        )
+    return run_write_checkpoint(
+        project_id=project_id,
+        stage=stage,
+        status="completed",
+        artifacts_json=artifacts_json,
+        pipeline_type=pipeline_type,
+        human_approval_required=True,
+        human_approved=True,
+        approval_note=approval_text.strip(),
+    )
+
+
+def run_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
+    require_p1_writes()
+    _ensure_repo_on_path()
+    from lib.checkpoint import _merge_decision_log
+
+    root = require_projects_root()
+    project_dir(project_id)
+    try:
+        decision = json.loads(decision_json)
+    except json.JSONDecodeError as exc:
+        raise DoctorError(f"decision_json invalid: {exc}", code="bad_request") from exc
+    if isinstance(decision, dict) and "decisions" not in decision:
+        decision = {"version": "1.0", "project_id": project_id, "decisions": [decision]}
+    if not isinstance(decision, dict) or "decisions" not in decision:
+        raise DoctorError(
+            "decision_json must be a decision object or {decisions:[...]}",
+            code="bad_request",
+        )
+    _merge_decision_log(root, project_id, decision)
+    return {"project_id": project_id, "appended": len(decision.get("decisions") or [])}
