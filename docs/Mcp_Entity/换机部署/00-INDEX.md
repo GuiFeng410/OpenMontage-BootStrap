@@ -14,3 +14,4 @@
 - P1：[../Mcp_P1/00-INDEX.md](../Mcp_P1/00-INDEX.md)
 - P2（TTS）：[../Mcp_P2/00-INDEX.md](../Mcp_P2/00-INDEX.md)
 - 配置模板：[../Mcp_P1/templates/](../Mcp_P1/templates/) · [../Mcp_P2/templates/](../Mcp_P2/templates/)
+- **新人三步总览：** [../../新机导入三步/00-INDEX.md](../../新机导入三步/00-INDEX.md)
