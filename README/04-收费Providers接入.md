@@ -1,20 +1,21 @@
 # 04 — 收费 Providers 接入（Skill03）
 
-> 零 Key 出片先完成 [03](./03-零Key最小出片.md)。本文为**可选**收费能力。
+> 前提：安装时已注册门面 + 三个 providers MCP，且零 Key 路径可参考 [03](./03-零Key最小出片.md)。  
+> 本文只做**可选**：往已有 MCP 里填 Key，即可用付费能力。
 
-使用 Skill：`openmontage-bootstrap-providers`（引导）  
+使用 Skill：`openmontage-bootstrap-providers`（引导填 Key）  
 真正生成：`openmontage-providers-tts` / `image` / `video`
 
-## 架构（门面不动）
+## 架构（安装时已注册，Key 后填）
 
 ```text
 openmontage-bootstrap          ← 零 Key setup/produce
-openmontage-providers-tts      ← 付费语音
-openmontage-providers-image    ← 付费生图（C-常用 6）
-openmontage-providers-video    ← 付费生视频（C-常用 6）
+openmontage-providers-tts      ← 付费语音（安装已注册，Key 可选）
+openmontage-providers-image    ← 付费生图
+openmontage-providers-video    ← 付费生视频
 ```
 
-## 1. 配环境变量
+## 1. 在已有 MCP 的 env 里填 Key
 
 | Key | 用途 |
 |-----|------|
@@ -26,28 +27,20 @@ openmontage-providers-video    ← 付费生视频（C-常用 6）
 | `XAI_API_KEY` | grok 图 |
 | `RUNWAY_API_KEY` | runway 视频 |
 | `ELEVENLABS_API_KEY` / `DOUBAO_SPEECH_API_KEY` | 对应 TTS |
-| `OPENMONTAGE_PROJECTS_DIR` | 沙箱根（必填） |
 | `OPENMONTAGE_MAX_COST_USD` | 估价上限（可选） |
 | `OPENMONTAGE_ALLOWED_PROVIDERS` | 白名单，如 `flux,kling`（可选） |
 
-## 2. 注册 MCP（口述/手改）
+填完后**重启**对应 MCP。不必重装项目、不必重配 cwd/command。
 
-模板：
+若安装时漏了某个 providers server，模板仍在 [templates/](./templates/)。
 
-- [templates/providers-tts.mcp.json](./templates/providers-tts.mcp.json)
-- [templates/providers-image.mcp.json](./templates/providers-image.mcp.json)
-- [templates/providers-video.mcp.json](./templates/providers-video.mcp.json)
+## 2. 启用执行 Skill
 
-按需注册 1～3 个 server；`cwd` 为仓库根，`command` 用 `.venv` python。
+`extraDirs` → `<REPO>/openmontage/skills`，按需启用：
 
-## 3. 启用 Skill
+- `openmontage-providers-tts` / `image` / `video`
 
-`extraDirs` → `<REPO>/openmontage/skills`，启用：
-
-- `openmontage-bootstrap-providers`（本引导，可选）  
-- 以及你实际用到的 `openmontage-providers-tts` / `image` / `video`
-
-## 4. 门禁协议（所有付费能力）
+## 3. 门禁协议
 
 ```text
 list_*_providers
@@ -59,9 +52,9 @@ list_*_providers
 
 失败不静默换商。
 
-## 5. 对 Agent 示例口令
+## 4. 对 Agent 示例口令
 
-> 按 Skill03：我要配 Kling 生图+生视频，只口述步骤，先别调用付费 API。
+> 按 Skill03：我要给 Kling 填 Key，只口述改 env，先别调用付费 API。
 
 > list 可用图商；用 flux dry_run 估价，未经确认不要 sample。
 
@@ -70,5 +63,3 @@ list_*_providers
 - **图：** flux · openai · dashscope · kling · google · grok  
 - **视频：** kling（官方）· seedance · sora · veo · minimax · runway  
 - **TTS：** openai · elevenlabs · dashscope · doubao · google · kling  
-
-Stock 素材站另议，不在本文。

@@ -1,9 +1,9 @@
 ---
 name: openmontage-bootstrap-providers
 description: >-
-  BootStrap Skill03: guide paid TTS / image / video provider setup (Keys + MCP
-  registration + gate protocol). Does not call paid APIs itself — hands off to
-  openmontage-providers-tts / image / video.
+  BootStrap Skill03: after install, guide filling paid TTS/image/video API Keys
+  into already-registered provider MCPs and hand off gated generation. Does not
+  call paid APIs itself.
 metadata:
   openclaw:
     requires:
@@ -50,7 +50,8 @@ metadata:
 
 ## 角色
 
-本 Skill **只做收费接入引导**：配 Key、口述注册 MCP、说明门禁协议。  
+本 Skill **只做收费 Key 接入与门禁引导**。  
+安装阶段通常已注册门面 + 三个 providers MCP；此处**优先补 Key**，缺 MCP 时再口述补注册。  
 **不直接调用**付费 API。真正生成交给：
 
 | 能力 | MCP | 执行 Skill |
@@ -88,7 +89,13 @@ metadata:
 问清：只要 TTS、只要图、只要视频，还是组合。  
 建议设置：`OPENMONTAGE_MAX_COST_USD`、`OPENMONTAGE_ALLOWED_PROVIDERS`（逗号白名单）。
 
-### 2. 口述配环境变量（用户本机）
+### 2. 确认 MCP 已在（安装时通常已注册）
+
+若安装 Skill 已配好四个 MCP，**跳过注册**，直接改对应 server 的 `env` 填 Key 并请用户重启 MCP。  
+
+若缺失，再口述补注册（模板：`README/templates/providers-*.mcp.json`）。
+
+### 3. 口述填入环境变量（用户本机 / OpenClaw MCP env）
 
 按需求勾选（同 Key 尽量复用）：
 
@@ -106,29 +113,13 @@ metadata:
 
 另需：`OPENMONTAGE_PROJECTS_DIR`（与门面相同沙箱根）。
 
-### 3. 口述注册 providers MCP（可多选）
+等用户回复「Key 已写入并已重启 MCP」再继续。
 
-模板（仓内，可提交）：
+### 4. 口述启用执行 Skill
 
-- `README/templates/providers-tts.mcp.json`
-- `README/templates/providers-image.mcp.json`
-- `README/templates/providers-video.mcp.json`
+`skills.load.extraDirs` 已含 `<REPO>/openmontage/skills` 时，启用实际用到的：
 
-要点（每个 server）：
-
-- `command`：仓库 `.venv` 的 python  
-- `cwd`：`<REPO>`  
-- `args`：`-m openmontage.mcp.providers_tts` / `providers_image` / `providers_video`  
-- `env`：上表 Key + `OPENMONTAGE_PROJECTS_DIR` + `PYTHONUTF8=1`
-
-等用户回复「MCP 已配好」再继续。
-
-### 4. 口述启用 Skill
-
-`skills.load.extraDirs` 已含 `<REPO>/openmontage/skills` 时，启用：
-
-- 本 Skill：`openmontage-bootstrap-providers`（可选保留）  
-- 对应执行 Skill：`openmontage-providers-tts` / `image` / `video`
+- `openmontage-providers-tts` / `image` / `video`
 
 ### 5. 交接执行
 
@@ -149,20 +140,20 @@ metadata:
 
 Stock（Pexels/Pixabay）**不在本 Skill 范围**（以后单独 stock MCP）。
 
-## 与 Skill01 / 02 的关系
+## 与 Skill01 / 02 / 安装的关系
 
 | Skill | 职责 |
 |-------|------|
+| installer | 拉仓 + 注册 4 MCP + 启用 3 Skill；**不填付费 Key** |
 | 01 setup | 环境 / 零 Key 依赖 |
 | 02 produce | 门面 `produce_*`，默认 Piper |
-| **03 providers（本 Skill）** | 收费接入引导 → 交 providers-* |
+| **03 providers（本 Skill）** | 后补 Key → 交 providers-* |
 
-用户可在零 Key 成片后再按需启用本 Skill，不必一开始就配齐全部 Key。
+用户应先零 Key 成片，再按需开本 Skill 填 Key。
 
 ## 成功标准
 
-- 用户知道要配哪些 Key / 哪个 MCP  
-- 用户已口述确认 MCP + Skill 就绪  
+- 用户在已注册的 providers MCP 中写入所需 Key 并重启  
 - 后续付费调用由对应 `openmontage-providers-*` Skill 按门禁执行  
 
 操作说明：`README/04-收费Providers接入.md`

@@ -11,9 +11,8 @@
 
 拉仓后，仓库内会包含：
 
-- 门面 MCP：`openmontage/mcp/bootstrap/`  
-- Skill：setup / produce / **providers（Skill03）** / installer  
-- 付费 MCP（可选）：`providers_tts` / `providers_image` / `providers_video`  
+- 门面 MCP + 三个 providers MCP（安装时一并注册；付费 Key 可后填）  
+- Skill：setup / produce / providers（Skill03） / installer  
 - MCP 模板：[templates/](./templates/)
 
 ## 阅读顺序（已 clone 之后）
@@ -21,10 +20,11 @@
 | 步 | 文件 | 做什么 |
 |----|------|--------|
 | 0 | [00-安装Skill-先拷贝到OpenClaw.md](./00-安装Skill-先拷贝到OpenClaw.md) | （可选）只装安装 Skill，用一句话拉仓并口述配置 |
-| 1 | [01-手动克隆与配置OpenClaw.md](./01-手动克隆与配置OpenClaw.md) | clone + 口述/手配门面 MCP 与 Skill |
+| — | [流程简版-OpenClaw安装到出片.txt](./流程简版-OpenClaw安装到出片.txt) | 一页流程（有 OpenClaw 时怎么选） |
+| 1 | [01-手动克隆与配置OpenClaw.md](./01-手动克隆与配置OpenClaw.md) | clone + 口述/手配 4 MCP 与 3 Skill |
 | 2 | [02-环境检测与安装.md](./02-环境检测与安装.md) | setup：计划 → 确认 → 安装 → verify |
 | 3 | [03-零Key最小出片.md](./03-零Key最小出片.md) | produce → `final.mp4` |
-| 4 | [04-收费Providers接入.md](./04-收费Providers接入.md) | （可选）TTS / 生图 / 生视频 Key + MCP |
+| 4 | [04-收费Providers接入.md](./04-收费Providers接入.md) | （可选）往已注册 MCP 填付费 Key |
 
 ## 其它
 
