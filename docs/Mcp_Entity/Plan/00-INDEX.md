@@ -14,6 +14,7 @@
 **P0 已交付产物：** [../Mcp_P0/00-INDEX.md](../Mcp_P0/00-INDEX.md)  
 **P1 已交付产物：** [../Mcp_P1/00-INDEX.md](../Mcp_P1/00-INDEX.md)  
 **P2 TTS 已交付：** [../Mcp_P2/00-INDEX.md](../Mcp_P2/00-INDEX.md)  
+**Bootstrap 门面（已实现首版）：** [../Mcp_Bootstrap/00-INDEX.md](../Mcp_Bootstrap/00-INDEX.md)  
 **换机清单：** [../换机部署/00-INDEX.md](../换机部署/00-INDEX.md)
 
-**阅读顺序：** Guide → chance_file/03 → Plan → Mcp_P0 → Mcp_P1 → Mcp_P2 → 换机部署。
+**阅读顺序：** Guide → chance_file/03 → Plan → Mcp_P0 → Mcp_P1 → Mcp_P2 → Mcp_Bootstrap → 换机部署。

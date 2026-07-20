@@ -1,7 +1,7 @@
 # 门面 MCP 与 Skill 规划备忘
 
-> 状态：已对齐需求，**待开始编写**（本文件只记结论，不代替实现）  
-> 日期：2026-07-20
+> 状态：**首版已实现** → 见 [../Mcp_Bootstrap/00-INDEX.md](../Mcp_Bootstrap/00-INDEX.md)  
+> 日期：2026-07-20（更新）
 
 ## 产品目标
 
@@ -12,10 +12,12 @@
 | 项 | 结论 |
 |----|------|
 | 入口 | 对外 **1 个 MCP**（门面）；内部复用现有 doctor/media 逻辑，不重写出片 |
-| 权限 | 允许自动改 PATH、装依赖、下载仓库到指定路径 |
+| 权限 | 允许自动改 PATH、装依赖；**高危默认 dry_run，确认后执行** |
+| 启动 | 首版 **手动 clone**（不做 seed pip）；种子包后续迭代 |
 | Skill01 | 检测 / 安装环境（驱动门面 MCP） |
-| Skill02 | 零 Key 出片；付费 TTS 仅可选教学 |
+| Skill02 | 零 Key **最简**出片；不接 diagram/stitch 全家桶；付费 TTS 仅可选教学 |
 | Skill03 | 各类 Key / 扩展配置 — **以后再做** |
+| 文档 | `docs/Mcp_Entity/Mcp_Bootstrap/` |
 | 与旧 MCP | 保留 doctor/media/providers-tts；用户最小路径可不感知 |
 
 ## 仓库镜像（门面「拉仓」应支持双源）
@@ -25,19 +27,7 @@
 | 1 主 | GitHub | https://github.com/GuiFeng410/OpenMontage-BootStrap |
 | 2 备 | Gitee | https://gitee.com/rory_-3232/open-montage-boot-strap |
 
-门面 MCP 实现拉仓时：先试 GitHub，失败再试 Gitee（或由用户指定 URL）。
+## 下一步
 
-## 本地 git remote 约定（开发机）
-
-| remote | URL |
-|--------|-----|
-| `bootstrap` | GitHub BootStrap |
-| `gitee` | Gitee BootStrap |
-| `origin` | 上游 calesthio/OpenMontage（勿误推除非明确要求） |
-
-## 下一步（开始编写时）
-
-1. 定工具清单：`bootstrap_*` + `produce_*`（薄封装）  
-2. 危险操作确认点（改 PATH / 装系统包）  
-3. 写 Skill01 / Skill02 + OpenClaw 模板  
-4. 自检：`can_produce` 类检查通过后再进 Skill02  
+首版代码已落地。验证：`pytest tests/mcp_bootstrap`；OpenClaw 按 [../Mcp_Bootstrap/02-OpenClaw安装.md](../Mcp_Bootstrap/02-OpenClaw安装.md) 配置后实机试跑。  
+后续迭代：seed pip 包、双源自动同步校验、produce 工具面扩展。

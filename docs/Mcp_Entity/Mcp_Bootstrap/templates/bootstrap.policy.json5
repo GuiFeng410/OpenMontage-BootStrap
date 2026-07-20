@@ -1,0 +1,8 @@
+// OpenClaw / eClaw tool policy sketch — allow bootstrap facade only for minimal path
+{
+  allow: [
+    "openmontage-bootstrap__*",
+  ],
+  // Optional: deny accidental paid TTS if that MCP is also registered
+  // deny: ["openmontage-providers-tts__*"],
+}
