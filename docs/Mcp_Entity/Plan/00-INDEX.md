@@ -9,6 +9,7 @@
 |------|------|------|
 | 01 | [01-P0实现计划.md](./01-P0实现计划.md) | P0：doctor MCP + router/gates Skill |
 | 02 | [02-P2-高级TTS实现计划.md](./02-P2-高级TTS实现计划.md) | P2 切片：providers-tts（其它插件暂缓） |
+| 03 | [03-门面MCP与Skill规划备忘.md](./03-门面MCP与Skill规划备忘.md) | BootStrap 门面 MCP + 双镜像（GitHub/Gitee），待编写 |
 
 **P0 已交付产物：** [../Mcp_P0/00-INDEX.md](../Mcp_P0/00-INDEX.md)  
 **P1 已交付产物：** [../Mcp_P1/00-INDEX.md](../Mcp_P1/00-INDEX.md)  
