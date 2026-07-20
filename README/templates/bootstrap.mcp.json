@@ -1,0 +1,16 @@
+{
+  "mcp": {
+    "servers": {
+      "openmontage-bootstrap": {
+        "command": "python",
+        "args": ["-m", "openmontage.mcp.bootstrap"],
+        "cwd": "<OPENMONTAGE_REPO_ROOT>",
+        "env": {
+          "OPENMONTAGE_PROJECTS_DIR": "<PROJECTS_DIR>",
+          "PYTHONUTF8": "1",
+          "OPENMONTAGE_P1_ALLOW_WRITES": "true"
+        }
+      }
+    }
+  }
+}

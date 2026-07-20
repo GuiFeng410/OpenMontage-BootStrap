@@ -1,0 +1,24 @@
+{
+  "mcp": {
+    "servers": {
+      "openmontage-providers-image": {
+        "command": "python",
+        "args": ["-m", "openmontage.mcp.providers_image"],
+        "cwd": "<OPENMONTAGE_REPO_ROOT>",
+        "env": {
+          "OPENMONTAGE_PROJECTS_DIR": "<PROJECTS_DIR>",
+          "PYTHONUTF8": "1",
+          "OPENMONTAGE_MAX_COST_USD": "2.00",
+          "OPENMONTAGE_ALLOWED_PROVIDERS": "flux,openai,dashscope,kling,google,grok",
+          "FAL_KEY": "<OPTIONAL>",
+          "OPENAI_API_KEY": "<OPTIONAL>",
+          "DASHSCOPE_API_KEY": "<OPTIONAL>",
+          "KLING_API_KEY": "<OPTIONAL>",
+          "GEMINI_API_KEY": "<OPTIONAL>",
+          "GOOGLE_API_KEY": "<OPTIONAL>",
+          "XAI_API_KEY": "<OPTIONAL>"
+        }
+      }
+    }
+  }
+}

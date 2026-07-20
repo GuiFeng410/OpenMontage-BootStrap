@@ -1,6 +1,6 @@
 # 操作说明集合（README/）
 
-> BootStrap 用户请按顺序阅读。更细的工程归档在 `docs/Mcp_Entity/`（会提交进仓库）。
+> BootStrap 用户请按顺序阅读。公开操作说明以本目录为准。
 
 ## 两种用法
 
@@ -11,22 +11,23 @@
 
 拉仓后，仓库内会包含：
 
-- 门面 MCP：`openmontage/mcp/bootstrap/`（`python -m openmontage.mcp.bootstrap`）  
-- Skill：`openmontage-bootstrap-setup` / `openmontage-bootstrap-produce`  
-- 安装 Skill 源文件：`openmontage-bootstrap-installer`（也可单独拷到 OpenClaw）
+- 门面 MCP：`openmontage/mcp/bootstrap/`  
+- Skill：setup / produce / **providers（Skill03）** / installer  
+- 付费 MCP（可选）：`providers_tts` / `providers_image` / `providers_video`  
+- MCP 模板：[templates/](./templates/)
 
 ## 阅读顺序（已 clone 之后）
 
 | 步 | 文件 | 做什么 |
 |----|------|--------|
 | 0 | [00-安装Skill-先拷贝到OpenClaw.md](./00-安装Skill-先拷贝到OpenClaw.md) | （可选）只装安装 Skill，用一句话拉仓并口述配置 |
-| 1 | [01-手动克隆与配置OpenClaw.md](./01-手动克隆与配置OpenClaw.md) | clone + 口述/手配门面 MCP 与 2 个 Skill |
+| 1 | [01-手动克隆与配置OpenClaw.md](./01-手动克隆与配置OpenClaw.md) | clone + 口述/手配门面 MCP 与 Skill |
 | 2 | [02-环境检测与安装.md](./02-环境检测与安装.md) | setup：计划 → 确认 → 安装 → verify |
 | 3 | [03-零Key最小出片.md](./03-零Key最小出片.md) | produce → `final.mp4` |
+| 4 | [04-收费Providers接入.md](./04-收费Providers接入.md) | （可选）TTS / 生图 / 生视频 Key + MCP |
 
-## 详细归档
+## 其它
 
-- 门面：[../docs/Mcp_Entity/Mcp_Bootstrap/00-INDEX.md](../docs/Mcp_Entity/Mcp_Bootstrap/00-INDEX.md)
 - 新机三步：[../docs/新机导入三步/00-INDEX.md](../docs/新机导入三步/00-INDEX.md)
 - 上游长 README：[./archive/](./archive/)
 
@@ -34,5 +35,4 @@
 
 - 根目录短 `README.md` / `README_zh-CN.md` 作首页  
 - 长操作说明在本目录  
-- **不**忽略整个 `docs/`  
 - 安装 Skill **不自动改** OpenClaw 配置，只口述步骤  

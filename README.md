@@ -19,8 +19,9 @@ Open-source **agentic video production**. BootStrap path: optional **installer S
 | [01-clone-and-openclaw](README/01-手动克隆与配置OpenClaw.md) | Clone + narrate MCP/Skill config |
 | [02-env-setup](README/02-环境检测与安装.md) | setup Skill / dry_run install |
 | [03-minimal-produce](README/03-零Key最小出片.md) | produce Skill → `final.mp4` |
+| [04-paid-providers](README/04-收费Providers接入.md) | Optional paid TTS / image / video |
 
-After clone, this repo includes: `openmontage.mcp.bootstrap`, `openmontage-bootstrap-setup`, `openmontage-bootstrap-produce`, and `openmontage-bootstrap-installer`.
+After clone, this repo includes the facade MCP, setup/produce/providers Skills, installer, and optional paid provider MCPs.
 
 Chinese landing: [`README_zh-CN.md`](README_zh-CN.md)
 

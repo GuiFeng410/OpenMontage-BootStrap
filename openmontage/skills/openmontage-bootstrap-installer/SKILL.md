@@ -26,7 +26,7 @@ metadata:
 
 1. **不自动修改** OpenClaw 配置文件；只**口述**逐步操作，等用户确认完成后再进入下一步。  
 2. 拉仓优先 GitHub，失败再用 Gitee。  
-3. 拉仓完成后，仓内应已包含：门面 MCP `openmontage-bootstrap` + Skill `openmontage-bootstrap-setup` + `openmontage-bootstrap-produce`。  
+3. 拉仓完成后，仓内应已包含：门面 MCP `openmontage-bootstrap` + Skill `setup` / `produce` /（可选）`providers`（Skill03）。  
 4. 不要跳过「用户确认已 clone / 已改配置」的检查点。
 
 ## 触发话术（示例）
@@ -67,7 +67,7 @@ pip install -r requirements.txt
 
 请用户在 OpenClaw 中新增 MCP（模板在仓内）：
 
-- 文件：`<TARGET>/docs/Mcp_Entity/Mcp_Bootstrap/templates/bootstrap.mcp.json`
+- 文件：`<TARGET>/README/templates/bootstrap.mcp.json`
 - `command`：`<TARGET>\.venv\Scripts\python.exe`（或等价）
 - `args`：`["-m", "openmontage.mcp.bootstrap"]`
 - `cwd`：`<TARGET>`
@@ -75,7 +75,7 @@ pip install -r requirements.txt
 
 等用户回复「MCP 已配好」再继续。
 
-### E. 口述启用仓内 2 个 Skill
+### E. 口述启用仓内 Skill
 
 请用户将 `skills.load.extraDirs` 增加：
 
@@ -85,6 +85,7 @@ pip install -r requirements.txt
 
 - `openmontage-bootstrap-setup`（环境安装）  
 - `openmontage-bootstrap-produce`（零 Key 出片）  
+- （可选）`openmontage-bootstrap-providers`（收费 Key/MCP 引导，见 README/04）  
 
 （本安装 Skill 可保留，用于新机再次引导。）
 
@@ -96,6 +97,7 @@ pip install -r requirements.txt
 
 > 先检测环境，给我看完整安装计划，不要直接改系统。
 
-交由 **setup** Skill 执行；通过 `verify_ready` 后再说出片需求，交由 **produce** Skill。
+交由 **setup** Skill 执行；通过 `verify_ready` 后再说出片需求，交由 **produce** Skill。  
+若要云端 TTS/生图/生视频：读 `<TARGET>/README/04-收费Providers接入.md`，启用 Skill03。
 
 操作说明索引：`<TARGET>/README/00-INDEX.md`

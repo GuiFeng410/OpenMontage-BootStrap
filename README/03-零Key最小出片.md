@@ -21,8 +21,9 @@
 
 > 制作一个约 45 秒动画解说，解释天空为什么是蓝色的；零 Key（Piper）；每个关卡等我确认。
 
-## 付费语音（可选说明，不执行）
+## 付费能力（可选，不在本 Skill 执行）
 
-若需要云端 TTS，需另行配置 `openmontage-providers-tts`，并遵守估价 → 试听 → 批量门禁。本 Skill 不代为调用付费 API。
+云端 TTS / 生图 / 生视频：见 [04-收费Providers接入.md](./04-收费Providers接入.md) 与 Skill03 `openmontage-bootstrap-providers`。  
+本 Skill **不**代为调用付费 API。
 
 更细清单：[../docs/新机导入三步/03-第三步-最小视频出片验证.md](../docs/新机导入三步/03-第三步-最小视频出片验证.md)

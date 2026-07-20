@@ -1,0 +1,23 @@
+{
+  "mcp": {
+    "servers": {
+      "openmontage-providers-video": {
+        "command": "python",
+        "args": ["-m", "openmontage.mcp.providers_video"],
+        "cwd": "<OPENMONTAGE_REPO_ROOT>",
+        "env": {
+          "OPENMONTAGE_PROJECTS_DIR": "<PROJECTS_DIR>",
+          "PYTHONUTF8": "1",
+          "OPENMONTAGE_MAX_COST_USD": "5.00",
+          "OPENMONTAGE_ALLOWED_PROVIDERS": "kling,seedance,sora,veo,minimax,runway",
+          "FAL_KEY": "<OPTIONAL>",
+          "OPENAI_API_KEY": "<OPTIONAL>",
+          "KLING_API_KEY": "<OPTIONAL>",
+          "GEMINI_API_KEY": "<OPTIONAL>",
+          "GOOGLE_API_KEY": "<OPTIONAL>",
+          "RUNWAY_API_KEY": "<OPTIONAL>"
+        }
+      }
+    }
+  }
+}

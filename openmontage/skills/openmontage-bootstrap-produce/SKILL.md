@@ -35,7 +35,7 @@ Zero-key **animated explainer** path only via facade `produce_*` tools.
 
 **In scope:** init project, checkpoints/approvals, Piper TTS sample→batch, subtitles, compose, probe.
 
-**Out of scope:** diagram, stitch, mix_audio, paid TTS execution.
+**Out of scope:** diagram, stitch, mix_audio, paid TTS/image/video execution.
 
 ## Required MCP
 
@@ -53,7 +53,7 @@ Prerequisite: Skill01 `verify_ready` passed (or equivalent doctor ready).
 
 ## Optional teaching (do not execute unless configured)
 
-If the user wants paid/cloud voice: explain they need `openmontage-providers-tts` separately, with dry_run → sample → generate gates. Do **not** call paid APIs from this Skill.
+If the user wants paid/cloud TTS, image, or video: hand off to Skill03 `openmontage-bootstrap-providers` (setup) and the matching `openmontage-providers-*` Skill (execution with dry_run → sample → generate). Do **not** call paid APIs from this Skill.
 
 ## Related
 

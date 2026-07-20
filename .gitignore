@@ -59,9 +59,12 @@ scratch/
 internal/
 
 # Local / exploratory docs — not part of BootStrap ship set
-# (ship docs/新机导入三步/ and docs/Mcp_Entity/; keep chance_file out of uploads)
+# (ship docs/新机导入三步/; keep chance_file / Mcp_Entity / handoffs local)
 docs/chance_file/
 docs/documents/
+docs/Mcp_Entity/
+# Local session handoffs — never push (new chats read here first)
+docs/会话交接/
 
 # Local voice / model caches (fetched at install time — *.onnx already ignored above)
 piper_models/
