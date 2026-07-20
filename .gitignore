@@ -58,6 +58,15 @@ scratch/
 # Internal docs (strategy, handoffs, playbooks — not shipped)
 internal/
 
+# Local / exploratory docs — not part of BootStrap ship set
+# (ship docs/新机导入三步/ and docs/Mcp_Entity/; keep chance_file out of uploads)
+docs/chance_file/
+docs/documents/
+
+# Local voice / model caches (fetched at install time — *.onnx already ignored above)
+piper_models/
+.piper/
+
 # Local agent config (user-specific)
 .claude/memory/
 .claude/settings.local.json
