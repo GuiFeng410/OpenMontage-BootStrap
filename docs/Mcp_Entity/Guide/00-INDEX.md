@@ -30,8 +30,11 @@
 8. P1 交付：[../Mcp_P1/00-INDEX.md](../Mcp_P1/00-INDEX.md)  
    media MCP + animated-explainer / production-contract Skills 的安装模板与验收清单。
 
-8. P1 交付：[../Mcp_P1/00-INDEX.md](../Mcp_P1/00-INDEX.md)  
-   media MCP + animated-explainer / production-contract Skills 的安装模板与验收清单。
+9. 换机部署：[../换机部署/00-INDEX.md](../换机部署/00-INDEX.md)  
+   目标机已有 eClaw/OpenClaw 时，仍需导入的仓库/运行时/MCP/Skill 勾选清单。
+
+10. P2 交付（高级 TTS）：[../Mcp_P2/00-INDEX.md](../Mcp_P2/00-INDEX.md)  
+    `openmontage-providers-tts` MCP + Skill；其它 P2 插件未交付。
 
 ## 一页结论
 

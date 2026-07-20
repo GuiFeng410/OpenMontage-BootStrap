@@ -44,8 +44,9 @@ Zero-key **animated-explainer** only. Cloud video/image APIs are out of scope un
 
 - `openmontage-doctor` (state, checkpoints, artifacts)
 - `openmontage-media` (Piper, diagrams, subtitles, compose jobs)
+- Optional P2: `openmontage-providers-tts` (paid/cloud TTS) + Skill `openmontage-providers-tts`
 
-Tool names may appear as `openmontage-doctor__*` / `openmontage-media__*`.
+Tool names may appear as `openmontage-doctor__*` / `openmontage-media__*` / `openmontage-providers-tts__*`.
 
 ## Pipeline contract
 
@@ -70,7 +71,9 @@ Also follow `openmontage-production-contract`.
 2. `init_project` with `pipeline_type=animated-explainer` (production Agent only).
 3. For each stage: read director skill → produce artifact via `write_artifact` → `write_checkpoint`.
 4. Gated stages: write `awaiting_human`, summarize, **END TURN**. After user approval, call `approve_checkpoint` with their exact approval text.
-5. Assets: `tts_sample` → user listen OK → `tts_generate` with `confirm_sample_ok=true`.
+5. Assets: default Piper via media MCP — `tts_sample` → user listen OK → `tts_generate` with `confirm_sample_ok=true`.
+   If user opts into paid voice and `openmontage-providers-tts` is installed: follow that Skill
+   (`tts_dry_run` → estimate approval → paid sample → batch). Never silent provider fallback.
 6. Compose: `compose_preflight` → `compose_start` → poll `job_status` → `probe_media` on `renders/final.mp4`.
 
 ## Hard rules

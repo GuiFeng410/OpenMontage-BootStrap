@@ -1,0 +1,21 @@
+{
+  "mcp": {
+    "servers": {
+      "openmontage-providers-tts": {
+        "command": "python",
+        "args": ["-m", "openmontage.mcp.providers_tts"],
+        "cwd": "<OPENMONTAGE_REPO_ROOT>",
+        "env": {
+          "OPENMONTAGE_PROJECTS_DIR": "<PROJECTS_DIR>",
+          "PYTHONUTF8": "1",
+          "OPENMONTAGE_MAX_COST_USD": "2.00",
+          "OPENMONTAGE_ALLOWED_PROVIDERS": "openai,elevenlabs,dashscope,doubao",
+          "OPENAI_API_KEY": "<OPTIONAL>",
+          "ELEVENLABS_API_KEY": "<OPTIONAL>",
+          "DASHSCOPE_API_KEY": "<OPTIONAL>",
+          "DOUBAO_SPEECH_API_KEY": "<OPTIONAL>"
+        }
+      }
+    }
+  }
+}
