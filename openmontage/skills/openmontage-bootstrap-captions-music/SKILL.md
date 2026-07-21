@@ -31,7 +31,7 @@ metadata:
 
 **不做：** 自定义字幕时间/位置；静默付费配乐；替代 Skill02 档位与旁白 TTS。
 
-边界：`README/07-字幕与配乐Skill边界大纲.md`
+边界：`README/说明/03-字幕与配乐.md`
 
 ## Required MCP
 
@@ -69,6 +69,11 @@ metadata:
    `produce_mix_narration_and_music(confirm=true)` → `assets/audio/mixed.wav`（manifest id=`audio_mixed`）。  
 10. 若 FFmpeg compose 需要单轨 `audio_path`，使用该 mixed 文件；Remotion 路径可继续用 manifest + edit_decisions。  
 11. 无 ffmpeg / mix 失败：展示错误与依赖说明，仍可用「仅登记 BGM、不混音」路径。
+
+### 工具失败（强制交接）
+
+任一 `produce_*` / mix / compose 相关失败时：读 Skill `openmontage-bootstrap-error-handling`，  
+`error_capture_context` → `error_plan_recovery`；E01/E04 常见。阶段 1 只给计划，不自动 apply。
 
 ## 工具一览
 

@@ -82,7 +82,7 @@ pip install -r requirements.txt
 
 #### D.2 模板位置与四个必配 server
 
-模板目录：`<TARGET>/README/templates/`
+模板目录：`<TARGET>/README/配置/templates/`
 
 | # | Server 名称（须一致） | 模板文件 | args |
 |---|----------------------|----------|------|
@@ -162,14 +162,15 @@ Windows 路径含空格时：`command`/`cwd` 用完整路径；JSON 里用 `\\` 
 
 > 先检测环境，给我看完整安装计划，不要直接改系统。
 
-路径：**setup** → `verify_ready` → **produce**（主题确认后选 **轻度 / 中度 / 重度**，见 `README/06-出片三档说明.md`）。
+路径：**setup** → `verify_ready` → **produce**（主题确认后选 **轻度 / 中度 / 重度**，见 `README/说明/02-免费与收费能力.md`）。
 
-**付费 Key（可选，安装后）：** 对 Agent 说「按 Skill03 帮我填 Key」，或读 `<TARGET>/README/04-收费Providers接入.md`。  
+**付费 Key（可选，安装后）：** 对 Agent 说「按 Skill03 帮我填 Key」，或读 `<TARGET>/README/说明/02-免费与收费能力.md`。  
 只改已注册 MCP 的 `env` 并重启，**不必重装**。
 
 **免费 Stock（可选后补，默认不安）：**  
-注册 `openmontage-providers-stock`（模板 `providers-stock.mcp.json`），启用 `openmontage-providers-stock`，填 `PEXELS_API_KEY` / `PIXABAY_API_KEY`。  
-说明：`<TARGET>/README/05-免费Stock素材接入.md`。  
+注册 `openmontage-providers-stock`（模板 `README/配置/templates/providers-stock.mcp.json`），启用 `openmontage-providers-stock`，填 `PEXELS_API_KEY` / `PIXABAY_API_KEY`。  
+说明：`<TARGET>/README/说明/02-免费与收费能力.md`。  
 **不要**塞进安装必配的 4 个 MCP。
 
-操作索引：`<TARGET>/README/00-INDEX.md`
+操作索引：`<TARGET>/README/00-INDEX.md`  
+模板目录：`<TARGET>/README/配置/templates/`

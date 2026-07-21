@@ -1,6 +1,6 @@
 # OpenMontage BootStrap
 
-Open-source **agentic video production**. BootStrap path: optional **installer Skill** (copy into OpenClaw) → clone this repo → one **facade MCP** + setup/produce Skills → zero-key minimal explainer.
+Open-source **agentic video production**. Prerequisite: **OpenClaw already installed**. Clone this repo → facade MCP + Skills → free or paid produce paths.
 
 ## Mirrors
 
@@ -15,13 +15,10 @@ Open-source **agentic video production**. BootStrap path: optional **installer S
 
 | Doc | Topic |
 |-----|--------|
-| [00-installer-skill](README/00-安装Skill-先拷贝到OpenClaw.md) | Copy installer Skill into OpenClaw first |
-| [01-clone-and-openclaw](README/01-手动克隆与配置OpenClaw.md) | Clone + narrate MCP/Skill config |
-| [02-env-setup](README/02-环境检测与安装.md) | setup Skill / dry_run install |
-| [03-minimal-produce](README/03-零Key最小出片.md) | produce Skill → `final.mp4` |
-| [04-paid-providers](README/04-收费Providers接入.md) | Optional paid TTS / image / video |
-
-After clone, this repo includes the facade MCP, setup/produce/providers Skills, installer, and optional paid provider MCPs.
+| [说明/01 安装配置与环境](README/说明/01-安装配置与环境.md) | Clone, MCP/Skill, setup |
+| [说明/02 免费与收费](README/说明/02-免费与收费能力.md) | Light / medium / heavy |
+| [说明/03 字幕与配乐](README/说明/03-字幕与配乐.md) | Captions + BGM |
+| [配置/字段清单](README/配置/00-字段清单.md) | Templates + env names |
 
 Chinese landing: [`README_zh-CN.md`](README_zh-CN.md)
 

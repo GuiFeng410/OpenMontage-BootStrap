@@ -1,6 +1,6 @@
 # OpenMontage BootStrap（中文入口）
 
-开源 **Agent 视频制作**。BootStrap 路径：可选先把 **安装 Skill** 拷进 OpenClaw → clone 本仓 → **1 个门面 MCP** + setup/produce → 零 Key 最小解说成片。
+开源 **Agent 视频制作**。前提：**已有 OpenClaw**。clone 本仓 → 门面 MCP + Skill → 按免费/收费路径出片。
 
 ## 仓库镜像
 
@@ -15,15 +15,10 @@
 
 | 文档 | 内容 |
 |------|------|
-| [00-安装Skill](README/00-安装Skill-先拷贝到OpenClaw.md) | 先拷安装 Skill 到 OpenClaw |
-| [01-克隆与配置](README/01-手动克隆与配置OpenClaw.md) | 拉仓 + 口述配 MCP/Skill |
-| [02-环境安装](README/02-环境检测与安装.md) | setup / dry_run |
-| [03-最小出片](README/03-零Key最小出片.md) | produce → 先轻度 `final.mp4` |
-| [04-收费Providers](README/04-收费Providers接入.md) | （可选）TTS / 生图 / 生视频 |
-| [05-免费Stock](README/05-免费Stock素材接入.md) | （可选后补）Pexels/Pixabay |
-| [06-出片三档](README/06-出片三档说明.md) | 轻度 / 中度 / 重度 |
-
-拉仓后仓内含：门面 MCP、setup、produce、providers（Skill03）、installer，以及可选付费/Stock MCP。
+| [说明/01 安装配置与环境](README/说明/01-安装配置与环境.md) | 拉仓、口述 MCP/Skill、setup |
+| [说明/02 免费与收费](README/说明/02-免费与收费能力.md) | 轻度 / 中度 / 重度 |
+| [说明/03 字幕与配乐](README/说明/03-字幕与配乐.md) | 字幕 + BGM |
+| [配置/字段清单](README/配置/00-字段清单.md) | 模板与 env 名 |
 
 英文入口：[`README.md`](README.md)
 

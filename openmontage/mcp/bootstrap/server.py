@@ -442,6 +442,49 @@ def produce_probe_media(path: str) -> dict[str, Any]:
     return _wrap(T.produce_probe_media, path)
 
 
+@mcp.tool()
+def error_capture_context(
+    project_id: str,
+    tool_name: str,
+    stage: str,
+    stderr: str,
+    stdout: str = "",
+    paths_json: str = "",
+) -> dict[str, Any]:
+    """Capture tool stderr into project artifacts/error_recovery.json; returns incident_id."""
+    return _wrap(
+        T.error_capture_context,
+        project_id,
+        tool_name,
+        stage,
+        stderr,
+        stdout,
+        paths_json,
+    )
+
+
+@mcp.tool()
+def error_classify(project_id: str, incident_id: str) -> dict[str, Any]:
+    """Match a stored incident to a known playbook (E01–E04 or E00_unknown)."""
+    return _wrap(T.error_classify, project_id, incident_id)
+
+
+@mcp.tool()
+def error_plan_recovery(
+    project_id: str,
+    incident_id: str,
+    playbook_id: str = "",
+) -> dict[str, Any]:
+    """Build recovery plan for an incident. Phase 1: plan only, no auto-apply."""
+    return _wrap(T.error_plan_recovery, project_id, incident_id, playbook_id)
+
+
+@mcp.tool()
+def error_list_incidents(project_id: str) -> dict[str, Any]:
+    """List stored error-recovery incidents for a project."""
+    return _wrap(T.error_list_incidents, project_id)
+
+
 def main() -> None:
     mcp.run(transport="stdio")
 

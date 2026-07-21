@@ -93,7 +93,7 @@ metadata:
 
 若安装 Skill 已配好四个 MCP，**跳过注册**，直接改对应 server 的 `env` 填 Key 并请用户重启 MCP。  
 
-若缺失，再口述补注册（模板：`README/templates/providers-*.mcp.json`）。
+若缺失，再口述补注册（模板：`README/配置/templates/providers-*.mcp.json`）。
 
 ### 3. 口述填入环境变量（用户本机 / OpenClaw MCP env）
 
@@ -138,7 +138,7 @@ metadata:
 **视频：** kling（官方）· seedance · sora · veo · minimax · runway  
 **TTS：** openai · elevenlabs · dashscope · doubao · google · kling  
 
-Stock（Pexels/Pixabay）**不在本 Skill 范围** — 见可选后补 `openmontage-providers-stock` / `README/05-免费Stock素材接入.md`。
+Stock（Pexels/Pixabay）**不在本 Skill 范围** — 见可选后补 `openmontage-providers-stock` / `README/说明/02-免费与收费能力.md`。
 
 ## 与出片三档的关系
 
@@ -148,7 +148,7 @@ Stock（Pexels/Pixabay）**不在本 Skill 范围** — 见可选后补 `openmon
 | 中度 | 画面用 Stock（05）；若用户**手动**要付费 TTS，再按本 Skill 补 TTS Key |
 | 重度 | **全套**：引导补齐付费 TTS + 生图 + 生视频 Key，再交对应执行 Skill |
 
-用户可读版：`README/06-出片三档说明.md`。
+用户可读版：`README/说明/02-免费与收费能力.md`。
 
 ## 与 Skill01 / 02 / 安装的关系
 
@@ -166,4 +166,4 @@ Stock（Pexels/Pixabay）**不在本 Skill 范围** — 见可选后补 `openmon
 - 用户在已注册的 providers MCP 中写入所需 Key 并重启  
 - 后续付费调用由对应 `openmontage-providers-*` Skill 按门禁执行  
 
-操作说明：`README/04-收费Providers接入.md`
+操作说明：`README/说明/02-免费与收费能力.md`；字段：`README/配置/00-字段清单.md`

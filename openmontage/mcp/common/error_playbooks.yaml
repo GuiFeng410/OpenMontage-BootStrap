@@ -1,0 +1,145 @@
+# BootStrap Error-Handling playbooks (phase 1)
+# Source: README/错误处理/01-错误集合.md
+# Phase 1: classify + plan only (no auto-apply). max_retries default 3.
+
+version: 1
+max_retries: 3
+
+playbooks:
+  - id: E01_silent_bgm
+    title_zh: BGM 素材无声 / AAC 极低码率
+    summary_zh: >
+      第三方 Stock/音乐文件实际响度极低（约 -91dB），或 AAC 编码器因静音
+      自动降到 2kbps 左右。
+    match_any:
+      - pattern: "mean_volume:\\s*-9\\d"
+        flags: i
+      - pattern: "input_i:\\s*-inf"
+        flags: i
+      - pattern: "Qavg:\\s*65536"
+        flags: i
+      - pattern: "\\b[234]kbps\\b"
+        flags: i
+      - pattern: "bitrate.+?[234]\\.?\\d*\\s*k"
+        flags: i
+    risk_level: medium
+    auto_allowed: true
+    needs_confirm_for:
+      - overwrite_or_delete_source_bgm
+      - restock_download
+      - synthesize_replacement_bgm
+    planned_actions:
+      - id: loudness_check
+        auto: true
+        description_zh: 对嫌疑 BGM 做 volumedetect / probe，确认是否有效音频
+      - id: mark_manifest_invalid
+        auto: true
+        description_zh: 在 asset_manifest 标记该 music 条目无效，并建议跳过或替换
+      - id: skip_bgm_continue
+        auto: true
+        description_zh: 无确认时可先关闭 BGM 继续 compose（仅字幕/旁白）
+      - id: replace_bgm
+        auto: false
+        description_zh: 换本地合成 BGM 或重新 Stock 下载（须用户确认）
+    post_check:
+      - audio_bitrate_kbps_min: 64
+      - mean_volume_db_min: -40
+
+  - id: E02_subtitle_drive_colon
+    title_zh: Windows 字幕路径盘符冒号被 FFmpeg 误解析
+    summary_zh: >
+      subtitles=D:\\... 中的 D: 被当成 filter option 分隔符，
+      报 Unable to parse "original_size"。
+    match_any:
+      - pattern: 'Unable to parse ["'']?original_size'
+        flags: i
+      - pattern: "subtitles=.+[A-Za-z]:\\\\"
+        flags: i
+      - pattern: "Error parsing options.+subtitles"
+        flags: i
+    risk_level: low
+    auto_allowed: true
+    needs_confirm_for: []
+    planned_actions:
+      - id: copy_srt_to_work_relpath
+        auto: true
+        description_zh: 将 SRT 复制到项目 assets/subs/_work/ 并用相对路径引用
+      - id: retry_compose_with_relpath
+        auto: true
+        description_zh: 用相对路径重试 compose / ffmpeg 字幕滤镜
+    post_check:
+      - compose_preflight_ok: true
+
+  - id: E03_powershell_arg_escaping
+    title_zh: PowerShell 参数转义导致 FFmpeg 参数被截断
+    summary_zh: >
+      &&、逗号、多层引号在 PowerShell 中被错误解析；应改用 Python subprocess list 参数。
+    match_any:
+      - pattern: "force_style=.+Fontsize=.+(?!FontName)"
+        flags: i
+      - pattern: "The string is missing the terminator"
+        flags: i
+      - pattern: "is not recognized as (a|the) name of a cmdlet"
+        flags: i
+      - pattern: "ParserError:.+&&"
+        flags: i
+      - pattern: "UnexpectedToken"
+        flags: i
+    risk_level: low
+    auto_allowed: true
+    needs_confirm_for: []
+    planned_actions:
+      - id: rerun_via_python_subprocess_list
+        auto: true
+        description_zh: 禁止 shell 字符串；用 Python subprocess.run(list) 重跑同一命令
+    post_check:
+      - command_exit_code: 0
+
+  - id: E04_amix_aac_bitrate_collapse
+    title_zh: amix/混音一步出 AAC 导致码率崩溃
+    summary_zh: >
+      混音与 AAC 编码一步完成时，极低信号输入会使 AAC 降到 2–4kbps。
+      应拆成 WAV PCM 中间件再强制 -b:a 128k。
+    match_any:
+      - pattern: "amix"
+        flags: i
+      - pattern: "Qavg:\\s*65536"
+        flags: i
+      - pattern: "\\b[234]kbps\\b"
+        flags: i
+      - pattern: "audio mix failed"
+        flags: i
+    # Prefer E01 when loudness keywords also present; classifier ranks by score.
+    match_boost_if:
+      - pattern: "aac"
+        flags: i
+      - pattern: "mixed\\.(wav|m4a|aac|mp3)"
+        flags: i
+      - pattern: "duck"
+        flags: i
+    risk_level: medium
+    auto_allowed: true
+    needs_confirm_for:
+      - overwrite_final_mp4
+    planned_actions:
+      - id: two_step_encode
+        auto: true
+        description_zh: 先输出 WAV PCM，再用 -c:a aac -b:a 128k 单独编码
+      - id: verify_bitrate
+        auto: true
+        description_zh: probe 确认输出音频码率 ≥ 64kbps
+    post_check:
+      - audio_bitrate_kbps_min: 64
+
+unknown:
+  id: E00_unknown
+  title_zh: 未匹配已知 playbook
+  summary_zh: stderr 未命中文档内四类已知错误；阶段一不自动修复。
+  risk_level: high
+  auto_allowed: false
+  needs_confirm_for:
+    - any_recovery
+  planned_actions:
+    - id: report_to_user
+      auto: false
+      description_zh: 展示 stderr 摘要，请用户选择跳过 / 手动处理 / 补充 playbook

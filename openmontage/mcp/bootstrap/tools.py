@@ -97,8 +97,12 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_register_music",
             "produce_build_compose_inputs",
             "produce_mix_narration_and_music",
+            "error_capture_context",
+            "error_classify",
+            "error_plan_recovery",
+            "error_list_incidents",
         ],
-        "not_in_v1": ["diagram", "stitch", "providers_tts"],
+        "not_in_v1": ["diagram", "stitch", "providers_tts", "error_apply_recovery"],
         "repo_root": str(REPO_ROOT),
         "mirrors": {"github": GITHUB_CLONE_URL, "gitee": GITEE_CLONE_URL},
     }
@@ -927,3 +931,49 @@ def produce_mix_narration_and_music(
             "Remotion paths may still prefer edit_decisions.audio.music + narration assets."
         ),
     }
+
+
+def error_capture_context(
+    project_id: str,
+    tool_name: str,
+    stage: str,
+    stderr: str,
+    stdout: str = "",
+    paths_json: str = "",
+) -> dict[str, Any]:
+    """Capture tool stderr into artifacts/error_recovery.json (phase 1)."""
+    from openmontage.mcp.common.error_recovery import error_capture_context as _capture
+
+    return _capture(
+        project_id,
+        tool_name,
+        stage,
+        stderr,
+        stdout=stdout,
+        paths_json=paths_json,
+    )
+
+
+def error_classify(project_id: str, incident_id: str) -> dict[str, Any]:
+    """Classify a stored incident against known playbooks."""
+    from openmontage.mcp.common.error_recovery import error_classify as _classify
+
+    return _classify(project_id, incident_id)
+
+
+def error_plan_recovery(
+    project_id: str,
+    incident_id: str,
+    playbook_id: str = "",
+) -> dict[str, Any]:
+    """Return recovery plan only — does not execute (phase 1)."""
+    from openmontage.mcp.common.error_recovery import error_plan_recovery as _plan
+
+    return _plan(project_id, incident_id, playbook_id=playbook_id)
+
+
+def error_list_incidents(project_id: str) -> dict[str, Any]:
+    """List error_recovery incidents for a project."""
+    from openmontage.mcp.common.error_recovery import error_list_incidents as _list
+
+    return _list(project_id)

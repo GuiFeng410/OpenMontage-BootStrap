@@ -41,7 +41,7 @@ metadata:
 ## Required MCP
 
 `openmontage-providers-stock` — `python -m openmontage.mcp.providers_stock`  
-模板：`README/templates/providers-stock.mcp.json`
+模板：`README/配置/templates/providers-stock.mcp.json`
 
 ## Hard protocol
 

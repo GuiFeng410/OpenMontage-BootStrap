@@ -55,7 +55,7 @@ metadata:
 | **中度** | Stock（Pexels/Pixabay）搜图/搜视频 → 下载进沙箱 | **默认 Piper**；若已配 TTS Key，可**手动**改云端 TTS | 至少一个免费 Stock Key | Stock $0 + 可选付费 TTS |
 | **重度** | 付费 AI 生图 + 付费 AI 生视频 | **付费高级 TTS**（不默认 Piper） | TTS + 图 + 视频 Key | 按 provider |
 
-用户可读版：`README/06-出片三档说明.md`。
+用户可读版：`README/说明/02-免费与收费能力.md`。
 
 ### 档位时机
 
@@ -152,13 +152,17 @@ produce_set_production_profile(
 
 **字幕 / 文稿 / BGM：** Skill `openmontage-bootstrap-captions-music`（B+C）  
 文稿→`segment_copy_to_subtitles`；BGM→`import/register_music`→`produce_build_compose_inputs`→交回 `compose_*`。  
-可选：`produce_mix_narration_and_music`（需 ffmpeg）。详见 `README/07-字幕与配乐Skill边界大纲.md`。
+可选：`produce_mix_narration_and_music`（需 ffmpeg）。详见 `README/说明/03-字幕与配乐.md`。
 
 也可直接：
 
 1. `produce_generate_subtitles`（已有分段时）  
 2. `produce_compose_preflight` → `produce_compose_start` → 轮询 `produce_job_status`  
 3. 交付 `renders/final.mp4`；可用 `produce_probe_media` 抽检  
+
+**工具失败时（强制）：** 先读 Skill `openmontage-bootstrap-error-handling`，调用  
+`error_capture_context` → `error_plan_recovery`；按计划安全步骤处理后再重试。  
+勿在未分类时盲目重跑付费 API 或覆盖素材。详见 `README/错误处理/`。
 
 有 explainer stage director 时可读 `skills/pipelines/explainer/`。
 
@@ -168,6 +172,7 @@ produce_set_production_profile(
 |-------|------|
 | setup (01) | 前置环境 |
 | captions-music | 文稿→字幕；BGM 登记与 compose 输入打包（可选 ffmpeg 混音） |
+| error-handling | 工具失败时：capture → classify → plan（阶段 1 不自动 apply） |
 | providers (03) | 补 Key；重度/中度付费 TTS 前可先走 03 |
 | providers-stock | 中度画面 |
 | providers-tts/image/video | 中度可选 TTS；重度全套 |
@@ -175,5 +180,5 @@ produce_set_production_profile(
 
 ## Related
 
-- `README/06-出片三档说明.md`  
+- `README/说明/02-免费与收费能力.md`  
 - `openmontage-animated-explainer` / `openmontage-production-contract`（若已加载）
