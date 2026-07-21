@@ -28,6 +28,8 @@ list_stock_sources
 `media_kind`：`image` | `video`  
 费用：$0（注意 API 限速）
 
+中度出片时请带 `project_id`（及可选 `scene_id` / `asset_id`）调用 download，以便写入项目 `artifacts/asset_manifest.json`；再用门面 `produce_read_asset_manifest` → `produce_compose_*`。
+
 ## 与付费生成的区别
 
 | | Stock | 付费 image/video |

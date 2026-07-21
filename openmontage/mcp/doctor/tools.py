@@ -16,6 +16,16 @@ from openmontage.mcp.common.sandbox import project_dir, projects_root, require_p
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
+PRODUCTION_TIERS = frozenset({"light", "medium", "heavy"})
+VISUAL_SOURCES = frozenset({"template", "stock", "paid_gen"})
+TTS_SOURCES = frozenset({"piper", "paid"})
+_PROFILE_KEYS = ("production_tier", "visual_source", "tts_source")
+_TIER_DEFAULTS: dict[str, dict[str, str]] = {
+    "light": {"visual_source": "template", "tts_source": "piper"},
+    "medium": {"visual_source": "stock", "tts_source": "piper"},
+    "heavy": {"visual_source": "paid_gen", "tts_source": "paid"},
+}
+
 
 def _which(name: str) -> dict[str, Any]:
     path = shutil.which(name)
@@ -351,6 +361,143 @@ def run_list_projects() -> dict[str, Any]:
     return {"projects_dir": str(root), "projects": projects}
 
 
+def _marker_path(project_id: str) -> Path:
+    _ensure_repo_on_path()
+    from lib.checkpoint import PROJECT_MARKER_FILENAME
+
+    return project_dir(project_id) / PROJECT_MARKER_FILENAME
+
+
+def _read_marker(project_id: str) -> dict[str, Any]:
+    path = _marker_path(project_id)
+    if not path.exists():
+        return {}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _write_marker(project_id: str, marker: dict[str, Any]) -> Path:
+    path = _marker_path(project_id)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(marker, ensure_ascii=False, indent=2), encoding="utf-8")
+    return path
+
+
+def _pick_profile_fields(mapping: dict[str, Any] | None) -> dict[str, str]:
+    if not isinstance(mapping, dict):
+        return {}
+    nested = mapping.get("production_profile")
+    source = nested if isinstance(nested, dict) else mapping
+    out: dict[str, str] = {}
+    for key in _PROFILE_KEYS:
+        value = source.get(key)
+        if isinstance(value, str) and value.strip():
+            out[key] = value.strip()
+    return out
+
+
+def _normalize_production_profile(
+    production_tier: str,
+    visual_source: str = "",
+    tts_source: str = "",
+) -> dict[str, str]:
+    tier = (production_tier or "").strip().lower()
+    if tier not in PRODUCTION_TIERS:
+        raise DoctorError(
+            f"production_tier must be one of {sorted(PRODUCTION_TIERS)}; got {production_tier!r}",
+            code="bad_request",
+        )
+    defaults = _TIER_DEFAULTS[tier]
+    visual = (visual_source or "").strip().lower() or defaults["visual_source"]
+    tts = (tts_source or "").strip().lower() or defaults["tts_source"]
+    if visual not in VISUAL_SOURCES:
+        raise DoctorError(
+            f"visual_source must be one of {sorted(VISUAL_SOURCES)}; got {visual_source!r}",
+            code="bad_request",
+        )
+    if tts not in TTS_SOURCES:
+        raise DoctorError(
+            f"tts_source must be one of {sorted(TTS_SOURCES)}; got {tts_source!r}",
+            code="bad_request",
+        )
+    return {
+        "production_tier": tier,
+        "visual_source": visual,
+        "tts_source": tts,
+    }
+
+
+def resolve_production_profile(
+    marker: dict[str, Any] | None,
+    latest_checkpoint: dict[str, Any] | None = None,
+) -> dict[str, Any] | None:
+    """Prefer project.json profile; fall back to latest checkpoint artifacts."""
+    picked = _pick_profile_fields(marker)
+    if "production_tier" not in picked and isinstance(latest_checkpoint, dict):
+        artifacts = latest_checkpoint.get("artifacts")
+        picked = {**_pick_profile_fields(artifacts), **picked}
+    if "production_tier" not in picked:
+        return None
+    try:
+        return _normalize_production_profile(
+            picked.get("production_tier", ""),
+            picked.get("visual_source", ""),
+            picked.get("tts_source", ""),
+        )
+    except DoctorError:
+        # Legacy/partial marker: still surface raw fields for debugging.
+        return {
+            "production_tier": picked.get("production_tier"),
+            "visual_source": picked.get("visual_source"),
+            "tts_source": picked.get("tts_source"),
+            "valid": False,
+        }
+
+
+def _sync_production_profile_to_marker(project_id: str, fields: dict[str, Any]) -> dict[str, str] | None:
+    picked = _pick_profile_fields(fields)
+    if "production_tier" not in picked:
+        return None
+    profile = _normalize_production_profile(
+        picked.get("production_tier", ""),
+        picked.get("visual_source", ""),
+        picked.get("tts_source", ""),
+    )
+    marker = _read_marker(project_id)
+    if not marker.get("project_id"):
+        raise DoctorError(f"Project not found: {project_id}", code="not_found")
+    marker["production_profile"] = profile
+    _write_marker(project_id, marker)
+    return profile
+
+
+def run_set_production_profile(
+    project_id: str,
+    production_tier: str,
+    visual_source: str = "",
+    tts_source: str = "",
+) -> dict[str, Any]:
+    """Persist light/medium/heavy profile onto project.json (requires P1 writes)."""
+    require_p1_writes()
+    pdir = project_dir(project_id)
+    if not pdir.exists():
+        raise DoctorError(f"Project not found: {project_id}", code="not_found")
+    profile = _normalize_production_profile(production_tier, visual_source, tts_source)
+    marker = _read_marker(project_id)
+    if not marker:
+        raise DoctorError(f"Project marker missing for: {project_id}", code="not_found")
+    marker["production_profile"] = profile
+    path = _write_marker(project_id, marker)
+    return {
+        "project_id": project_id,
+        "marker_path": str(path),
+        "production_profile": profile,
+    }
+
+
 def run_get_project_state(project_id: str) -> dict[str, Any]:
     _ensure_repo_on_path()
     from lib.checkpoint import (
@@ -382,6 +529,7 @@ def run_get_project_state(project_id: str) -> dict[str, Any]:
         "project_id": project_id,
         "project_dir": str(pdir),
         "marker": marker,
+        "production_profile": resolve_production_profile(marker, latest),
         "completed_stages": completed,
         "next_stage": nxt,
         "awaiting_human": awaiting,
@@ -591,6 +739,7 @@ def run_write_checkpoint(
         raise DoctorError(f"artifacts_json invalid: {exc}", code="bad_request") from exc
     if not isinstance(artifacts, dict):
         raise DoctorError("artifacts_json must be an object", code="bad_request")
+    synced_profile = _sync_production_profile_to_marker(project_id, artifacts)
     metadata = {}
     if approval_note:
         metadata["approval_note"] = approval_note
@@ -605,7 +754,10 @@ def run_write_checkpoint(
         human_approved=human_approved,
         metadata=metadata or None,
     )
-    return {"checkpoint_path": str(path), "stage": stage, "status": status}
+    result: dict[str, Any] = {"checkpoint_path": str(path), "stage": stage, "status": status}
+    if synced_profile:
+        result["production_profile"] = synced_profile
+    return result
 
 
 def run_approve_checkpoint(

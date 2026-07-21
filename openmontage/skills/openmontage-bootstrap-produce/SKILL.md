@@ -79,17 +79,27 @@ metadata:
 1. 确认主题/标题（人审；`approval_text` 用用户原话）。  
 2. ★ **档位选择关卡**：讲清轻/中/重 → 用户选定 → 再继续。  
 3. `produce_init_project`（`pipeline_type=animated-explainer`）。  
-4. 用 `produce_write_checkpoint` 写入档位元数据（建议 `artifacts_json` 含）：
+4. ★ 写入档位（优先专用工具）：
 
-```json
-{
-  "production_tier": "light|medium|heavy",
-  "visual_source": "template|stock|paid_gen",
-  "tts_source": "piper|paid"
-}
+```text
+produce_set_production_profile(
+  project_id,
+  production_tier="light|medium|heavy",
+  visual_source="",   # 可空：按档位默认
+  tts_source=""       # 可空：按档位默认；中度改付费 TTS 时再写成 "paid"
+)
 ```
 
-中度默认 `"tts_source": "piper"`；用户稍后选手动付费 TTS 再改写为 `"paid"`。
+默认映射：
+
+| tier | visual_source | tts_source |
+|------|---------------|------------|
+| light | template | piper |
+| medium | stock | piper |
+| heavy | paid_gen | paid |
+
+也可用 `produce_write_checkpoint` 的 `artifacts_json` 带同名字段，会**同步写进** `project.json`。  
+之后用 `produce_read_state` → 顶层 `production_profile` 读取（权威在 marker）。
 
 ### 2. 脚本等人审关卡（共用）
 
@@ -123,8 +133,11 @@ metadata:
 
 1. `list_stock_sources`  
 2. 按镜头 `stock_search(source, media_kind, query)` → 展示候选 → 用户确认  
-3. `stock_download(..., confirm=true)`  
-4. 把下载路径写入即将用于 compose 的 `asset_manifest_json`（字段约定见 stock Skill「与 produce 交接」）  
+3. `stock_download(..., confirm=true, project_id=<id>, scene_id=..., asset_id=...)`  
+   - 下载到项目沙箱，并**自动 upsert** `artifacts/asset_manifest.json`  
+4. `produce_read_asset_manifest(project_id)` 取 `asset_manifest_json`  
+5. 编 `edit_decisions_json`（镜头引用 `asset_id` / `scene_id`）  
+6. `produce_compose_preflight` → `produce_compose_start`（用上一步的 manifest JSON）  
 
 失败不静默换源；让用户改 query 或换 pexels/pixabay。
 

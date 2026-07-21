@@ -53,8 +53,11 @@ def stock_download(
     output_path: str = "",
     extras_json: str = "{}",
     confirm: bool = False,
+    project_id: str = "",
+    scene_id: str = "",
+    asset_id: str = "",
 ) -> dict[str, Any]:
-    """Download stock media after user approval (confirm=true required)."""
+    """Download stock media after approval; with project_id, also upsert asset_manifest."""
     return _wrap(
         T.stock_download,
         source,
@@ -63,6 +66,9 @@ def stock_download(
         output_path,
         extras_json,
         confirm,
+        project_id,
+        scene_id,
+        asset_id,
     )
 
 

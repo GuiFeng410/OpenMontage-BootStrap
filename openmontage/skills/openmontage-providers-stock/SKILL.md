@@ -67,21 +67,13 @@ metadata:
 
 由 Skill02 `openmontage-bootstrap-produce` 在 **中度** 画面分支调用本 Skill。
 
-1. 搜索确认后 `stock_download(..., confirm=true)`，产物落在 `OPENMONTAGE_PROJECTS_DIR` 沙箱内。  
-2. 把每个镜头的本地路径回传 produce，写入 compose 用的 `asset_manifest_json`，建议条目至少含：
-
-```json
-{
-  "id": "shot_01",
-  "kind": "image|video",
-  "path": "<absolute path under projects sandbox>",
-  "source": "pexels|pixabay",
-  "query": "<used query>"
-}
-```
-
-3. 本 Skill **不**调用 `produce_compose_*`；合成仍由 produce / 门面完成。  
-4. 轻度/重度默认不走本 Skill（重度用付费生图生视频）。
+1. `stock_search` → 用户确认候选。  
+2. `stock_download(..., confirm=true, project_id=<项目ID>, scene_id=..., asset_id=...)`  
+   - 文件落入项目沙箱  
+   - **自动**写入/更新 `<project>/artifacts/asset_manifest.json`（schema 合法条目：`id/type/path/source_tool/scene_id` + stock 元数据）  
+3. produce 侧：`produce_read_asset_manifest(project_id)` → 将 `asset_manifest_json` 传入 `produce_compose_*`。  
+4. 本 Skill **不**调用 `produce_compose_*`。  
+5. 轻度/重度默认不走本 Skill（重度用付费生图生视频；付费产物可用 `produce_append_asset_manifest_entry` 登记）。
 
 ## 与 BootStrap 关系
 

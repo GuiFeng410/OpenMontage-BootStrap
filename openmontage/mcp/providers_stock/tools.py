@@ -351,6 +351,9 @@ def stock_download(
     output_path: str = "",
     extras_json: str = "{}",
     confirm: bool = False,
+    project_id: str = "",
+    scene_id: str = "",
+    asset_id: str = "",
 ) -> dict[str, Any]:
     require_projects_root()
     if not confirm:
@@ -362,9 +365,18 @@ def stock_download(
     src, kind, tool_name = _resolve_stock(source, media_kind)
     _require_key(src)
     extras = _parse_extras(extras_json)
-    default = (
-        f"assets/stock/{src}_{kind}.jpg" if kind == "image" else f"assets/stock/{src}_{kind}.mp4"
-    )
+    pid = (project_id or "").strip()
+    if pid:
+        # Prefer project-scoped stock paths for medium produce
+        default = (
+            f"{pid}/assets/stock/{src}_{kind}.jpg"
+            if kind == "image"
+            else f"{pid}/assets/stock/{src}_{kind}.mp4"
+        )
+    else:
+        default = (
+            f"assets/stock/{src}_{kind}.jpg" if kind == "image" else f"assets/stock/{src}_{kind}.mp4"
+        )
     out = _sandbox_output(output_path or default, default)
     tool = get_tool(tool_name)
     inputs = {"query": query, "output_path": out, **extras}
@@ -385,4 +397,35 @@ def stock_download(
     payload["output_path"] = out
     payload["estimated_cost_usd"] = 0.0
     payload["cost_usd"] = 0.0
+
+    if pid:
+        from openmontage.mcp.common.asset_manifest import build_stock_asset_entry, upsert_asset_entry
+
+        aid = (asset_id or "").strip() or f"stock_{src}_{kind}_{len(query)}"
+        # Keep asset_id filesystem-safe-ish
+        aid = "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in aid)[:64]
+        entry = build_stock_asset_entry(
+            project_id=pid,
+            asset_id=aid,
+            media_kind=kind,
+            absolute_path=out,
+            source=src,
+            tool_name=tool_name,
+            scene_id=(scene_id or "").strip() or "scene_01",
+            query=query,
+            license_text=str(payload.get("license") or ""),
+            original_url=str(payload.get("url") or payload.get("page_url") or ""),
+            cost_usd=0.0,
+        )
+        registered = upsert_asset_entry(pid, entry)
+        payload["project_id"] = pid
+        payload["asset_id"] = aid
+        payload["scene_id"] = entry["scene_id"]
+        payload["manifest_entry"] = entry
+        payload["asset_manifest_path"] = registered["asset_manifest_path"]
+        payload["asset_count"] = registered["asset_count"]
+        payload["next_step"] = (
+            "Pass asset_manifest from produce_read_asset_manifest(project_id) "
+            "into produce_compose_preflight / produce_compose_start."
+        )
     return payload

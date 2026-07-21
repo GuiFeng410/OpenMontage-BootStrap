@@ -13,11 +13,13 @@
 
 ### 协议摘要
 
-1. 主题确认 → **选轻度** → `produce_init_project`（`animated-explainer`）  
+1. 主题确认 → **选轻度** → `produce_init_project` → `produce_set_production_profile(..., "light")`  
 2. 人审关：`produce_approve_checkpoint` 必须带用户原话 `approval_text`  
 3. TTS：`produce_tts_sample` → 试听 OK → `produce_tts_generate(..., confirm_sample_ok=true)`  
 4. `produce_compose_start` → `produce_job_status`  
 5. 成片：`<PROJECTS>/<project_id>/renders/final.mp4`  
+
+可用 `produce_read_state` 查看顶层 `production_profile`。
 
 ### 试跑提示词示例
 

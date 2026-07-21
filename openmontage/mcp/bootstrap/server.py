@@ -129,6 +129,23 @@ def produce_init_project(
 
 
 @mcp.tool()
+def produce_set_production_profile(
+    project_id: str,
+    production_tier: str,
+    visual_source: str = "",
+    tts_source: str = "",
+) -> dict[str, Any]:
+    """Persist light/medium/heavy profile on project.json after the user picks a tier."""
+    return _wrap(
+        T.produce_set_production_profile,
+        project_id,
+        production_tier,
+        visual_source,
+        tts_source,
+    )
+
+
+@mcp.tool()
 def produce_write_checkpoint(
     project_id: str,
     stage: str,
@@ -254,6 +271,18 @@ def produce_compose_start(
         output_path,
         proposal_packet_json,
     )
+
+
+@mcp.tool()
+def produce_read_asset_manifest(project_id: str) -> dict[str, Any]:
+    """Read project artifacts/asset_manifest.json (for medium stock / heavy assets)."""
+    return _wrap(T.produce_read_asset_manifest, project_id)
+
+
+@mcp.tool()
+def produce_append_asset_manifest_entry(project_id: str, entry_json: str) -> dict[str, Any]:
+    """Upsert one asset_manifest entry by id (schema fields required)."""
+    return _wrap(T.produce_append_asset_manifest_entry, project_id, entry_json)
 
 
 @mcp.tool()

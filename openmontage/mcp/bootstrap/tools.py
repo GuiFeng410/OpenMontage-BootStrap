@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -72,6 +73,7 @@ def list_bootstrap_tools() -> dict[str, Any]:
         ],
         "produce_minimal": [
             "produce_init_project",
+            "produce_set_production_profile",
             "produce_write_checkpoint",
             "produce_approve_checkpoint",
             "produce_read_state",
@@ -84,6 +86,8 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_compose_start",
             "produce_job_status",
             "produce_probe_media",
+            "produce_read_asset_manifest",
+            "produce_append_asset_manifest_entry",
         ],
         "not_in_v1": ["diagram", "stitch", "mix_audio", "providers_tts"],
         "repo_root": str(REPO_ROOT),
@@ -489,6 +493,20 @@ def produce_init_project(project_id: str, title: str, pipeline_type: str = "anim
     return doctor_tools.run_init_project(project_id, title, pipeline_type)
 
 
+def produce_set_production_profile(
+    project_id: str,
+    production_tier: str,
+    visual_source: str = "",
+    tts_source: str = "",
+) -> dict[str, Any]:
+    return doctor_tools.run_set_production_profile(
+        project_id,
+        production_tier,
+        visual_source,
+        tts_source,
+    )
+
+
 def produce_write_checkpoint(
     project_id: str,
     stage: str,
@@ -593,3 +611,33 @@ def produce_job_status(job_id: str) -> dict[str, Any]:
 
 def produce_probe_media(path: str) -> dict[str, Any]:
     return media_tools.probe_media(path)
+
+
+def produce_read_asset_manifest(project_id: str) -> dict[str, Any]:
+    from openmontage.mcp.common.asset_manifest import load_asset_manifest, manifest_path
+
+    manifest = load_asset_manifest(project_id)
+    path = manifest_path(project_id)
+    return {
+        "project_id": project_id,
+        "asset_manifest_path": str(path),
+        "exists": path.exists(),
+        "asset_count": len(manifest.get("assets") or []),
+        "asset_manifest": manifest,
+        "asset_manifest_json": json.dumps(manifest, ensure_ascii=False),
+    }
+
+
+def produce_append_asset_manifest_entry(project_id: str, entry_json: str) -> dict[str, Any]:
+    """Manual upsert of one asset_manifest entry (e.g. after paid gen or local file)."""
+    from openmontage.mcp.common.asset_manifest import upsert_asset_entry
+    from openmontage.mcp.doctor.tools import require_p1_writes
+
+    require_p1_writes()
+    try:
+        entry = json.loads(entry_json) if entry_json else {}
+    except json.JSONDecodeError as exc:
+        from openmontage.mcp.common.errors import DoctorError
+
+        raise DoctorError(f"entry_json invalid: {exc}", code="bad_request") from exc
+    return upsert_asset_entry(project_id, entry)
