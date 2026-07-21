@@ -293,7 +293,7 @@ def produce_scan_copy_music(project_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def produce_ensure_captions_music_dirs(project_id: str) -> dict[str, Any]:
-    """Create assets/copy|music|subs|audio and artifacts if missing."""
+    """Create assets/copy|music|subs|audio|images|video|stock and artifacts if missing."""
     return _wrap(T.produce_ensure_captions_music_dirs, project_id)
 
 

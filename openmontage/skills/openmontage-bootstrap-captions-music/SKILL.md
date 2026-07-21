@@ -40,7 +40,7 @@ metadata:
 ## 目录
 
 ```text
-<project>/assets/copy|music|subs|audio/
+<project>/assets/copy|music|subs|audio|images|video|stock/
 <project>/artifacts/asset_manifest.json
 ```
 

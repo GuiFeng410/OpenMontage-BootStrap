@@ -14,6 +14,21 @@ COPY_DIR = "assets/copy"
 MUSIC_DIR = "assets/music"
 SUBS_DIR = "assets/subs"
 AUDIO_DIR = "assets/audio"
+IMAGES_DIR = "assets/images"
+VIDEO_DIR = "assets/video"
+STOCK_DIR = "assets/stock"
+
+# Canonical project asset folders (user drop-in + pipeline outputs).
+ASSET_LAYOUT_DIRS = (
+    COPY_DIR,
+    MUSIC_DIR,
+    SUBS_DIR,
+    AUDIO_DIR,
+    IMAGES_DIR,
+    VIDEO_DIR,
+    STOCK_DIR,
+    "artifacts",
+)
 
 COPY_EXTS = {".txt", ".md"}
 MUSIC_EXTS = {".mp3", ".wav", ".m4a", ".aac", ".ogg", ".flac"}
@@ -29,10 +44,11 @@ def _project_root(project_id: str) -> Path:
 
 
 def ensure_captions_music_dirs(project_id: str) -> dict[str, Any]:
+    """Ensure canonical assets/* (+ artifacts). Idempotent; safe to call anytime."""
     pdir = _project_root(project_id)
     created: list[str] = []
     paths: dict[str, str] = {}
-    for rel in (COPY_DIR, MUSIC_DIR, SUBS_DIR, AUDIO_DIR, "artifacts"):
+    for rel in ASSET_LAYOUT_DIRS:
         target = pdir / rel
         if not target.exists():
             target.mkdir(parents=True, exist_ok=True)

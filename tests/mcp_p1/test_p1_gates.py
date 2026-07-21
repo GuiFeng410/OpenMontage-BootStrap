@@ -30,6 +30,18 @@ def test_write_artifact_and_init_with_flag(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setenv("OPENMONTAGE_P1_ALLOW_WRITES", "true")
     result = run_init_project("p1demo", "P1 Demo", "animated-explainer")
     assert Path(result["project_dir"]).exists()
+    for rel in (
+        "assets/images",
+        "assets/video",
+        "assets/audio",
+        "assets/music",
+        "assets/copy",
+        "assets/subs",
+        "assets/stock",
+        "artifacts",
+        "renders",
+    ):
+        assert (tmp_path / "p1demo" / rel).is_dir()
     art = tmp_path / "p1demo" / "artifacts" / "note.json"
     written = run_write_artifact(str(art), json.dumps({"ok": True}))
     assert Path(written["path"]).exists()

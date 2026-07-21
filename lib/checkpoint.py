@@ -200,6 +200,9 @@ def init_project(
         "assets/video",
         "assets/audio",
         "assets/music",
+        "assets/copy",
+        "assets/subs",
+        "assets/stock",
         "renders",
     ):
         (project_dir / sub).mkdir(parents=True, exist_ok=True)
