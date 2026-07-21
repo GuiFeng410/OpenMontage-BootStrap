@@ -100,9 +100,11 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "error_capture_context",
             "error_classify",
             "error_plan_recovery",
+            "error_apply_recovery",
             "error_list_incidents",
+            "probe_audio_loudness",
         ],
-        "not_in_v1": ["diagram", "stitch", "providers_tts", "error_apply_recovery"],
+        "not_in_v1": ["diagram", "stitch", "providers_tts"],
         "repo_root": str(REPO_ROOT),
         "mirrors": {"github": GITHUB_CLONE_URL, "gitee": GITEE_CLONE_URL},
     }
@@ -897,9 +899,12 @@ def produce_mix_narration_and_music(
         ),
     )
     if not mix.get("success"):
+        detail = mix.get("error") or mix.get("stderr") or mix
         raise DoctorError(
-            f"audio mix failed: {mix.get('error')}. Ensure ffmpeg is on PATH. "
-            f"Dependency note: uses audio_mixer duck operation.",
+            f"audio mix failed: {detail}. Ensure ffmpeg is on PATH. "
+            f"Dependency note: uses audio_mixer duck operation. "
+            f"On low-bitrate AAC collapse, use error_capture_context (E01/E04) then "
+            f"error_apply_recovery for two_step_encode.",
             code="mix_failed",
         )
     abs_out = str(resolve_under_projects(out_rel))
@@ -966,10 +971,22 @@ def error_plan_recovery(
     incident_id: str,
     playbook_id: str = "",
 ) -> dict[str, Any]:
-    """Return recovery plan only — does not execute (phase 1)."""
+    """Return recovery plan for an incident."""
     from openmontage.mcp.common.error_recovery import error_plan_recovery as _plan
 
     return _plan(project_id, incident_id, playbook_id=playbook_id)
+
+
+def error_apply_recovery(
+    project_id: str,
+    incident_id: str,
+    confirm: bool = False,
+    action_ids: str = "",
+) -> dict[str, Any]:
+    """Apply safe recovery actions (phase 2). High-risk actions need confirm=true."""
+    from openmontage.mcp.common.error_recovery import error_apply_recovery as _apply
+
+    return _apply(project_id, incident_id, confirm=confirm, action_ids=action_ids)
 
 
 def error_list_incidents(project_id: str) -> dict[str, Any]:
@@ -977,3 +994,10 @@ def error_list_incidents(project_id: str) -> dict[str, Any]:
     from openmontage.mcp.common.error_recovery import error_list_incidents as _list
 
     return _list(project_id)
+
+
+def probe_audio_loudness(path: str) -> dict[str, Any]:
+    """ffprobe/ffmpeg volumedetect for a sandboxed audio path (E01 helper)."""
+    from openmontage.mcp.common.error_recovery import probe_audio_loudness as _probe
+
+    return _probe(path)

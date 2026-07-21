@@ -475,14 +475,31 @@ def error_plan_recovery(
     incident_id: str,
     playbook_id: str = "",
 ) -> dict[str, Any]:
-    """Build recovery plan for an incident. Phase 1: plan only, no auto-apply."""
+    """Build recovery plan for an incident."""
     return _wrap(T.error_plan_recovery, project_id, incident_id, playbook_id)
+
+
+@mcp.tool()
+def error_apply_recovery(
+    project_id: str,
+    incident_id: str,
+    confirm: bool = False,
+    action_ids: str = "",
+) -> dict[str, Any]:
+    """Apply safe playbook actions (max 3 retries). High-risk needs confirm=true."""
+    return _wrap(T.error_apply_recovery, project_id, incident_id, confirm, action_ids)
 
 
 @mcp.tool()
 def error_list_incidents(project_id: str) -> dict[str, Any]:
     """List stored error-recovery incidents for a project."""
     return _wrap(T.error_list_incidents, project_id)
+
+
+@mcp.tool()
+def probe_audio_loudness(path: str) -> dict[str, Any]:
+    """Run ffmpeg volumedetect on a sandboxed audio file (E01 helper)."""
+    return _wrap(T.probe_audio_loudness, path)
 
 
 def main() -> None:

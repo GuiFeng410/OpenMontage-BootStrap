@@ -1,8 +1,8 @@
-# BootStrap Error-Handling playbooks (phase 1)
+# BootStrap Error-Handling playbooks
 # Source: README/错误处理/01-错误集合.md
-# Phase 1: classify + plan only (no auto-apply). max_retries default 3.
+# Phase 2: classify + plan + apply (safe auto). max_retries default 3.
 
-version: 1
+version: 2
 max_retries: 3
 
 playbooks:
@@ -66,7 +66,7 @@ playbooks:
         description_zh: 将 SRT 复制到项目 assets/subs/_work/ 并用相对路径引用
       - id: retry_compose_with_relpath
         auto: true
-        description_zh: 用相对路径重试 compose / ffmpeg 字幕滤镜
+        description_zh: 用相对路径重试 compose / ffmpeg 字幕滤镜（返回提示）
     post_check:
       - compose_preflight_ok: true
 
@@ -75,8 +75,6 @@ playbooks:
     summary_zh: >
       &&、逗号、多层引号在 PowerShell 中被错误解析；应改用 Python subprocess list 参数。
     match_any:
-      - pattern: "force_style=.+Fontsize=.+(?!FontName)"
-        flags: i
       - pattern: "The string is missing the terminator"
         flags: i
       - pattern: "is not recognized as (a|the) name of a cmdlet"
@@ -85,13 +83,15 @@ playbooks:
         flags: i
       - pattern: "UnexpectedToken"
         flags: i
+      - pattern: "force_style="
+        flags: i
     risk_level: low
     auto_allowed: true
     needs_confirm_for: []
     planned_actions:
       - id: rerun_via_python_subprocess_list
         auto: true
-        description_zh: 禁止 shell 字符串；用 Python subprocess.run(list) 重跑同一命令
+        description_zh: 禁止 shell 字符串；用 Python subprocess.run(list) 重跑（paths.command）
     post_check:
       - command_exit_code: 0
 
@@ -109,7 +109,6 @@ playbooks:
         flags: i
       - pattern: "audio mix failed"
         flags: i
-    # Prefer E01 when loudness keywords also present; classifier ranks by score.
     match_boost_if:
       - pattern: "aac"
         flags: i
@@ -134,7 +133,7 @@ playbooks:
 unknown:
   id: E00_unknown
   title_zh: 未匹配已知 playbook
-  summary_zh: stderr 未命中文档内四类已知错误；阶段一不自动修复。
+  summary_zh: stderr 未命中文档内四类已知错误；不自动修复。
   risk_level: high
   auto_allowed: false
   needs_confirm_for:

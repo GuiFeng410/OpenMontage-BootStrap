@@ -73,7 +73,7 @@ metadata:
 ### 工具失败（强制交接）
 
 任一 `produce_*` / mix / compose 相关失败时：读 Skill `openmontage-bootstrap-error-handling`，  
-`error_capture_context` → `error_plan_recovery`；E01/E04 常见。阶段 1 只给计划，不自动 apply。
+`error_capture_context` → `error_plan_recovery` → `error_apply_recovery`；E01/E04 常见。
 
 ## 工具一览
 

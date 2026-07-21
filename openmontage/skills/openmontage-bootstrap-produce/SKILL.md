@@ -161,8 +161,8 @@ produce_set_production_profile(
 3. 交付 `renders/final.mp4`；可用 `produce_probe_media` 抽检  
 
 **工具失败时（强制）：** 先读 Skill `openmontage-bootstrap-error-handling`，调用  
-`error_capture_context` → `error_plan_recovery`；按计划安全步骤处理后再重试。  
-勿在未分类时盲目重跑付费 API 或覆盖素材。详见 `README/错误处理/`。
+`error_capture_context` → `error_plan_recovery` → `error_apply_recovery`（安全动作），再重试。  
+高危覆盖/付费须 `confirm=true`。详见 `README/错误处理/`。
 
 有 explainer stage director 时可读 `skills/pipelines/explainer/`。
 
@@ -172,7 +172,7 @@ produce_set_production_profile(
 |-------|------|
 | setup (01) | 前置环境 |
 | captions-music | 文稿→字幕；BGM 登记与 compose 输入打包（可选 ffmpeg 混音） |
-| error-handling | 工具失败时：capture → classify → plan（阶段 1 不自动 apply） |
+| error-handling | 工具失败：capture → plan → **apply**（≤3；高危须确认） |
 | providers (03) | 补 Key；重度/中度付费 TTS 前可先走 03 |
 | providers-stock | 中度画面 |
 | providers-tts/image/video | 中度可选 TTS；重度全套 |

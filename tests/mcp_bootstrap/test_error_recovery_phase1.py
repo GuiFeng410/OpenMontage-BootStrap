@@ -30,8 +30,9 @@ def test_list_includes_error_tools() -> None:
     assert "error_capture_context" in names
     assert "error_classify" in names
     assert "error_plan_recovery" in names
-    assert "error_list_incidents" in names
-    assert "error_apply_recovery" in list_bootstrap_tools()["not_in_v1"]
+    assert "error_apply_recovery" in names
+    assert "probe_audio_loudness" in names
+    assert "error_apply_recovery" not in list_bootstrap_tools()["not_in_v1"]
 
 
 def test_classify_e01_silent_bgm() -> None:
@@ -86,7 +87,8 @@ def test_capture_classify_plan_persist(sandbox: Path) -> None:
     plan = error_plan_recovery("err1", cap["incident_id"])
     assert plan["plan"]["playbook_id"] == "E02_subtitle_drive_colon"
     assert plan["plan"]["max_retries"] == 3
-    assert plan["plan"]["apply_available"] is False
+    assert plan["plan"]["apply_available"] is True
+    assert plan["plan"]["phase"] == 2
     assert plan["plan"]["auto_allowed"] is True
     assert any(a["id"] == "copy_srt_to_work_relpath" for a in plan["plan"]["actions"])
 
