@@ -88,8 +88,17 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_probe_media",
             "produce_read_asset_manifest",
             "produce_append_asset_manifest_entry",
+            "produce_scan_copy_music",
+            "produce_ensure_captions_music_dirs",
+            "produce_write_copy",
+            "produce_import_copy",
+            "produce_segment_copy_to_subtitles",
+            "produce_import_music",
+            "produce_register_music",
+            "produce_build_compose_inputs",
+            "produce_mix_narration_and_music",
         ],
-        "not_in_v1": ["diagram", "stitch", "mix_audio", "providers_tts"],
+        "not_in_v1": ["diagram", "stitch", "providers_tts"],
         "repo_root": str(REPO_ROOT),
         "mirrors": {"github": GITHUB_CLONE_URL, "gitee": GITEE_CLONE_URL},
     }
@@ -637,7 +646,284 @@ def produce_append_asset_manifest_entry(project_id: str, entry_json: str) -> dic
     try:
         entry = json.loads(entry_json) if entry_json else {}
     except json.JSONDecodeError as exc:
-        from openmontage.mcp.common.errors import DoctorError
-
         raise DoctorError(f"entry_json invalid: {exc}", code="bad_request") from exc
     return upsert_asset_entry(project_id, entry)
+
+
+def produce_scan_copy_music(project_id: str) -> dict[str, Any]:
+    from openmontage.mcp.common.captions_music import scan_copy_music
+
+    return scan_copy_music(project_id)
+
+
+def produce_ensure_captions_music_dirs(project_id: str) -> dict[str, Any]:
+    from openmontage.mcp.common.captions_music import ensure_captions_music_dirs
+    from openmontage.mcp.doctor.tools import require_p1_writes
+
+    require_p1_writes()
+    return ensure_captions_music_dirs(project_id)
+
+
+def produce_write_copy(
+    project_id: str,
+    content: str,
+    filename: str = "script.txt",
+    confirm: bool = False,
+) -> dict[str, Any]:
+    from openmontage.mcp.common.captions_music import write_copy
+    from openmontage.mcp.doctor.tools import require_p1_writes
+
+    require_p1_writes()
+    return write_copy(project_id, content, filename=filename, confirm=confirm)
+
+
+def produce_import_copy(
+    project_id: str,
+    source_path: str,
+    filename: str = "",
+    confirm: bool = False,
+) -> dict[str, Any]:
+    from openmontage.mcp.common.captions_music import import_copy
+    from openmontage.mcp.doctor.tools import require_p1_writes
+
+    require_p1_writes()
+    return import_copy(project_id, source_path, filename=filename, confirm=confirm)
+
+
+def produce_segment_copy_to_subtitles(
+    project_id: str,
+    filename: str = "",
+    chars_per_second: float = 4.0,
+    min_cue_seconds: float = 1.2,
+    max_cue_chars: int = 42,
+    fmt: str = "srt",
+    scene_id: str = "scene_01",
+    confirm_copy_ok: bool = False,
+) -> dict[str, Any]:
+    """Split assets/copy → subtitle segments → write assets/subs → register manifest."""
+    from openmontage.mcp.common.asset_manifest import path_relative_to_project, upsert_asset_entry
+    from openmontage.mcp.common.captions_music import (
+        SUBS_DIR,
+        read_primary_copy,
+        split_copy_into_cues,
+    )
+    from openmontage.mcp.doctor.tools import require_p1_writes
+
+    require_p1_writes()
+    if not confirm_copy_ok:
+        raise ConfigError(
+            "produce_segment_copy_to_subtitles requires confirm_copy_ok=true "
+            "after the user approved the copy/script."
+        )
+    copy_path, text = read_primary_copy(project_id, filename=filename)
+    segments = split_copy_into_cues(
+        text,
+        chars_per_second=chars_per_second,
+        min_cue_seconds=min_cue_seconds,
+        max_cue_chars=max_cue_chars,
+    )
+    if not segments:
+        raise DoctorError("copy produced zero subtitle segments", code="bad_request")
+
+    out_name = "captions.srt" if fmt == "srt" else f"captions.{fmt}"
+    out_rel = f"{project_id}/{SUBS_DIR}/{out_name}"
+    gen = media_tools.generate_subtitles(
+        json.dumps(segments, ensure_ascii=False),
+        output_path=out_rel,
+        fmt=fmt,
+    )
+    abs_out = gen.get("output_path") or out_rel
+    entry = {
+        "id": "subs_main",
+        "type": "subtitle",
+        "path": path_relative_to_project(project_id, abs_out),
+        "source_tool": "subtitle_gen",
+        "scene_id": (scene_id or "scene_01").strip() or "scene_01",
+        "subtype": "from_copy",
+        "generation_summary": f"segmented from {copy_path.name}",
+        "cost_usd": 0.0,
+    }
+    registered = upsert_asset_entry(project_id, entry)
+    preview = segments[:3]
+    return {
+        "project_id": project_id,
+        "copy_path": str(copy_path),
+        "subtitle_path": abs_out,
+        "format": fmt,
+        "segment_count": len(segments),
+        "duration_estimate_seconds": segments[-1]["end"] if segments else 0.0,
+        "segments_preview": preview,
+        "segments_json": json.dumps(segments, ensure_ascii=False),
+        "generate": gen,
+        "manifest_entry": entry,
+        "asset_manifest_path": registered["asset_manifest_path"],
+        "asset_count": registered["asset_count"],
+        "note": (
+            "Timing is heuristic (chars/sec) until real TTS/ASR timestamps exist. "
+            "Custom cue timing/position is out of scope for phase B."
+        ),
+    }
+
+
+def produce_import_music(
+    project_id: str,
+    source_path: str,
+    filename: str = "",
+    confirm: bool = False,
+    asset_id: str = "music_bgm",
+    scene_id: str = "scene_01",
+    volume: float = 0.25,
+) -> dict[str, Any]:
+    from openmontage.mcp.common.captions_music import import_music
+    from openmontage.mcp.doctor.tools import require_p1_writes
+
+    require_p1_writes()
+    return import_music(
+        project_id,
+        source_path,
+        filename=filename,
+        confirm=confirm,
+        asset_id=asset_id,
+        scene_id=scene_id,
+        volume=volume,
+    )
+
+
+def produce_register_music(
+    project_id: str,
+    filename: str = "",
+    asset_id: str = "music_bgm",
+    scene_id: str = "scene_01",
+    volume: float = 0.25,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    from openmontage.mcp.common.captions_music import register_music
+    from openmontage.mcp.doctor.tools import require_p1_writes
+
+    require_p1_writes()
+    return register_music(
+        project_id,
+        filename=filename,
+        asset_id=asset_id,
+        scene_id=scene_id,
+        volume=volume,
+        confirm=confirm,
+    )
+
+
+def produce_build_compose_inputs(
+    project_id: str,
+    music_asset_id: str = "music_bgm",
+    subtitle_asset_id: str = "subs_main",
+    music_volume: float = 0.25,
+    include_music: bool = True,
+    include_subs: bool = True,
+) -> dict[str, Any]:
+    from openmontage.mcp.common.captions_music import build_compose_inputs
+
+    return build_compose_inputs(
+        project_id,
+        music_asset_id=music_asset_id,
+        subtitle_asset_id=subtitle_asset_id,
+        music_volume=music_volume,
+        include_music=include_music,
+        include_subs=include_subs,
+    )
+
+
+def produce_mix_narration_and_music(
+    project_id: str,
+    narration_path: str = "",
+    music_filename: str = "",
+    music_volume: float = 0.2,
+    duck_db: float = 12.0,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Optional FFmpeg duck mix: narration + BGM → assets/audio/mixed.wav + manifest."""
+    from openmontage.mcp.common.asset_manifest import path_relative_to_project, upsert_asset_entry
+    from openmontage.mcp.common.captions_music import AUDIO_DIR, _pick_music_file, ensure_captions_music_dirs
+    from openmontage.mcp.common.sandbox import project_dir, resolve_under_projects
+    from openmontage.mcp.doctor.tools import require_p1_writes
+
+    require_p1_writes()
+    if not confirm:
+        raise ConfigError(
+            "produce_mix_narration_and_music requires confirm=true after the user approved mixing."
+        )
+    ensure_captions_music_dirs(project_id)
+    pdir = project_dir(project_id)
+
+    if narration_path:
+        narr = resolve_under_projects(narration_path)
+    else:
+        audio_dir = pdir / AUDIO_DIR
+        candidates = sorted(
+            [
+                p
+                for p in audio_dir.glob("*")
+                if p.is_file() and p.suffix.lower() in {".wav", ".mp3", ".m4a", ".aac"}
+                and p.name != "mixed.wav"
+            ]
+        )
+        if not candidates:
+            raise DoctorError(
+                "No narration under assets/audio/. Run produce TTS first or pass narration_path.",
+                code="not_found",
+            )
+        narr = candidates[0]
+
+    if not narr.exists():
+        raise DoctorError(f"narration not found: {narr}", code="not_found")
+
+    music = _pick_music_file(project_id, filename=music_filename)
+    out_rel = f"{project_id}/{AUDIO_DIR}/mixed.wav"
+    # duck_level is attenuation in dB (negative). music_volume retained for docs only.
+    level = -abs(float(duck_db))
+    _ = music_volume
+    mix = media_tools.mix_audio(
+        "duck",
+        json.dumps(
+            {
+                "primary_audio": str(narr),
+                "secondary_audio": str(music),
+                "output_path": out_rel,
+                "duck_level": level,
+            },
+            ensure_ascii=False,
+        ),
+    )
+    if not mix.get("success"):
+        raise DoctorError(
+            f"audio mix failed: {mix.get('error')}. Ensure ffmpeg is on PATH. "
+            f"Dependency note: uses audio_mixer duck operation.",
+            code="mix_failed",
+        )
+    abs_out = str(resolve_under_projects(out_rel))
+    if mix.get("data") and isinstance(mix["data"], dict) and mix["data"].get("output_path"):
+        abs_out = str(mix["data"]["output_path"])
+    entry = {
+        "id": "audio_mixed",
+        "type": "audio",
+        "path": path_relative_to_project(project_id, abs_out),
+        "source_tool": "audio_mixer",
+        "scene_id": "scene_01",
+        "subtype": "narration_plus_bgm",
+        "generation_summary": f"duck mix {narr.name} + {music.name}",
+        "cost_usd": 0.0,
+    }
+    registered = upsert_asset_entry(project_id, entry)
+    return {
+        "project_id": project_id,
+        "narration_path": str(narr),
+        "music_path": str(music),
+        "mixed_path": abs_out,
+        "mix": mix,
+        "manifest_entry": entry,
+        "asset_manifest_path": registered["asset_manifest_path"],
+        "asset_count": registered["asset_count"],
+        "note": (
+            "Mixed file registered as audio_mixed. "
+            "FFmpeg compose paths that accept a single audio bed can use this file; "
+            "Remotion paths may still prefer edit_decisions.audio.music + narration assets."
+        ),
+    }

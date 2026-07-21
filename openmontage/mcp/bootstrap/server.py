@@ -286,6 +286,151 @@ def produce_append_asset_manifest_entry(project_id: str, entry_json: str) -> dic
 
 
 @mcp.tool()
+def produce_scan_copy_music(project_id: str) -> dict[str, Any]:
+    """Scan assets/copy, assets/music, assets/subs for captions-music Skill."""
+    return _wrap(T.produce_scan_copy_music, project_id)
+
+
+@mcp.tool()
+def produce_ensure_captions_music_dirs(project_id: str) -> dict[str, Any]:
+    """Create assets/copy|music|subs|audio and artifacts if missing."""
+    return _wrap(T.produce_ensure_captions_music_dirs, project_id)
+
+
+@mcp.tool()
+def produce_write_copy(
+    project_id: str,
+    content: str,
+    filename: str = "script.txt",
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Write approved script text into assets/copy/ (confirm=true required)."""
+    return _wrap(T.produce_write_copy, project_id, content, filename, confirm)
+
+
+@mcp.tool()
+def produce_import_copy(
+    project_id: str,
+    source_path: str,
+    filename: str = "",
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Copy a user file under projects sandbox into assets/copy/ (confirm=true)."""
+    return _wrap(T.produce_import_copy, project_id, source_path, filename, confirm)
+
+
+@mcp.tool()
+def produce_segment_copy_to_subtitles(
+    project_id: str,
+    filename: str = "",
+    chars_per_second: float = 4.0,
+    min_cue_seconds: float = 1.2,
+    max_cue_chars: int = 42,
+    fmt: str = "srt",
+    scene_id: str = "scene_01",
+    confirm_copy_ok: bool = False,
+) -> dict[str, Any]:
+    """Split approved copy into cues, write assets/subs, register asset_manifest."""
+    return _wrap(
+        T.produce_segment_copy_to_subtitles,
+        project_id,
+        filename,
+        chars_per_second,
+        min_cue_seconds,
+        max_cue_chars,
+        fmt,
+        scene_id,
+        confirm_copy_ok,
+    )
+
+
+@mcp.tool()
+def produce_import_music(
+    project_id: str,
+    source_path: str,
+    filename: str = "",
+    confirm: bool = False,
+    asset_id: str = "music_bgm",
+    scene_id: str = "scene_01",
+    volume: float = 0.25,
+) -> dict[str, Any]:
+    """Copy BGM under projects sandbox into assets/music/ and register manifest."""
+    return _wrap(
+        T.produce_import_music,
+        project_id,
+        source_path,
+        filename,
+        confirm,
+        asset_id,
+        scene_id,
+        volume,
+    )
+
+
+@mcp.tool()
+def produce_register_music(
+    project_id: str,
+    filename: str = "",
+    asset_id: str = "music_bgm",
+    scene_id: str = "scene_01",
+    volume: float = 0.25,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Register an existing assets/music file into asset_manifest."""
+    return _wrap(
+        T.produce_register_music,
+        project_id,
+        filename,
+        asset_id,
+        scene_id,
+        volume,
+        confirm,
+    )
+
+
+@mcp.tool()
+def produce_build_compose_inputs(
+    project_id: str,
+    music_asset_id: str = "music_bgm",
+    subtitle_asset_id: str = "subs_main",
+    music_volume: float = 0.25,
+    include_music: bool = True,
+    include_subs: bool = True,
+) -> dict[str, Any]:
+    """Build edit_decisions_json + asset_manifest_json for produce_compose_*."""
+    return _wrap(
+        T.produce_build_compose_inputs,
+        project_id,
+        music_asset_id,
+        subtitle_asset_id,
+        music_volume,
+        include_music,
+        include_subs,
+    )
+
+
+@mcp.tool()
+def produce_mix_narration_and_music(
+    project_id: str,
+    narration_path: str = "",
+    music_filename: str = "",
+    music_volume: float = 0.2,
+    duck_db: float = 12.0,
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Optional FFmpeg duck mix of narration + BGM into assets/audio/mixed.wav."""
+    return _wrap(
+        T.produce_mix_narration_and_music,
+        project_id,
+        narration_path,
+        music_filename,
+        music_volume,
+        duck_db,
+        confirm,
+    )
+
+
+@mcp.tool()
 def produce_job_status(job_id: str) -> dict[str, Any]:
     """Poll background compose job."""
     return _wrap(T.produce_job_status, job_id)

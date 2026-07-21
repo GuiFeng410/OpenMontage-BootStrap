@@ -28,6 +28,7 @@
 | 4 | [04-收费Providers接入.md](./04-收费Providers接入.md) | （可选）往已注册 MCP 填付费 Key |
 | 5 | [05-免费Stock素材接入.md](./05-免费Stock素材接入.md) | （可选后补）Pexels/Pixabay Stock MCP |
 | 6 | [06-出片三档说明.md](./06-出片三档说明.md) | 主题后选：轻度 / 中度 / 重度 |
+| 7 | [07-字幕与配乐Skill边界大纲.md](./07-字幕与配乐Skill边界大纲.md) | 字幕+BGM：B/C 已实现 |
 
 ## 其它
 

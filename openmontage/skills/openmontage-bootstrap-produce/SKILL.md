@@ -148,9 +148,15 @@ produce_set_production_profile(
 
 产物路径写入 `asset_manifest_json`。本 Skill **不**直接调付费工具；只编排与等人审。
 
-### 5–7. 字幕与合成（共用）
+### 5–7. 字幕与合成
 
-1. `produce_generate_subtitles`（有分段时）  
+**字幕 / 文稿 / BGM：** Skill `openmontage-bootstrap-captions-music`（B+C）  
+文稿→`segment_copy_to_subtitles`；BGM→`import/register_music`→`produce_build_compose_inputs`→交回 `compose_*`。  
+可选：`produce_mix_narration_and_music`（需 ffmpeg）。详见 `README/07-字幕与配乐Skill边界大纲.md`。
+
+也可直接：
+
+1. `produce_generate_subtitles`（已有分段时）  
 2. `produce_compose_preflight` → `produce_compose_start` → 轮询 `produce_job_status`  
 3. 交付 `renders/final.mp4`；可用 `produce_probe_media` 抽检  
 
@@ -161,6 +167,7 @@ produce_set_production_profile(
 | Skill | 关系 |
 |-------|------|
 | setup (01) | 前置环境 |
+| captions-music | 文稿→字幕；BGM 登记与 compose 输入打包（可选 ffmpeg 混音） |
 | providers (03) | 补 Key；重度/中度付费 TTS 前可先走 03 |
 | providers-stock | 中度画面 |
 | providers-tts/image/video | 中度可选 TTS；重度全套 |
