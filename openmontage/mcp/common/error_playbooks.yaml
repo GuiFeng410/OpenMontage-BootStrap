@@ -1,8 +1,8 @@
 # BootStrap Error-Handling playbooks
 # Source: README/错误处理/01-错误集合.md
-# Phase 2: classify + plan + apply (safe auto). max_retries default 3.
+# Phase 3: + zero-key synth BGM (replace_bgm / synthesize_replacement_bgm with confirm).
 
-version: 2
+version: 3
 max_retries: 3
 
 playbooks:
@@ -27,6 +27,7 @@ playbooks:
     needs_confirm_for:
       - overwrite_or_delete_source_bgm
       - restock_download
+      - replace_bgm
       - synthesize_replacement_bgm
     planned_actions:
       - id: loudness_check
@@ -40,7 +41,10 @@ playbooks:
         description_zh: 无确认时可先关闭 BGM 继续 compose（仅字幕/旁白）
       - id: replace_bgm
         auto: false
-        description_zh: 换本地合成 BGM 或重新 Stock 下载（须用户确认）
+        description_zh: 零 Key 合成 ambient BGM 并登记（须 confirm=true；旧文件移到 music/_invalid/）
+      - id: synthesize_replacement_bgm
+        auto: false
+        description_zh: 同 replace_bgm（别名）
     post_check:
       - audio_bitrate_kbps_min: 64
       - mean_volume_db_min: -40

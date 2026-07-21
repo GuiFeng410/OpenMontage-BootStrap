@@ -73,7 +73,8 @@ metadata:
 ### 工具失败（强制交接）
 
 任一 `produce_*` / mix / compose 相关失败时：读 Skill `openmontage-bootstrap-error-handling`，  
-`error_capture_context` → `error_plan_recovery` → `error_apply_recovery`；E01/E04 常见。
+`error_capture_context` → `error_plan_recovery` → `error_apply_recovery`；E01/E04 常见。  
+E01 确认后可用 `produce_synthesize_bgm(confirm=true)` 或 `action_ids="replace_bgm"` 零 Key 换 BGM。
 
 ## 工具一览
 
@@ -83,6 +84,7 @@ metadata:
 | `produce_write_copy` / `produce_import_copy` | B |
 | `produce_segment_copy_to_subtitles` | B |
 | `produce_import_music` / `produce_register_music` | C |
+| `produce_synthesize_bgm` | C / E01 回退 |
 | `produce_build_compose_inputs` | C |
 | `produce_mix_narration_and_music` | C 可选 |
 | `produce_read_asset_manifest` | B/C |

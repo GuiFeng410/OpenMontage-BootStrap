@@ -410,6 +410,25 @@ def produce_build_compose_inputs(
 
 
 @mcp.tool()
+def produce_synthesize_bgm(
+    project_id: str,
+    duration_seconds: float = 64.0,
+    filename: str = "synth_ambient.wav",
+    asset_id: str = "music_bgm",
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Zero-key ambient BGM synthesis (E01). Requires confirm=true; archives old music."""
+    return _wrap(
+        T.produce_synthesize_bgm,
+        project_id,
+        duration_seconds,
+        filename,
+        asset_id,
+        confirm,
+    )
+
+
+@mcp.tool()
 def produce_mix_narration_and_music(
     project_id: str,
     narration_path: str = "",

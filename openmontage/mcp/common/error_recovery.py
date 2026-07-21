@@ -1,7 +1,7 @@
 """Error capture / classify / plan / apply for BootStrap Error-Handling Skill.
 
-Phase 2 adds ``error_apply_recovery`` (safe auto actions, max 3 retries) and
-``probe_audio_loudness``. High-risk actions require confirm=true.
+Phase 3: safe auto apply (max 3) + zero-key ``replace_bgm`` /
+``synthesize_replacement_bgm`` when confirm=true. Also ``probe_audio_loudness``.
 """
 
 from __future__ import annotations
@@ -880,11 +880,40 @@ def _action_verify_bitrate(project_id: str, prior: dict[str, Any] | None, incide
     }
 
 
+def _action_replace_or_synth_bgm(
+    project_id: str,
+    action_id: str,
+    *,
+    duration_seconds: float = 64.0,
+) -> dict[str, Any]:
+    """E01 high-risk: synthesize ambient BGM and re-register (confirm already gated)."""
+    from openmontage.mcp.common.synth_bgm import synthesize_and_register_bgm
+
+    out = synthesize_and_register_bgm(
+        project_id,
+        duration_seconds=duration_seconds,
+        filename="synth_ambient.wav",
+        asset_id="music_bgm",
+        archive_invalid=True,
+    )
+    return {
+        "ok": True,
+        "action": action_id,
+        **out,
+        "hint": (
+            "BGM replaced with zero-key synth_ambient.wav. "
+            "Retry produce_build_compose_inputs / mix / compose."
+        ),
+    }
+
+
 def _run_action(
     project_id: str,
     action_id: str,
     incident: dict[str, Any],
     results_so_far: list[dict[str, Any]],
+    *,
+    confirm: bool = False,
 ) -> dict[str, Any]:
     prior = next((r for r in reversed(results_so_far) if r.get("ok")), None)
     if action_id == "copy_srt_to_work_relpath":
@@ -903,12 +932,25 @@ def _run_action(
         return _action_two_step_encode(project_id, incident)
     if action_id == "verify_bitrate":
         return _action_verify_bitrate(project_id, prior, incident)
+    if action_id in {"replace_bgm", "synthesize_replacement_bgm"}:
+        if not confirm:
+            raise ConfigError(
+                f"{action_id} requires confirm=true after the user approved replacing BGM."
+            )
+        paths = _incident_paths(incident)
+        dur = 64.0
+        if isinstance(paths.get("duration_seconds"), (int, float)):
+            dur = float(paths["duration_seconds"])
+        return _action_replace_or_synth_bgm(project_id, action_id, duration_seconds=dur)
     if action_id in HIGH_RISK_ACTION_IDS:
         return {
             "ok": False,
             "action": action_id,
             "skipped": True,
-            "reason": "High-risk action requires explicit user workflow (import music / stock / overwrite).",
+            "reason": (
+                "High-risk action not auto-implemented here "
+                "(restock_download / overwrite_final_mp4). Handle via Stock/produce Skill with confirm."
+            ),
         }
     raise DoctorError(f"Unsupported action_id for apply: {action_id}", code="bad_request")
 
@@ -948,7 +990,6 @@ def error_apply_recovery(
     planned = [a for a in (pb.get("planned_actions") or []) if isinstance(a, dict) and a.get("id")]
     requested = _parse_action_ids(action_ids)
     if requested is None:
-        # default: all auto:true actions
         to_run = [str(a["id"]) for a in planned if a.get("auto")]
     else:
         known = {str(a["id"]) for a in planned}
@@ -960,7 +1001,6 @@ def error_apply_recovery(
     if not to_run:
         raise DoctorError("No actions to apply", code="bad_request")
 
-    # Gate: any non-auto or high-risk selected → confirm required
     auto_map = {str(a["id"]): bool(a.get("auto")) for a in planned}
     needs_confirm = any(
         (aid in HIGH_RISK_ACTION_IDS) or (not auto_map.get(aid, False)) for aid in to_run
@@ -975,7 +1015,7 @@ def error_apply_recovery(
     errors: list[str] = []
     for aid in to_run:
         try:
-            results.append(_run_action(project_id, aid, incident, results))
+            results.append(_run_action(project_id, aid, incident, results, confirm=confirm))
         except Exception as exc:  # noqa: BLE001
             err = {"ok": False, "action": aid, "error": str(exc)}
             results.append(err)

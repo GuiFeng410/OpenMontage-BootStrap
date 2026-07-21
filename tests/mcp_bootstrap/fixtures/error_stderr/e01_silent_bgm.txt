@@ -1,0 +1,3 @@
+volumedetect mean_volume: -91.0 dB max_volume: -91.0 dB
+[Parsed_loudnorm_0 @ ...] input_i: -inf
+Output AAC bitrate ~2kbps Qavg: 65536

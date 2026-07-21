@@ -1,0 +1,4 @@
+ParserError: The token '&&' is not a valid statement separator in this version.
+At line:1 char:42
++ ffmpeg -i a.mp4 -vf force_style=Fontsize=24,FontName=Arial && echo ok
+The string is missing the terminator: '.

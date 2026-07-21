@@ -1,0 +1,3 @@
+[Parsed_subtitles_0 @ 000001] Unable to parse "original_size" option value "\workfile\project\sub.srt"
+Error parsing options for filter 'subtitles'
+subtitles=D:\workfile\project\assets\subs\main.srt

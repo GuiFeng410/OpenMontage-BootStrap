@@ -1,0 +1,4 @@
+ffmpeg filtergraph amix + aac encode
+[aac @ ...] Qavg: 65536
+audio mix failed: output mixed.m4a only 2kbps
+duck mix narration + bgm collapsed bitrate

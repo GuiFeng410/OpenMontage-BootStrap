@@ -97,6 +97,7 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_register_music",
             "produce_build_compose_inputs",
             "produce_mix_narration_and_music",
+            "produce_synthesize_bgm",
             "error_capture_context",
             "error_classify",
             "error_plan_recovery",
@@ -837,6 +838,31 @@ def produce_build_compose_inputs(
     )
 
 
+def produce_synthesize_bgm(
+    project_id: str,
+    duration_seconds: float = 64.0,
+    filename: str = "synth_ambient.wav",
+    asset_id: str = "music_bgm",
+    confirm: bool = False,
+) -> dict[str, Any]:
+    """Zero-key ambient BGM (E01 fallback). Archives prior music to music/_invalid/."""
+    from openmontage.mcp.common.synth_bgm import synthesize_and_register_bgm
+    from openmontage.mcp.doctor.tools import require_p1_writes
+
+    require_p1_writes()
+    if not confirm:
+        raise ConfigError(
+            "produce_synthesize_bgm requires confirm=true after the user approved replacing BGM."
+        )
+    return synthesize_and_register_bgm(
+        project_id,
+        duration_seconds=duration_seconds,
+        filename=filename,
+        asset_id=asset_id,
+        archive_invalid=True,
+    )
+
+
 def produce_mix_narration_and_music(
     project_id: str,
     narration_path: str = "",
@@ -983,7 +1009,7 @@ def error_apply_recovery(
     confirm: bool = False,
     action_ids: str = "",
 ) -> dict[str, Any]:
-    """Apply safe recovery actions (phase 2). High-risk actions need confirm=true."""
+    """Apply recovery actions (phase 3). High-risk / replace_bgm need confirm=true."""
     from openmontage.mcp.common.error_recovery import error_apply_recovery as _apply
 
     return _apply(project_id, incident_id, confirm=confirm, action_ids=action_ids)
