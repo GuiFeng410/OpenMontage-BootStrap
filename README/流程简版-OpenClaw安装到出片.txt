@@ -4,27 +4,30 @@ OpenMontage BootStrap — 有 OpenClaw 时怎么走（简版）
    把仓内 openmontage/skills/openmontage-bootstrap-installer/
    拷到 OpenClaw 用户 Skill 目录并启用。
    对 Agent 说：我想生成视频 / 按 BootStrap 安装。
+   （安装 Skill 会逐步口述 MCP 字段与验收口令，不自动改配置）
 
-2) 安装 Skill 会带你做完这些（只口述，不自动改配置）
+2) 安装 Skill 会带你做完这些
    - 选目录，clone 仓库（先 GitHub，失败用 Gitee）
    - 建 venv、装依赖
    - 注册 4 个 MCP（都能先启动；付费 Key 可空）：
        门面 bootstrap
        providers-tts / providers-image / providers-video
    - 启用 3 个 Skill：setup、produce、providers(Skill03)
+   - 注意：command 用 venv python；cwd=仓库根；门面要 P1_ALLOW_WRITES
 
 3) 怎么选、先后顺序
    - 先跑 setup（环境计划 → 你确认 → 安装 → verify）
-   - 再跑 produce：零 Key 最小出片 → final.mp4
-   - 详细步骤见同目录 00～03；模板在 templates/
+   - 再跑 produce：主题确认后选档（轻度 / 中度 / 重度）→ final.mp4
+   - 三档说明：06-出片三档说明.md；详细步骤见 00～06；模板在 templates/
 
 4) 付费 Key（可选，装好并能出片后再说）
    - 不必安装时就填
-   - 需要云端 TTS / 生图 / 生视频时：在已注册的 providers MCP 的 env 里填 Key，重启 MCP
+   - 中度可选付费 TTS；重度需要 TTS+生图+生视频 Key
+   - 在已注册的 providers MCP 的 env 里填 Key，重启 MCP
    - 由 Skill03 引导；说明见 04-收费Providers接入.md
    - 仍走门禁：估价 → 样片确认 → 再正式生成
 
-5) 免费 Stock（可选后补，默认不装）
+5) 免费 Stock（可选后补，默认不装；中度出片需要）
    - 需要 Pexels/Pixabay 素材时再注册 providers-stock
    - 见 05-免费Stock素材接入.md；模板 templates/providers-stock.mcp.json
    - 协议：search → 确认 → download(confirm)

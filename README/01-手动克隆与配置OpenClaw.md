@@ -41,7 +41,8 @@ pip install -r requirements.txt
 
 ## 3. 注册 MCP（门面 + 三个 providers；Key 可后填）
 
-安装路径建议**一并注册 4 个** server（模板见 [templates/](./templates/)）：
+配置写在 **OpenClaw**，不写在仓库里。安装 Skill **不会**自动改配置。  
+建议**一并注册 4 个** server（模板见 [templates/](./templates/)）：
 
 | Server | 模板 | 说明 |
 |--------|------|------|
@@ -50,17 +51,25 @@ pip install -r requirements.txt
 | `openmontage-providers-image` | `providers-image.mcp.json` | 付费生图（Key 可空） |
 | `openmontage-providers-video` | `providers-video.mcp.json` | 付费生视频（Key 可空） |
 
-共同点：`command` 用 venv python；`cwd`=`<REPO>`；`OPENMONTAGE_PROJECTS_DIR` + `PYTHONUTF8=1`。  
-门面另需 `OPENMONTAGE_P1_ALLOW_WRITES=true`。
+### 字段对照（易错）
 
-安装 Skill **不会**自动改 OpenClaw 配置。付费 Key 见 [04](./04-收费Providers接入.md)（项目跑通后再填即可）。
+| 字段 | 正确值 |
+|------|--------|
+| `command` | `<REPO>\.venv\Scripts\python.exe`（推荐绝对路径） |
+| `args` | `["-m", "openmontage.mcp.<模块>"]` |
+| `cwd` | `<REPO>` |
+| `env` | 四个 server 同一 `OPENMONTAGE_PROJECTS_DIR`；`PYTHONUTF8=1` |
+| 门面额外 | `OPENMONTAGE_P1_ALLOW_WRITES=true` |
+
+逐个启动验收后再配 Skill。更细口述清单见仓内 `openmontage-bootstrap-installer` Skill。  
+付费 Key 见 [04](./04-收费Providers接入.md)（跑通后再填）。Stock 见 [05](./05-免费Stock素材接入.md)（可选后补，勿塞进必配 4 个）。
 
 ## 4. 启用仓内 3 个 Skill
 
 `skills.load.extraDirs` → `<REPO>/openmontage/skills`
 
 - `openmontage-bootstrap-setup`（Skill01）
-- `openmontage-bootstrap-produce`（Skill02）
+- `openmontage-bootstrap-produce`（Skill02；主题后选三档，见 [06](./06-出片三档说明.md)）
 - `openmontage-bootstrap-providers`（Skill03；无 Key 时不烧钱）
 
 可选：外置保留 `openmontage-bootstrap-installer` 供新机引导。

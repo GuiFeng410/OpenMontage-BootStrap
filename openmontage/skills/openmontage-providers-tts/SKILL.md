@@ -74,6 +74,18 @@ Never put API keys in extras or Skills.
 
 Respect `OPENMONTAGE_MAX_COST_USD` and `OPENMONTAGE_ALLOWED_PROVIDERS` when set.
 
-## With animated-explainer
+## With animated-explainer / produce 交接
+
+| 档位 | 何时用本 Skill |
+|------|----------------|
+| 轻度 | 不用（门面 Piper） |
+| 中度 | **仅当用户显式选云端 TTS**；已配 Key 也不要自动升级 |
+| 重度 | **必用**付费 TTS（全套语音） |
+
+被 Skill02 交接时：
+
+1. 产出 wav/mp3 写到项目沙箱（路径告知 produce）。  
+2. produce 用该路径做字幕与 compose；本 Skill 不调 `produce_compose_*`。  
+3. 失败不静默改走 Piper；问用户：换 provider / 退回 Piper / 中止。
 
 At assets stage: if a paid TTS provider is available and user wants higher voice quality, present Piper (free) vs selected paid path with itemized cost, then follow this protocol. Default remains Piper unless user opts in.

@@ -18,9 +18,10 @@
 | [00-安装Skill](README/00-安装Skill-先拷贝到OpenClaw.md) | 先拷安装 Skill 到 OpenClaw |
 | [01-克隆与配置](README/01-手动克隆与配置OpenClaw.md) | 拉仓 + 口述配 MCP/Skill |
 | [02-环境安装](README/02-环境检测与安装.md) | setup / dry_run |
-| [03-最小出片](README/03-零Key最小出片.md) | produce → `final.mp4` |
+| [03-最小出片](README/03-零Key最小出片.md) | produce → 先轻度 `final.mp4` |
 | [04-收费Providers](README/04-收费Providers接入.md) | （可选）TTS / 生图 / 生视频 |
 | [05-免费Stock](README/05-免费Stock素材接入.md) | （可选后补）Pexels/Pixabay |
+| [06-出片三档](README/06-出片三档说明.md) | 轻度 / 中度 / 重度 |
 
 拉仓后仓内含：门面 MCP、setup、produce、providers（Skill03）、installer，以及可选付费/Stock MCP。
 

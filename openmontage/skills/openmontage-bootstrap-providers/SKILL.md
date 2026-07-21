@@ -140,16 +140,26 @@ metadata:
 
 Stock（Pexels/Pixabay）**不在本 Skill 范围** — 见可选后补 `openmontage-providers-stock` / `README/05-免费Stock素材接入.md`。
 
+## 与出片三档的关系
+
+| 档位 | 本 Skill 做什么 |
+|------|-----------------|
+| 轻度 | 通常不需要 |
+| 中度 | 画面用 Stock（05）；若用户**手动**要付费 TTS，再按本 Skill 补 TTS Key |
+| 重度 | **全套**：引导补齐付费 TTS + 生图 + 生视频 Key，再交对应执行 Skill |
+
+用户可读版：`README/06-出片三档说明.md`。
+
 ## 与 Skill01 / 02 / 安装的关系
 
 | Skill | 职责 |
 |-------|------|
 | installer | 拉仓 + 注册 4 MCP + 启用 3 Skill；**不填付费 Key** |
 | 01 setup | 环境 / 零 Key 依赖 |
-| 02 produce | 门面 `produce_*`，默认 Piper |
+| 02 produce | 门面 `produce_*`；主题后选轻/中/重并编排交接 |
 | **03 providers（本 Skill）** | 后补 Key → 交 providers-* |
 
-用户应先零 Key 成片，再按需开本 Skill 填 Key。
+建议先 **轻度** 成片，再按需开本 Skill 填 Key 升到中度付费 TTS 或重度。
 
 ## 成功标准
 

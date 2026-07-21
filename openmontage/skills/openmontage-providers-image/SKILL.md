@@ -82,3 +82,11 @@ Provider-specific fields as a JSON object string, e.g.:
 ## Budget
 
 Respect `OPENMONTAGE_MAX_COST_USD` and `OPENMONTAGE_ALLOWED_PROVIDERS` when set.
+
+## 与 produce 交接（重度档）
+
+由 Skill02 在 **重度** 画面分支按镜头交接本 Skill。
+
+1. 走完整门禁后，生图文件落在项目沙箱。  
+2. 回传路径给 produce，写入 `asset_manifest_json`（建议含 `id` / `kind: image` / `path` / `provider`）。  
+3. 不调用 compose；中度画面走 Stock，不走本 Skill。

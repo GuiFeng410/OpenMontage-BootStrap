@@ -16,8 +16,10 @@ git pull bootstrap main
 拉完后确认有：
   openmontage/mcp/providers_{tts,image,video,stock}/
   openmontage/skills/openmontage-bootstrap-providers/
+  openmontage/skills/openmontage-bootstrap-produce/   （含三档流程）
   openmontage/skills/openmontage-providers-{tts,image,video,stock}/
   README/templates/providers-*.mcp.json
+  README/06-出片三档说明.md
 
 （可选）.\.venv\Scripts\Activate.ps1 && pip install -r requirements.txt
 
@@ -53,8 +55,10 @@ Stock → PEXELS_API_KEY / PIXABAY_API_KEY，见 05-免费Stock素材接入.md
 ------------------------------------------------------------
 
 [ ] git pull 成功
-[ ] 门面仍能用；setup/produce 未动
+[ ] 门面仍能用；setup 未动；produce Skill 已是含三档的新版
 [ ] 新增 3 个付费 MCP 能启动；Skill03 已启用
 [ ] （可选）stock MCP + Skill；Key 有需要再填
 
-（可选）外置 installer 若以前拷过：用仓内最新夹覆盖一次即可，不影响现有出片。
+出片：主题确认后选轻度/中度/重度，见 README/06-出片三档说明.md。
+
+（可选）外置 installer 若以前拷过：用仓内最新夹覆盖一次（含更细 MCP 验收步骤），不影响现有出片。
