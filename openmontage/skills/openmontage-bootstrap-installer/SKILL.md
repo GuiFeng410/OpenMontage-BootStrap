@@ -114,4 +114,9 @@ pip install -r requirements.txt
 **付费 Key（可选，安装后）：** 项目与 MCP 已稳定后，若要用云端 TTS/生图/生视频，再对 Agent 说「按 Skill03 帮我填 Key」，或自读 `<TARGET>/README/04-收费Providers接入.md`。  
 此时只需在已注册的 providers MCP 的 `env` 里填入对应 Key 并重启 MCP，**不必重装项目**。
 
+**免费 Stock（可选后补，默认不安）：** 需要 Pexels/Pixabay B-roll 时，再注册  
+`openmontage-providers-stock`（模板 `README/templates/providers-stock.mcp.json`），启用 Skill `openmontage-providers-stock`，填免费 Key。  
+说明：`<TARGET>/README/05-免费Stock素材接入.md`。  
+**不要**在安装必配的 4 个 MCP 里强塞 stock。
+
 操作说明索引：`<TARGET>/README/00-INDEX.md`

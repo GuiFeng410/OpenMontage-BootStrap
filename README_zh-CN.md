@@ -20,8 +20,9 @@
 | [02-环境安装](README/02-环境检测与安装.md) | setup / dry_run |
 | [03-最小出片](README/03-零Key最小出片.md) | produce → `final.mp4` |
 | [04-收费Providers](README/04-收费Providers接入.md) | （可选）TTS / 生图 / 生视频 |
+| [05-免费Stock](README/05-免费Stock素材接入.md) | （可选后补）Pexels/Pixabay |
 
-拉仓后仓内含：门面 MCP、setup、produce、providers（Skill03）、installer，以及可选付费 MCP。
+拉仓后仓内含：门面 MCP、setup、produce、providers（Skill03）、installer，以及可选付费/Stock MCP。
 
 英文入口：[`README.md`](README.md)
 

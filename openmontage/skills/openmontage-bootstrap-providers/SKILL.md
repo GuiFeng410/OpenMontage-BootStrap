@@ -138,7 +138,7 @@ metadata:
 **视频：** kling（官方）· seedance · sora · veo · minimax · runway  
 **TTS：** openai · elevenlabs · dashscope · doubao · google · kling  
 
-Stock（Pexels/Pixabay）**不在本 Skill 范围**（以后单独 stock MCP）。
+Stock（Pexels/Pixabay）**不在本 Skill 范围** — 见可选后补 `openmontage-providers-stock` / `README/05-免费Stock素材接入.md`。
 
 ## 与 Skill01 / 02 / 安装的关系
 

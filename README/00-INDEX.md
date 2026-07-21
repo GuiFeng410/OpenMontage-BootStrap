@@ -21,10 +21,12 @@
 |----|------|--------|
 | 0 | [00-安装Skill-先拷贝到OpenClaw.md](./00-安装Skill-先拷贝到OpenClaw.md) | （可选）只装安装 Skill，用一句话拉仓并口述配置 |
 | — | [流程简版-OpenClaw安装到出片.txt](./流程简版-OpenClaw安装到出片.txt) | 一页流程（有 OpenClaw 时怎么选） |
+| — | [已装机器-补装新MCP与Skill.txt](./已装机器-补装新MCP与Skill.txt) | 旧机已配过：只补新 MCP/Skill |
 | 1 | [01-手动克隆与配置OpenClaw.md](./01-手动克隆与配置OpenClaw.md) | clone + 口述/手配 4 MCP 与 3 Skill |
 | 2 | [02-环境检测与安装.md](./02-环境检测与安装.md) | setup：计划 → 确认 → 安装 → verify |
 | 3 | [03-零Key最小出片.md](./03-零Key最小出片.md) | produce → `final.mp4` |
 | 4 | [04-收费Providers接入.md](./04-收费Providers接入.md) | （可选）往已注册 MCP 填付费 Key |
+| 5 | [05-免费Stock素材接入.md](./05-免费Stock素材接入.md) | （可选后补）Pexels/Pixabay Stock MCP |
 
 ## 其它
 

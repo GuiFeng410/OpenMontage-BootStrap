@@ -24,5 +24,10 @@ OpenMontage BootStrap — 有 OpenClaw 时怎么走（简版）
    - 由 Skill03 引导；说明见 04-收费Providers接入.md
    - 仍走门禁：估价 → 样片确认 → 再正式生成
 
+5) 免费 Stock（可选后补，默认不装）
+   - 需要 Pexels/Pixabay 素材时再注册 providers-stock
+   - 见 05-免费Stock素材接入.md；模板 templates/providers-stock.mcp.json
+   - 协议：search → 确认 → download(confirm)
+
 索引：README/00-INDEX.md
 镜像：GitHub GuiFeng410/OpenMontage-BootStrap ；Gitee 备用
