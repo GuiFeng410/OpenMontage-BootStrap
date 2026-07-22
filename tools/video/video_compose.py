@@ -1378,6 +1378,19 @@ class VideoCompose(BaseTool):
                 resolved_cut["source"] = asset_lookup[source_id]["path"]
             resolved_cuts.append(resolved_cut)
 
+        # Remotion Explainer expects audio.narration.src (not segments/asset_id).
+        edit_for_remotion = dict(edit_decisions, cuts=resolved_cuts)
+        ed_audio = edit_decisions.get("audio") or {}
+        narration = dict(ed_audio.get("narration") or {})
+        if not narration.get("src"):
+            segments = narration.get("segments") or []
+            if segments:
+                asset_id = segments[0].get("asset_id")
+                if asset_id and asset_id in asset_lookup:
+                    narration["src"] = asset_lookup[asset_id]["path"]
+        if narration.get("src"):
+            edit_for_remotion["audio"] = {**ed_audio, "narration": narration}
+
         # --- Pre-compose validation gate ---
         scene_plan = inputs.get("scene_plan")
         validation_block = self._pre_compose_validation(edit_decisions, resolved_cuts, scene_plan)
@@ -1408,9 +1421,20 @@ class VideoCompose(BaseTool):
         # --- Explicit Remotion path (render_runtime == 'remotion') ---
         if self._needs_remotion(resolved_cuts):
             remotion_inputs: dict[str, Any] = {
-                "edit_decisions": dict(edit_decisions, cuts=resolved_cuts),
+                "edit_decisions": edit_for_remotion,
                 "output_path": str(output_path),
             }
+            project_id = edit_decisions.get("project_id")
+            if project_id:
+                try:
+                    from openmontage.mcp.common.sandbox import project_dir
+
+                    remotion_inputs["project_root"] = str(project_dir(str(project_id)))
+                except Exception:
+                    repo_root = Path(__file__).resolve().parent.parent.parent
+                    cand = repo_root / "projects" / project_id
+                    if cand.exists():
+                        remotion_inputs["project_root"] = str(cand.resolve())
             if profile:
                 remotion_inputs["profile"] = profile
             # Forward the creator-facing render timeout through the high-level
@@ -1670,6 +1694,104 @@ class VideoCompose(BaseTool):
 
         return render_result
 
+    def _resolve_project_root_for_remotion(
+        self, props: dict[str, Any], inputs: dict[str, Any]
+    ) -> Path | None:
+        """Resolve the OpenMontage project directory for staging local media."""
+        project_root = inputs.get("project_root")
+        if project_root:
+            root = Path(project_root).expanduser()
+            return root.resolve() if root.exists() else None
+
+        project_id = props.get("project_id")
+        if not project_id:
+            return None
+
+        try:
+            from openmontage.mcp.common.sandbox import project_dir
+
+            return project_dir(str(project_id))
+        except Exception:
+            repo_root = Path(__file__).resolve().parent.parent.parent
+            cand = repo_root / "projects" / project_id
+            return cand.resolve() if cand.exists() else None
+
+    def _stage_remotion_public_assets(
+        self,
+        props: dict[str, Any],
+        composer_dir: Path,
+        project_root: Path | None,
+    ) -> None:
+        """Copy local media into remotion-composer/public for staticFile() access.
+
+        Remotion's headless browser cannot reliably load Windows file:// URLs.
+        Project assets live under projects/<id>/assets/ but must be staged under
+        remotion-composer/public/<id>/ with paths relative to public/.
+        """
+        import shutil
+
+        project_id = str(props.get("project_id") or "openmontage-project")
+        public_root = composer_dir / "public" / project_id
+        public_root.mkdir(parents=True, exist_ok=True)
+        shared_public = composer_dir / "public"
+        staged: dict[str, str] = {}
+
+        def stage_one(raw: str) -> str:
+            if not raw or raw.startswith(("http://", "https://", "data:")):
+                return raw
+
+            norm = raw.replace("\\", "/")
+            if (shared_public / norm).exists():
+                return norm
+            if raw in staged:
+                return staged[raw]
+
+            candidate = Path(raw)
+            resolved: Path | None = None
+            if candidate.is_absolute() and candidate.exists():
+                resolved = candidate.resolve()
+            elif project_root is not None:
+                under_project = (project_root / raw).resolve()
+                if under_project.exists():
+                    resolved = under_project
+            elif candidate.exists():
+                resolved = candidate.resolve()
+
+            if resolved is None:
+                return raw
+
+            resolved_key = str(resolved)
+            if resolved_key in staged:
+                rel = staged[resolved_key]
+                staged[raw] = rel
+                return rel
+
+            dest = public_root / resolved.name
+            if not dest.exists() or dest.stat().st_mtime < resolved.stat().st_mtime:
+                shutil.copy2(resolved, dest)
+
+            rel = f"{project_id}/{resolved.name}".replace("\\", "/")
+            staged[resolved_key] = rel
+            staged[raw] = rel
+            return rel
+
+        for cut in props.get("cuts", []):
+            if cut.get("source"):
+                cut["source"] = stage_one(cut["source"])
+            if cut.get("backgroundImage"):
+                cut["backgroundImage"] = stage_one(cut["backgroundImage"])
+            if cut.get("backgroundVideo"):
+                cut["backgroundVideo"] = stage_one(cut["backgroundVideo"])
+            if cut.get("images"):
+                cut["images"] = [stage_one(img) for img in cut["images"]]
+
+        audio = props.get("audio")
+        if isinstance(audio, dict):
+            for layer in ("narration", "music"):
+                layer_cfg = audio.get(layer)
+                if isinstance(layer_cfg, dict) and layer_cfg.get("src"):
+                    layer_cfg["src"] = stage_one(layer_cfg["src"])
+
     def _remotion_render(self, inputs: dict[str, Any]) -> ToolResult:
         """Render via Remotion (requires Node.js + npx).
 
@@ -1700,15 +1822,15 @@ class VideoCompose(BaseTool):
         # Deep-copy props so we don't mutate the original
         props = json.loads(json.dumps(composition_data))
 
-        # Convert absolute file paths to file:// URIs for Remotion's
-        # Img and OffthreadVideo components
-        for cut in props.get("cuts", []):
-            source = cut.get("source", "")
-            if source and not source.startswith(("http://", "https://", "file://")):
-                resolved = Path(source).resolve()
-                if resolved.exists():
-                    posix = resolved.as_posix()
-                    cut["source"] = f"file:///{posix}" if not posix.startswith("/") else f"file://{posix}"
+        composer_dir = Path(__file__).resolve().parent.parent.parent / "remotion-composer"
+        if not composer_dir.exists():
+            return ToolResult(
+                success=False,
+                error=f"Remotion composer project not found at {composer_dir}",
+            )
+
+        project_root = self._resolve_project_root_for_remotion(props, inputs)
+        self._stage_remotion_public_assets(props, composer_dir, project_root)
 
         # Build a custom themeConfig from the playbook's actual colors.
         # This ensures every video gets a unique visual identity derived
@@ -1727,14 +1849,6 @@ class VideoCompose(BaseTool):
         props_path = output_path.parent / ".remotion_props.json"
         with open(props_path, "w", encoding="utf-8") as f:
             json.dump(props, f)
-
-        # remotion-composer lives at project root
-        composer_dir = Path(__file__).resolve().parent.parent.parent / "remotion-composer"
-        if not composer_dir.exists():
-            return ToolResult(
-                success=False,
-                error=f"Remotion composer project not found at {composer_dir}",
-            )
 
         # Route to the correct Remotion composition based on renderer_family.
         # This prevents all pipelines from collapsing into the Explainer visual grammar.
