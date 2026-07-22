@@ -36,6 +36,16 @@ metadata:
 统一入口出片：门面 `produce_*` + 按档位交接 Stock / 付费 providers。  
 交付物：`<PROJECTS>/<project_id>/renders/final.mp4`。
 
+**素材按项目隔离**（不是全局共享库）：
+
+```text
+<PROJECTS>/<project_id>/assets/
+  images/  video/  music/  audio/  copy/  subs/  stock/
+```
+
+`produce_init_project` / `produce_ensure_captions_music_dirs` 会预建上述目录。  
+用户自带图/音/视频放入**当前** `project_id` 对应目录；新项目不会自动继承旧项目素材。
+
 **不做：** 代用户选档、伪造 `approval_text`、静默调付费 API、静默换 provider。
 
 ## Required MCP
@@ -78,7 +88,7 @@ metadata:
 
 1. 确认主题/标题（人审；`approval_text` 用用户原话）。  
 2. ★ **档位选择关卡**：讲清轻/中/重 → 用户选定 → 再继续。  
-3. `produce_init_project`（`pipeline_type=animated-explainer`）。  
+3. `produce_init_project`（`pipeline_type=animated-explainer`）→ 预建 `assets/*`。  
 4. ★ 写入档位（优先专用工具）：
 
 ```text
@@ -152,7 +162,8 @@ produce_set_production_profile(
 
 **字幕 / 文稿 / BGM：** Skill `openmontage-bootstrap-captions-music`（B+C）  
 文稿→`segment_copy_to_subtitles`；BGM→`import/register_music`→`produce_build_compose_inputs`→交回 `compose_*`。  
-可选：`produce_mix_narration_and_music`（需 ffmpeg）。详见 `README/说明/03-字幕与配乐.md`。
+可选：`produce_mix_narration_and_music`（需 ffmpeg）；E01 静音 BGM 确认后可用 `produce_synthesize_bgm(confirm=true)`。  
+详见 `README/说明/03-字幕与配乐.md`。
 
 也可直接：
 
@@ -160,9 +171,9 @@ produce_set_production_profile(
 2. `produce_compose_preflight` → `produce_compose_start` → 轮询 `produce_job_status`  
 3. 交付 `renders/final.mp4`；可用 `produce_probe_media` 抽检  
 
-**工具失败时（强制）：** 先读 Skill `openmontage-bootstrap-error-handling`，调用  
+**工具失败时（强制）：** 先读 Skill `openmontage-bootstrap-error-handling`（阶段 3），调用  
 `error_capture_context` → `error_plan_recovery` → `error_apply_recovery`（安全动作），再重试。  
-高危覆盖/付费须 `confirm=true`。详见 `README/错误处理/`。
+高危覆盖/付费/换 BGM 须 `confirm=true`（如 `action_ids="replace_bgm"`）。详见 `README/错误处理/`。
 
 有 explainer stage director 时可读 `skills/pipelines/explainer/`。
 

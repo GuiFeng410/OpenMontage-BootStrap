@@ -27,10 +27,22 @@ metadata:
 
 1. **不自动修改** OpenClaw 配置文件；只**口述**逐步操作，等用户确认完成后再进入下一步。  
 2. 拉仓优先 GitHub，失败再用 Gitee。  
-3. 安装阶段目标：项目可跑 + **4 个 MCP 已注册可启动** + **3 个 Skill 已启用**。  
+3. 安装阶段目标：项目可跑 + **4 个 MCP 已注册可启动** + **必开 3 Skill** + **强烈建议 2 Skill**（error-handling、captions-music）已启用。  
 4. **付费 API Key 安装时不必填**；MCP 可先用占位/空 Key 启动。项目与零 Key 路径跑通后，再可选填 Key。  
 5. 不要跳过「用户确认已 clone / 已改配置」的检查点。  
-6. 口述时用**本机真实路径**替换 `<TARGET>`、`<PROJECTS_DIR>`；优先让用户从模板复制再改。
+6. 口述时用**本机真实路径**替换 `<TARGET>`、`<PROJECTS_DIR>`；优先让用户从模板复制再改。  
+7. 仓内 Skill 靠 `extraDirs` 指向 `<TARGET>/openmontage/skills`；用户 `git pull` 后即同步，**不必**再拷贝 setup/produce 等到 `~/.openclaw/skills`。
+
+## 安装闭环（对人说明时按此顺序）
+
+```text
+① 本机 OpenClaw 先放入/启用「安装 Skill」（installer，外置拷贝）
+② 由 installer 口述：选 <TARGET> → clone 仓库 → 建 venv
+③ 仍由 installer 口述：注册 4 个 MCP + extraDirs + 启用仓内 Skill
+④ 验收口令齐 → 交接 setup 检测 → verify_ready → 可出片
+```
+
+未完成 ③ 的验收口令前，不要宣称「安装完成」。
 
 ## 触发话术（示例）
 
@@ -147,16 +159,37 @@ Windows 路径含空格时：`command`/`cwd` 用完整路径；JSON 里用 `\\` 
 
 **验收口令：**「三个必开 Skill 已启用」
 
-#### E.3 按需启用（安装时可不急）
+#### E.3 强烈建议一并启用（安装时尽量开）
+
+| Skill | 作用 |
+|-------|------|
+| `openmontage-bootstrap-error-handling` | 工具失败：capture → plan → **apply**（≤3；含零 Key 合成 BGM） |
+| `openmontage-bootstrap-captions-music` | 文稿→字幕；本地 BGM；compose 输入打包 |
+
+**验收口令（建议）：**「error-handling 与 captions-music 已启用」
+
+#### E.4 按需启用（安装时可不急）
 
 | Skill | 何时开 |
 |-------|--------|
 | `openmontage-providers-tts` / `image` / `video` | 填了对应 Key、要跑付费执行时 |
 | `openmontage-providers-stock` | 后补注册了 stock MCP 后 |
 
-本安装 Skill 可继续留在外置目录，供新机引导。
+本安装 Skill 可继续留在外置目录，供新机引导；仓内其它 Skill 只靠 `extraDirs` 同步。
 
-### F. 交接（先零 Key；再选档）
+### F. 闭环检查（齐了再交接）
+
+请用户确认下列全部为真：
+
+1. 仓库在 `<TARGET>`，venv 可 import `openmontage`  
+2. 四个 MCP 均能启动（Key 可空）  
+3. `extraDirs` = `<TARGET>/openmontage/skills`  
+4. 必开 3 Skill 已启用；建议 2 Skill 已启用  
+5. 四个 MCP 的 `OPENMONTAGE_PROJECTS_DIR` 相同  
+
+**验收口令：**「安装闭环检查通过」
+
+### G. 交接（先零 Key；再选档）
 
 告知用户下一步对 Agent 说：
 
