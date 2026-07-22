@@ -96,7 +96,8 @@ def test_agnes_video_execute_create_poll_download(monkeypatch, tmp_path):
         "task_id": "task_1",
         "seconds": "5.0",
         "size": "1152x768",
-        "metadata": {"url": "https://cdn.example.com/out.mp4"},
+        # Live Agnes responses put the download URL at top-level `url`.
+        "url": "https://cdn.example.com/out.mp4",
     }
     download_resp = MagicMock()
     download_resp.raise_for_status = MagicMock()

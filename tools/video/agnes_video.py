@@ -281,9 +281,10 @@ class AgnesVideo(BaseTool):
                 result.raise_for_status()
                 result_data = result.json()
                 status = str(result_data.get("status") or "").lower()
+                # Live API uses pending -> in_progress -> completed (docs also list queued).
                 if status == "completed":
                     break
-                if status == "failed":
+                if status in {"failed", "error", "cancelled", "canceled"}:
                     detail = result_data.get("error") or result_data.get("message") or status
                     return ToolResult(success=False, error=f"Agnes video generation failed: {detail}")
                 time.sleep(poll_interval)
@@ -291,10 +292,19 @@ class AgnesVideo(BaseTool):
             if not result_data or str(result_data.get("status") or "").lower() != "completed":
                 return ToolResult(success=False, error="Agnes video generation timed out")
 
-            metadata = result_data.get("metadata") or {}
-            video_url = metadata.get("url")
+            metadata = result_data.get("metadata") if isinstance(result_data.get("metadata"), dict) else {}
+            # Docs put the file under metadata.url; live responses expose top-level url.
+            video_url = (
+                result_data.get("url")
+                or metadata.get("url")
+                or result_data.get("video_url")
+                or metadata.get("video_url")
+            )
             if not video_url:
-                return ToolResult(success=False, error="Agnes video output missing metadata.url")
+                return ToolResult(
+                    success=False,
+                    error="Agnes video output missing url (checked top-level and metadata.url)",
+                )
 
             download = requests.get(video_url, timeout=300)
             download.raise_for_status()
