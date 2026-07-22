@@ -3,8 +3,8 @@ name: openmontage-bootstrap-installer
 description: >-
   BootStrap installer/updater for OpenClaw: after user confirms each step, the
   agent may execute (clone/pull, path checks). Default: register 5 MCPs together
-  (facade+tts+image+video+stock) and enable 5 Skills; Keys optional via
-  .env-example.md. Closed-loop checklist before setup/produce.
+  (facade+tts+image+video+stock) and enable 6 Skills (incl. production_to_usercheck);
+  Keys optional via .env-example.md. Closed-loop checklist before setup/produce.
 metadata:
   openclaw:
     os:
@@ -32,7 +32,7 @@ metadata:
 
 1. **先口述计划 → 用户确认 → 再代操作。** 未确认前不改配置、不跑会改系统的命令；用户说「确认 / 可以 / 继续」后，Agent **应主动代跑**（clone、pull、venv、路径核对等）。OpenClaw 图形里的 MCP/Skill 开关若无法代点，则给出精确粘贴内容并等用户点完后用验收口令确认。  
 2. 拉仓优先 GitHub，失败再用 Gitee；**已有仓库走更新分支（U）**，禁止重复 clone 覆盖。  
-3. 安装/更新默认目标：**5 个 MCP 一并注册可启动** + **5 个 Skill 一并启用** + 闭环检查通过。  
+3. 安装/更新默认目标：**5 个 MCP 一并注册可启动** + **6 个 Skill 一并启用** + 闭环检查通过。  
 4. **付费 Key / Stock Key 安装时不必填。** 已注册即可；没 Key 则后续**不调用**对应能力（轻度零 Key 仍可出片）。  
 5. Key 引导：请用户先看 `<TARGET>/.env-example.md` 分类填写，再写入真实配置（仓库 `.env` 和/或 OpenClaw 各 MCP 的 `env`）；需要高质量/中重度时再填。  
 6. 口述与代操作时用真实路径替换 `<TARGET>`、`<PROJECTS_DIR>`；MCP 模板优先从 `<TARGET>/README/配置/templates/` 复制。  
@@ -52,15 +52,16 @@ metadata:
 
 Stock / 付费 Key 可空；空 Key **不使用**该通道。
 
-### Skill（5 个，安装时一并启用）
+### Skill（6 个，安装时一并启用）
 
 | # | Skill | 作用 |
 |---|-------|------|
 | 1 | `openmontage-bootstrap-setup` | 环境检测 / 装依赖 |
-| 2 | `openmontage-bootstrap-produce` | 出片（轻/中/重） |
-| 3 | `openmontage-bootstrap-providers` | 收费 Key 引导 |
-| 4 | `openmontage-bootstrap-error-handling` | 失败 capture→plan→apply |
-| 5 | `openmontage-bootstrap-captions-music` | 文稿字幕 + 本地 BGM |
+| 2 | `production_to_usercheck` | 成片简报表 · 用户确认（模糊需求先过此关） |
+| 3 | `openmontage-bootstrap-produce` | 出片（轻/中/重） |
+| 4 | `openmontage-bootstrap-providers` | 收费 Key 引导 |
+| 5 | `openmontage-bootstrap-error-handling` | 失败 capture→plan→apply |
+| 6 | `openmontage-bootstrap-captions-music` | 文稿字幕 + 本地 BGM |
 
 另：`extraDirs` = `<TARGET>/openmontage/skills`。  
 付费执行 Skill（`openmontage-providers-tts` / `image` / `video`）与 `openmontage-providers-stock` **执行 Skill** 在要用对应能力且已填 Key 时再开（见 E.3）。
@@ -70,8 +71,8 @@ Stock / 付费 Key 可空；空 Key **不使用**该通道。
 ```text
 ① 外置 installer 已启用（若刚 pull 过仓，提醒再拷外置副本）
 ② 仓库在 <TARGET>（clone 或 pull）
-③ 5 个 MCP 一并注册可启动 + extraDirs + 5 个 Skill 已启用
-④ 「安装闭环检查通过」→ setup → verify_ready → 可出片
+③ 5 个 MCP 一并注册可启动 + extraDirs + 6 个 Skill 已启用
+④ 「安装闭环检查通过」→ setup → verify_ready → 模糊需求先 production_to_usercheck → produce
 ```
 
 ## 触发话术
@@ -117,11 +118,11 @@ pip install -r requirements.txt
 
 **验收口令：**「五个 MCP 已注册并可启动」
 
-### U.3 补齐 5 个 Skill + extraDirs
+### U.3 补齐 6 个 Skill + extraDirs
 
-`extraDirs` 指向当前 `<TARGET>/openmontage/skills`；五个 Skill 均启用。
+`extraDirs` 指向当前 `<TARGET>/openmontage/skills`；六个 Skill 均启用（含 `production_to_usercheck`）。
 
-**验收口令：**「extraDirs 正确；五个 Skill 已启用」
+**验收口令：**「extraDirs 正确；六个 Skill 已启用」
 
 ### U.4 → F → G
 
@@ -204,7 +205,7 @@ OpenClaw **MCP / Servers**（写在 OpenClaw，不写进 git）。
 6. 五个 `OPENMONTAGE_PROJECTS_DIR` 不一致  
 7. Stock 未注册却以为「可选后补」——**现为默认第五个**
 
-## E. 启用仓内 Skill（5 个一并）
+## E. 启用仓内 Skill（6 个一并）
 
 ### E.1 extraDirs
 
@@ -212,17 +213,18 @@ OpenClaw **MCP / Servers**（写在 OpenClaw，不写进 git）。
 
 **验收口令：**「extraDirs 已指向仓内 skills」
 
-### E.2 五个默认 Skill（安装时全部启用）
+### E.2 六个默认 Skill（安装时全部启用）
 
 | Skill | 作用 |
 |-------|------|
 | `openmontage-bootstrap-setup` | 环境 |
+| `production_to_usercheck` | 成片简报 · 用户确认 |
 | `openmontage-bootstrap-produce` | 出片 |
 | `openmontage-bootstrap-providers` | Key 引导 |
 | `openmontage-bootstrap-error-handling` | 错误处理 |
 | `openmontage-bootstrap-captions-music` | 字幕配乐 |
 
-**验收口令：**「五个 Skill 已启用」
+**验收口令：**「六个 Skill 已启用」
 
 ### E.3 用到再开（执行层）
 
@@ -233,14 +235,14 @@ OpenClaw **MCP / Servers**（写在 OpenClaw，不写进 git）。
 
 本 installer 外置；更新后**再次提醒拷贝**。
 
-## F. 闭环检查（新装与更新相同；含 stock 与 5 Skill）
+## F. 闭环检查（新装与更新相同；含 stock 与 6 Skill）
 
 下列**全部**为真：
 
 1. 仓库在 `<TARGET>`，venv 可 `import openmontage`  
 2. **五个 MCP**均能启动（Key 可空）  
 3. `extraDirs` = `<TARGET>/openmontage/skills`  
-4. **五个 Skill**均已启用（setup / produce / providers / error-handling / captions-music）  
+4. **六个 Skill**均已启用（setup / production_to_usercheck / produce / providers / error-handling / captions-music）  
 5. 五个 MCP 的 `OPENMONTAGE_PROJECTS_DIR` 相同  
 6. （提醒项）外置 installer 已与仓内副本同步  
 
@@ -250,7 +252,7 @@ OpenClaw **MCP / Servers**（写在 OpenClaw，不写进 git）。
 
 > 先检测环境，给我看完整安装计划，不要直接改系统。
 
-**setup** → `verify_ready` → **produce**（选档见 `README/说明/02-免费与收费能力.md`）。
+**setup** → `verify_ready` → 用户说「做个视频」等模糊需求时先走 **`production_to_usercheck`**（简报表确认）→ **produce**。
 
 ### Key 引导（需要质量再填）
 

@@ -55,7 +55,8 @@ metadata:
 - 重度另需：`openmontage-providers-tts` / `image` / `video`  
 - 中度可选付费 TTS：同上 TTS MCP  
 
-前提：Skill01 `verify_ready` 通过（或等价 doctor ready）。
+前提：Skill01 `verify_ready` 通过（或等价 doctor ready）。  
+**模糊需求：** 若用户尚未确认成片简报，先读并执行 Skill **`production_to_usercheck`**，确认后再进入本 Skill 主流程。
 
 ## 档位定义（主题确认后必讲清并让用户选）
 
@@ -86,10 +87,11 @@ metadata:
 
 ### 0–1. 主题与档位
 
-1. 确认主题/标题（人审；`approval_text` 用用户原话）。  
-2. ★ **档位选择关卡**：讲清轻/中/重 → 用户选定 → 再继续。  
-3. `produce_init_project`（`pipeline_type=animated-explainer`）→ 预建 `assets/*`。  
-4. ★ 写入档位（优先专用工具）：
+0. 若需求仍模糊、无已确认简报 → **先交接 `production_to_usercheck`**（表格确认 + 默认零 Key），回来后再继续。  
+1. 确认主题/标题（人审；`approval_text` 用用户原话；若简报已确认可沿用）。  
+2. ★ **档位选择关卡**：若简报已写入档位可复查确认；否则讲清轻/中/重 → 用户选定 → 再继续。  
+3. `produce_init_project`（若简报阶段未建；`pipeline_type=animated-explainer`）→ 预建 `assets/*`。  
+4. ★ 写入档位（优先专用工具；简报已写则可跳过或核对）：
 
 ```text
 produce_set_production_profile(
@@ -182,6 +184,7 @@ produce_set_production_profile(
 | Skill | 关系 |
 |-------|------|
 | setup (01) | 前置环境 |
+| production_to_usercheck | 模糊需求：成片简报表确认后再进入本 Skill |
 | captions-music | 文稿→字幕；BGM 登记与 compose 输入打包（可选 ffmpeg 混音） |
 | error-handling | 工具失败：capture → plan → **apply**（≤3；高危须确认） |
 | providers (03) | 补 Key；重度/中度付费 TTS 前可先走 03 |
