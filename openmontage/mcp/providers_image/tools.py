@@ -12,6 +12,7 @@ from openmontage.mcp.common.sandbox import require_projects_root, resolve_under_
 
 # C-常用 image whitelist (stock / local / selectors excluded).
 PROVIDER_TOOLS: dict[str, str] = {
+    "agnes": "agnes_image",
     "flux": "flux_image",
     "openai": "openai_image",
     "dashscope": "dashscope_image",
@@ -23,6 +24,7 @@ PROVIDER_TOOLS: dict[str, str] = {
 TOOL_TO_PROVIDER = {v: k for k, v in PROVIDER_TOOLS.items()}
 
 ENV_HINTS: dict[str, list[str]] = {
+    "agnes": ["AGNES_API_KEY", "AGNES_AI_API_KEY"],
     "flux": ["FAL_KEY", "FAL_AI_API_KEY"],
     "openai": ["OPENAI_API_KEY"],
     "dashscope": ["DASHSCOPE_API_KEY"],

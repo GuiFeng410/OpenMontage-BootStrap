@@ -18,7 +18,9 @@ metadata:
         description: Hard cap for estimated video cost
       - name: OPENMONTAGE_ALLOWED_PROVIDERS
         required: false
-        description: Comma list e.g. kling,seedance,sora,veo,minimax,runway
+        description: Comma list e.g. agnes,kling,seedance,sora,veo,minimax,runway
+      - name: AGNES_API_KEY
+        required: false
       - name: FAL_KEY
         required: false
       - name: OPENAI_API_KEY
@@ -44,16 +46,19 @@ metadata:
 
 **Paid/cloud video generation only.** Stock footage is out of scope. Uses **official** Kling (`kling_official_video`), not fal `kling_video`.
 
-Supported providers: `kling` · `seedance` · `sora` · `veo` · `minimax` · `runway`.
+Supported providers: `agnes` · `kling` · `seedance` · `sora` · `veo` · `minimax` · `runway`.
 
 | provider | tool | typical Key |
 |----------|------|-------------|
+| agnes | agnes_video | AGNES_API_KEY |
 | kling | kling_official_video | KLING_API_KEY |
 | seedance | seedance_video | FAL_KEY |
 | sora | sora_video | OPENAI_API_KEY |
 | veo | veo_video | GEMINI_API_KEY / GOOGLE_API_KEY or FAL_KEY |
 | minimax | minimax_video | FAL_KEY |
 | runway | runway_video | RUNWAY_API_KEY |
+
+Agnes video model is `agnes-video-v2.0`. Sample defaults inject `num_frames=121`, `frame_rate=24` (~5s).
 
 ## Required MCP
 

@@ -320,6 +320,15 @@ class ImageSelector(BaseTool):
             candidates = [tool for tool in candidates if tool.provider in allowed]
         candidates = self._filter_candidates(inputs, candidates)
 
+        if preferred == "auto":
+            from tools._agnes import get_agnes_api_key
+
+            if get_agnes_api_key() and any(
+                tool.provider == "agnes" and tool.get_status() == ToolStatus.AVAILABLE
+                for tool in candidates
+            ):
+                preferred = "agnes"
+
         rankings = rank_providers(candidates, task_context)
 
         tool_by_provider: dict[str, BaseTool] = {}

@@ -362,6 +362,15 @@ class VideoSelector(BaseTool):
         if preferred == "auto" and env_hint in env_map:
             preferred = env_map[env_hint]
 
+        if preferred == "auto":
+            from tools._agnes import get_agnes_api_key
+
+            if get_agnes_api_key() and any(
+                tool.provider == "agnes" and tool.get_status() == ToolStatus.AVAILABLE
+                for tool in candidates
+            ):
+                preferred = "agnes"
+
         rankings = rank_providers(candidates, task_context)
 
         # Selectable tools, keyed by NAME (not provider). Keying by provider

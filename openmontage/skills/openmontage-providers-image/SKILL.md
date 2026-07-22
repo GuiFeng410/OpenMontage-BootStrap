@@ -18,7 +18,9 @@ metadata:
         description: Hard cap for estimated image cost
       - name: OPENMONTAGE_ALLOWED_PROVIDERS
         required: false
-        description: Comma list e.g. flux,openai,dashscope,kling,google,grok
+        description: Comma list e.g. agnes,flux,openai,dashscope,kling,google,grok
+      - name: AGNES_API_KEY
+        required: false
       - name: FAL_KEY
         required: false
       - name: OPENAI_API_KEY
@@ -46,16 +48,19 @@ metadata:
 
 **Paid/cloud image generation only.** Stock (Pexels/Pixabay) is out of scope.
 
-Supported providers: `flux` · `openai` · `dashscope` · `kling` · `google` · `grok`.
+Supported providers: `agnes` · `flux` · `openai` · `dashscope` · `kling` · `google` · `grok`.
 
 | provider | tool | typical Key |
 |----------|------|-------------|
+| agnes | agnes_image | AGNES_API_KEY |
 | flux | flux_image | FAL_KEY |
 | openai | openai_image | OPENAI_API_KEY |
 | dashscope | dashscope_image | DASHSCOPE_API_KEY |
 | kling | kling_official_image | KLING_API_KEY |
 | google | google_imagen | GEMINI_API_KEY / GOOGLE_API_KEY |
 | grok | grok_image | XAI_API_KEY |
+
+Agnes image defaults to `agnes-image-2.1-flash`; switch with extras `{"model":"agnes-image-2.0-flash"}`.
 
 ## Required MCP
 

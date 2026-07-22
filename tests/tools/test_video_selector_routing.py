@@ -279,3 +279,55 @@ def test_estimate_cost_zero_when_no_providers():
     sel = VideoSelector()
     sel._providers = lambda: []  # type: ignore[assignment]
     assert sel.estimate_cost({"prompt": "x"}) == 0.0
+
+
+# ---------------------------------------------------------------------------
+# Agnes auto-prefer when AGNES_API_KEY is set
+# ---------------------------------------------------------------------------
+
+def test_auto_prefers_agnes_when_key_present(rankings, monkeypatch):
+    monkeypatch.setenv("AGNES_API_KEY", "test-agnes-key")
+    agnes = _StubTool("agnes_video", "agnes", cost=0.02)
+    veo = _StubTool("veo_video", "veo", cost=0.40)
+    # Rankings put veo on top; Agnes prefer should still win via preferred path.
+    rankings.extend([
+        _ScoreStub("veo_video", "veo", 0.95),
+        _ScoreStub("agnes_video", "agnes", 0.85),  # within 0.15 gap
+    ])
+
+    tool, _ = VideoSelector()._select_best_tool(
+        {"preferred_provider": "auto"}, [agnes, veo], {}
+    )
+    assert tool is not None
+    assert tool.name == "agnes_video"
+
+
+def test_explicit_preferred_overrides_agnes_auto(rankings, monkeypatch):
+    monkeypatch.setenv("AGNES_API_KEY", "test-agnes-key")
+    agnes = _StubTool("agnes_video", "agnes")
+    veo = _StubTool("veo_video", "veo")
+    rankings.extend([
+        _ScoreStub("agnes_video", "agnes", 0.95),
+        _ScoreStub("veo_video", "veo", 0.90),
+    ])
+
+    tool, _ = VideoSelector()._select_best_tool(
+        {"preferred_provider": "veo"}, [agnes, veo], {}
+    )
+    assert tool.name == "veo_video"
+
+
+def test_auto_does_not_prefer_agnes_without_key(rankings, monkeypatch):
+    monkeypatch.delenv("AGNES_API_KEY", raising=False)
+    monkeypatch.delenv("AGNES_AI_API_KEY", raising=False)
+    agnes = _StubTool("agnes_video", "agnes")
+    veo = _StubTool("veo_video", "veo")
+    rankings.extend([
+        _ScoreStub("veo_video", "veo", 0.95),
+        _ScoreStub("agnes_video", "agnes", 0.85),
+    ])
+
+    tool, _ = VideoSelector()._select_best_tool(
+        {"preferred_provider": "auto"}, [agnes, veo], {}
+    )
+    assert tool.name == "veo_video"

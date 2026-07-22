@@ -12,6 +12,7 @@ from openmontage.mcp.common.sandbox import require_projects_root, resolve_under_
 
 # C-常用 video whitelist (official Kling, not fal kling_video).
 PROVIDER_TOOLS: dict[str, str] = {
+    "agnes": "agnes_video",
     "kling": "kling_official_video",
     "seedance": "seedance_video",
     "sora": "sora_video",
@@ -23,6 +24,7 @@ PROVIDER_TOOLS: dict[str, str] = {
 TOOL_TO_PROVIDER = {v: k for k, v in PROVIDER_TOOLS.items()}
 
 ENV_HINTS: dict[str, list[str]] = {
+    "agnes": ["AGNES_API_KEY", "AGNES_AI_API_KEY"],
     "kling": ["KLING_API_KEY"],
     "seedance": ["FAL_KEY", "FAL_AI_API_KEY"],
     "sora": ["OPENAI_API_KEY"],
@@ -33,6 +35,7 @@ ENV_HINTS: dict[str, list[str]] = {
 
 # Short sample clip defaults per provider (provider-specific field names).
 SAMPLE_DURATION_EXTRAS: dict[str, dict[str, Any]] = {
+    "agnes": {"num_frames": 121, "frame_rate": 24},
     "kling": {"duration": "5"},
     "seedance": {"duration": "5"},
     "sora": {"seconds": "4"},
