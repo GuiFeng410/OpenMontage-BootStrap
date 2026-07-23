@@ -16,7 +16,15 @@ Use this skill when the user wants a **multi-clip AI video** longer than one pro
 
 Default segment length: **10s** (or 5–8s when more cuts help). Cap **≤ 10s** unless the provider docs say otherwise.
 
-Default concurrency: **2–3**. Start at 3; drop to 1 if 503s spike.
+Default concurrency follows **`AGNES_ACCOUNT_TIER`** (see Agnes Token Plan video RPM):
+
+| Tier | Default concurrency | Cap (without `--force-concurrency`) |
+|------|---------------------|-------------------------------------|
+| `default` | **1** | 1 |
+| `enterprise` | **2** | 2 |
+| `tokenplan` | **3** | 3 |
+
+On 429/503 failures, remaining work drops to concurrency **1**. Always show **optimistic + conservative** wall-time in `planning_report`.
 
 ## Agent Contract
 
@@ -26,14 +34,20 @@ Default concurrency: **2–3**. Start at 3; drop to 1 if 503s spike.
 2. Split duration:
 
 ```python
-from lib.parallel_generate import plan_segments, planning_report, estimate_wall_seconds
+from lib.parallel_generate import (
+    plan_segments,
+    planning_report,
+    resolve_agnes_concurrency,
+    build_scene_plan,
+)
 
 segs = plan_segments(30)  # -> scene01..scene03 @ 10s
+resolved = resolve_agnes_concurrency()  # reads AGNES_ACCOUNT_TIER
 ```
 
-3. Write `artifacts/brief.json` + `artifacts/scene_plan.json` via `build_scene_plan(...)`.
+3. Write `artifacts/brief.json` + `artifacts/scene_plan.json` via `build_scene_plan(...)` (parallel defaults from tier).
 4. Init `artifacts/generation_manifest.json` via `init_generation_manifest` / `load_or_init_manifest`.
-5. Show `planning_report(...)` and **wait for user confirmation** before generate.
+5. Show `planning_report(..., account_tier=resolved["tier"])` with **双档预估** and **wait for user confirmation** before generate.
 
 ### Phase B — Parallel generate
 
@@ -59,7 +73,8 @@ print(progress_report(manifest))
 
 Rules:
 - Skip clips that already exist and are large enough (`skip_if_exists_min_bytes`).
-- Retry 503/502/429/timeout with backoff; fail fast on 401.
+- Retry 503/502/429/timeout with backoff (429 uses longer wait); fail fast on 401.
+- On rate-limit failures, reduce concurrency to 1 for not-yet-started scenes.
 - Update manifest after every scene; report progress to the user.
 
 ### Phase C — Assemble (main agent only)
@@ -86,10 +101,13 @@ python scripts/run_parallel_video.py --project my-id --mode status
 python scripts/run_parallel_video.py --project my-id --mode assemble
 
 # Explicit generate (only when user approved)
-python scripts/run_parallel_video.py --project my-id --mode generate --concurrency 3
+python scripts/run_parallel_video.py --project my-id --mode generate --i-confirm-generate --account-tier tokenplan
+
+# Override concurrency above tier cap (not recommended)
+python scripts/run_parallel_video.py --project my-id --mode generate --i-confirm-generate --concurrency 5 --force-concurrency
 ```
 
-`--mode generate` must only run after the user confirmed the plan.
+`--mode generate` must only run after the user confirmed the plan. Set `AGNES_ACCOUNT_TIER=tokenplan` in `.env` when using Token Plan.
 
 ## Subagent boundaries
 
@@ -107,7 +125,8 @@ python scripts/run_parallel_video.py --project my-id --mode generate --concurren
 
 ## Anti-patterns
 
-- Serial cloud loops for 6×10s without concurrency
+- Serial cloud loops for 6×10s without concurrency (when tier allows >1)
+- Defaulting Agnes **default** tier to concurrency 3
 - Subagent pairwise merge trees
 - Starting `--mode generate` before user confirms theme/plan
 - Writing clips outside `projects/<id>/`

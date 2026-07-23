@@ -19,11 +19,16 @@ from lib.parallel_generate import (  # noqa: E402
     estimate_wall_seconds,
     generate_one_scene_with_retries,
     init_generation_manifest,
+    is_rate_limit_error,
     mark_existing_clips,
+    normalize_agnes_account_tier,
     ordered_clip_paths,
     pending_scene_ids,
     plan_segments,
+    planning_report,
     progress_report,
+    resolve_agnes_concurrency,
+    retry_wait_seconds,
     run_parallel_generate,
     save_manifest,
     update_manifest_scene,
@@ -58,15 +63,19 @@ def test_estimate_wall_batches():
     assert est["batches"] == 2
     assert est["generate_seconds"] == 600
     assert est["total_seconds"] == 660
+    assert est["optimistic_seconds"] == 660
+    assert est["conservative_seconds"] > est["optimistic_seconds"]
 
 
-def test_build_scene_plan_and_manifest(tmp_path: Path):
+def test_build_scene_plan_and_manifest(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("AGNES_ACCOUNT_TIER", raising=False)
+    monkeypatch.delenv("AGNES_VIDEO_MAX_CONCURRENCY", raising=False)
     scenes = [
         {"id": "scene01", "duration": 10, "prompt": "a", "caption": "一"},
         {"id": "scene02", "duration": 10, "prompt": "b", "caption": "二"},
     ]
     plan = build_scene_plan(scenes, provider="agnes")
-    assert plan["parallel"]["max_concurrency"] == 3
+    assert plan["parallel"]["max_concurrency"] == 1
     assert plan["scenes"][0]["asset"] == "assets/video/scene01_agnes.mp4"
 
     manifest = init_generation_manifest("demo", plan["scenes"], max_concurrency=2)
@@ -128,7 +137,8 @@ def test_retry_then_success(tmp_path: Path):
     )
     assert result.status == STATUS_COMPLETED
     assert result.attempts == 3
-    assert sleeps == [1.0, 2.0]
+    # 503 uses rate-limit floor (≥20s) even when retry_base_seconds=1
+    assert sleeps == [20.0, 20.0]
 
 
 def test_non_retryable_fails_immediately(tmp_path: Path):
@@ -271,6 +281,19 @@ def test_ordered_clip_paths_and_assemble_mock(tmp_path: Path):
     assert (project / "assets" / "subs" / "_work" / "captions.srt").is_file()
 
 
+def test_pending_includes_orphaned_running():
+    plan = build_scene_plan(
+        [
+            {"id": "scene01", "duration": 5, "prompt": "a"},
+            {"id": "scene02", "duration": 5, "prompt": "b"},
+        ]
+    )
+    manifest = init_generation_manifest("p", plan["scenes"])
+    update_manifest_scene(manifest, "scene01", status=STATUS_COMPLETED)
+    update_manifest_scene(manifest, "scene02", status="running", error="stale")
+    assert pending_scene_ids(manifest) == ["scene02"]
+
+
 def test_progress_report_contains_counts():
     plan = build_scene_plan([{"id": "scene01", "duration": 5, "prompt": "a"}])
     manifest = init_generation_manifest("p", plan["scenes"])
@@ -278,3 +301,98 @@ def test_progress_report_contains_counts():
     text = progress_report(manifest)
     assert "1/1" in text
     assert "scene01" in text
+
+
+def test_resolve_agnes_concurrency_tiers(monkeypatch):
+    monkeypatch.delenv("AGNES_VIDEO_MAX_CONCURRENCY", raising=False)
+    monkeypatch.setenv("AGNES_ACCOUNT_TIER", "default")
+    assert resolve_agnes_concurrency()["concurrency"] == 1
+    monkeypatch.setenv("AGNES_ACCOUNT_TIER", "enterprise")
+    assert resolve_agnes_concurrency()["concurrency"] == 2
+    monkeypatch.setenv("AGNES_ACCOUNT_TIER", "tokenplan")
+    assert resolve_agnes_concurrency()["concurrency"] == 3
+
+
+def test_resolve_agnes_concurrency_caps_without_force(monkeypatch):
+    monkeypatch.delenv("AGNES_VIDEO_MAX_CONCURRENCY", raising=False)
+    resolved = resolve_agnes_concurrency(3, force=False, tier="default")
+    assert resolved["concurrency"] == 1
+    assert resolved["capped"] is True
+    forced = resolve_agnes_concurrency(3, force=True, tier="default")
+    assert forced["concurrency"] == 3
+    assert forced["capped"] is False
+
+
+def test_normalize_agnes_account_tier_aliases():
+    assert normalize_agnes_account_tier("TokenPlan") == "tokenplan"
+    assert normalize_agnes_account_tier("FREE") == "default"
+    assert normalize_agnes_account_tier("enterprise") == "enterprise"
+
+
+def test_retry_wait_longer_for_429():
+    assert retry_wait_seconds("429 Too Many Requests", 1, 20) >= 30
+    assert retry_wait_seconds("generic error", 1, 20) == 20
+    assert is_rate_limit_error("503 Service Unavailable")
+
+
+def test_planning_report_has_dual_estimates():
+    segs = plan_segments(30)
+    text = planning_report(
+        project_id="demo",
+        target_seconds=30,
+        segments=segs,
+        max_concurrency=1,
+        provider="agnes",
+        model="agnes-video-v2.0",
+        subtitles=True,
+        account_tier="default",
+    )
+    assert "乐观" in text
+    assert "保守" in text
+    assert "default" in text
+
+
+def test_run_parallel_reduces_concurrency_on_429(tmp_path: Path, monkeypatch):
+    monkeypatch.delenv("AGNES_ACCOUNT_TIER", raising=False)
+    monkeypatch.delenv("AGNES_VIDEO_MAX_CONCURRENCY", raising=False)
+    project = tmp_path / "rl"
+    plan = build_scene_plan(
+        [
+            {"id": "scene01", "duration": 5, "prompt": "a"},
+            {"id": "scene02", "duration": 5, "prompt": "b"},
+            {"id": "scene03", "duration": 5, "prompt": "c"},
+        ],
+        parallel={
+            "max_concurrency": 3,
+            "account_tier": "tokenplan",
+            "retry_max": 1,
+            "retry_base_seconds": 0,
+            "skip_if_exists_min_bytes": 10,
+        },
+    )
+    (project / "artifacts").mkdir(parents=True)
+    (project / "assets" / "video").mkdir(parents=True)
+
+    calls: list[str] = []
+    reductions: list[int] = []
+
+    def gen(scene, out: Path):
+        calls.append(scene["id"])
+        if scene["id"] == "scene01":
+            return {"success": False, "error": "429 Too Many Requests", "wall_seconds": 0.01}
+        out.parent.mkdir(parents=True, exist_ok=True)
+        out.write_bytes(b"ok" * 40)
+        return {"success": True, "duration_actual": 5.0, "wall_seconds": 0.01}
+
+    manifest = run_parallel_generate(
+        project,
+        plan,
+        gen,
+        max_concurrency=3,
+        force_concurrency=True,
+        on_concurrency_reduced=lambda c, _r: reductions.append(c),
+    )
+    assert reductions == [1]
+    assert manifest.get("max_concurrency") == 1
+    # scene01 failed; others may complete depending on timing — at least reduction happened
+    assert any(s["id"] == "scene01" and s["status"] == STATUS_FAILED for s in manifest["scenes"])

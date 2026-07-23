@@ -11,10 +11,12 @@ from __future__ import annotations
 
 import json
 import math
+import os
 import shutil
 import subprocess
 import time
-from concurrent.futures import Future, ThreadPoolExecutor, as_completed
+from collections import deque
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,11 +27,27 @@ from lib.paths import PROJECTS_DIR, REPO_ROOT
 DEFAULT_SEGMENT_SECONDS = 10.0
 DEFAULT_MAX_SEGMENT_SECONDS = 10.0
 DEFAULT_MIN_SEGMENT_SECONDS = 5.0
-DEFAULT_MAX_CONCURRENCY = 3
+# Safe Agnes default (official default-tier video RPM ≈ 1). Prefer resolve_agnes_concurrency().
+DEFAULT_MAX_CONCURRENCY = 1
 DEFAULT_RETRY_MAX = 4
 DEFAULT_RETRY_BASE_SECONDS = 20
 DEFAULT_SKIP_IF_EXISTS_MIN_BYTES = 100_000
 DEFAULT_CLOUD_SECONDS_PER_CLIP = 300.0  # ~5 min Agnes 10s wall estimate
+DEFAULT_AGNES_POLL_INTERVAL_SECONDS = 8
+DEFAULT_AGNES_ACCOUNT_TIER = "default"
+
+# Official video RPM caps (Token Plan FAQ): default=1, enterprise=2, TokenPlan=5.
+# Code defaults leave headroom for create+poll; TokenPlan default concurrency=3 per product decision.
+AGNES_TIER_DEFAULT_CONCURRENCY = {
+    "default": 1,
+    "enterprise": 2,
+    "tokenplan": 3,
+}
+AGNES_TIER_MAX_CONCURRENCY = {
+    "default": 1,
+    "enterprise": 2,
+    "tokenplan": 3,
+}
 
 STATUS_PENDING = "pending"
 STATUS_RUNNING = "running"
@@ -38,6 +56,80 @@ STATUS_FAILED = "failed"
 STATUS_SKIPPED = "skipped"
 
 RETRYABLE_MARKERS = ("503", "502", "429", "timeout", "Unavailable", "timed out")
+RATE_LIMIT_MARKERS = ("503", "502", "429", "Unavailable")
+
+
+def normalize_agnes_account_tier(raw: str | None = None) -> str:
+    """Normalize AGNES_ACCOUNT_TIER to default|enterprise|tokenplan."""
+    value = (raw if raw is not None else os.environ.get("AGNES_ACCOUNT_TIER", DEFAULT_AGNES_ACCOUNT_TIER)) or ""
+    key = value.strip().lower().replace("-", "").replace("_", "")
+    aliases = {
+        "default": "default",
+        "free": "default",
+        "enterprise": "enterprise",
+        "tokenplan": "tokenplan",
+        "token": "tokenplan",
+        "plan": "tokenplan",
+    }
+    return aliases.get(key, DEFAULT_AGNES_ACCOUNT_TIER)
+
+
+def resolve_agnes_concurrency(
+    requested: int | None = None,
+    *,
+    force: bool = False,
+    tier: str | None = None,
+) -> dict[str, Any]:
+    """Resolve concurrency from tier + optional request/env override.
+
+    Returns dict: tier, default, cap, concurrency, capped, force.
+    """
+    resolved_tier = normalize_agnes_account_tier(tier)
+    tier_default = int(AGNES_TIER_DEFAULT_CONCURRENCY[resolved_tier])
+    tier_cap = int(AGNES_TIER_MAX_CONCURRENCY[resolved_tier])
+
+    env_raw = os.environ.get("AGNES_VIDEO_MAX_CONCURRENCY")
+    env_value: int | None = None
+    if env_raw is not None and str(env_raw).strip() != "":
+        env_value = max(1, int(env_raw))
+
+    if requested is not None:
+        desired = max(1, int(requested))
+    elif env_value is not None:
+        desired = env_value
+    else:
+        desired = tier_default
+
+    capped = False
+    if not force and desired > tier_cap:
+        desired = tier_cap
+        capped = True
+
+    return {
+        "tier": resolved_tier,
+        "default": tier_default,
+        "cap": tier_cap,
+        "concurrency": desired,
+        "capped": capped,
+        "force": bool(force),
+    }
+
+
+def default_parallel_config(
+    *,
+    max_concurrency: int | None = None,
+    force: bool = False,
+    tier: str | None = None,
+) -> dict[str, Any]:
+    resolved = resolve_agnes_concurrency(max_concurrency, force=force, tier=tier)
+    return {
+        "max_concurrency": resolved["concurrency"],
+        "account_tier": resolved["tier"],
+        "retry_max": DEFAULT_RETRY_MAX,
+        "retry_base_seconds": DEFAULT_RETRY_BASE_SECONDS,
+        "skip_if_exists_min_bytes": DEFAULT_SKIP_IF_EXISTS_MIN_BYTES,
+        "poll_interval_seconds": DEFAULT_AGNES_POLL_INTERVAL_SECONDS,
+    }
 
 
 def utc_now_iso() -> str:
@@ -144,14 +236,24 @@ def estimate_wall_seconds(
     cloud_seconds_per_clip: float = DEFAULT_CLOUD_SECONDS_PER_CLIP,
     assemble_seconds: float = 90.0,
 ) -> dict[str, float]:
-    """Rough wall-clock estimate for parallel cloud generation + assemble."""
+    """Rough wall-clock estimate for parallel cloud generation + assemble.
+
+    Returns optimistic (one-shot success) and conservative (retries/rate-limit) totals.
+    """
     conc = max(1, int(max_concurrency))
-    batches = math.ceil(segment_count / conc) if segment_count else 0
+    n = max(0, int(segment_count))
+    batches = math.ceil(n / conc) if n else 0
     gen = batches * float(cloud_seconds_per_clip)
+    assemble = float(assemble_seconds)
+    optimistic = gen + assemble
+    # Conservative: slower effective cloud time + per-clip retry/backoff overhead
+    conservative = batches * float(cloud_seconds_per_clip) * 1.6 + assemble + n * 60.0
     return {
         "generate_seconds": gen,
-        "assemble_seconds": float(assemble_seconds),
-        "total_seconds": gen + float(assemble_seconds),
+        "assemble_seconds": assemble,
+        "total_seconds": optimistic,  # backward-compatible alias = optimistic
+        "optimistic_seconds": optimistic,
+        "conservative_seconds": conservative,
         "batches": float(batches),
     }
 
@@ -191,13 +293,7 @@ def build_scene_plan(
         "provider": provider,
         "model": model,
         "compose": "ffmpeg_concat",
-        "parallel": parallel
-        or {
-            "max_concurrency": DEFAULT_MAX_CONCURRENCY,
-            "retry_max": DEFAULT_RETRY_MAX,
-            "retry_base_seconds": DEFAULT_RETRY_BASE_SECONDS,
-            "skip_if_exists_min_bytes": DEFAULT_SKIP_IF_EXISTS_MIN_BYTES,
-        },
+        "parallel": parallel or default_parallel_config(),
         "scenes": normalized,
     }
     if extra:
@@ -287,6 +383,7 @@ def update_manifest_scene(
     duration_actual: float | None = None,
     error: str | None = None,
     asset: str | None = None,
+    clear_error: bool = False,
 ) -> dict[str, Any]:
     found = False
     for entry in manifest.get("scenes") or []:
@@ -300,7 +397,8 @@ def update_manifest_scene(
                 entry["wall_seconds"] = wall_seconds
             if duration_actual is not None:
                 entry["duration_actual"] = duration_actual
-            if error is not None or status in (STATUS_COMPLETED, STATUS_SKIPPED):
+            if clear_error or error is not None or status in (STATUS_COMPLETED, STATUS_SKIPPED, STATUS_RUNNING):
+                # Explicit None clears stale errors when entering running/success
                 entry["error"] = error
             if asset is not None:
                 entry["asset"] = asset
@@ -371,10 +469,14 @@ def mark_existing_clips(
 
 
 def pending_scene_ids(manifest: dict[str, Any]) -> list[str]:
+    """Scenes that still need generation.
+
+    Includes orphaned ``running`` entries left by interrupted jobs.
+    """
     return [
         s["id"]
         for s in manifest.get("scenes") or []
-        if s.get("status") in (STATUS_PENDING, STATUS_FAILED)
+        if s.get("status") in (STATUS_PENDING, STATUS_FAILED, STATUS_RUNNING)
     ]
 
 
@@ -413,6 +515,22 @@ class SceneGenerateResult:
 
 def is_retryable_error(message: str) -> bool:
     return any(m in message for m in RETRYABLE_MARKERS)
+
+
+def is_rate_limit_error(message: str | None) -> bool:
+    if not message:
+        return False
+    return any(m in message for m in RATE_LIMIT_MARKERS)
+
+
+def retry_wait_seconds(message: str, attempt: int, retry_base_seconds: int) -> float:
+    """Longer backoff for 429/503 to avoid amplifying rate limits."""
+    base = float(retry_base_seconds) * attempt
+    if "429" in message:
+        return max(30.0, base * 1.5)
+    if is_rate_limit_error(message):
+        return max(20.0, base)
+    return base
 
 
 def generate_one_scene_with_retries(
@@ -458,7 +576,7 @@ def generate_one_scene_with_retries(
                 error=last_error,
                 asset=scene.get("asset"),
             )
-        sleep_fn(float(retry_base_seconds) * attempt)
+        sleep_fn(retry_wait_seconds(last_error, attempt, retry_base_seconds))
 
     return SceneGenerateResult(
         scene_id=scene_id,
@@ -475,22 +593,34 @@ def run_parallel_generate(
     generate_fn: GenerateFn,
     *,
     max_concurrency: int | None = None,
+    force_concurrency: bool = False,
     on_scene_done: Callable[[SceneGenerateResult, dict[str, Any]], None] | None = None,
+    on_concurrency_reduced: Callable[[int, str], None] | None = None,
 ) -> dict[str, Any]:
-    """Generate pending scenes with a thread pool; update generation_manifest.json.
+    """Generate pending scenes with a sliding-window pool; update generation_manifest.json.
 
+    On 429/503 failures, concurrency drops to 1 for remaining not-yet-started scenes.
     generate_fn(scene, output_path) -> dict with success/error/duration_actual/wall_seconds.
     """
     artifacts_dir(project).mkdir(parents=True, exist_ok=True)
     video_dir(project).mkdir(parents=True, exist_ok=True)
 
     parallel = scene_plan.get("parallel") or {}
-    conc = int(max_concurrency or parallel.get("max_concurrency") or DEFAULT_MAX_CONCURRENCY)
+    tier = parallel.get("account_tier") or scene_plan.get("account_tier")
+    requested = max_concurrency if max_concurrency is not None else parallel.get("max_concurrency")
+    resolved = resolve_agnes_concurrency(
+        int(requested) if requested is not None else None,
+        force=force_concurrency,
+        tier=str(tier) if tier else None,
+    )
+    conc = int(resolved["concurrency"])
     retry_max = int(parallel.get("retry_max", DEFAULT_RETRY_MAX))
     retry_base = int(parallel.get("retry_base_seconds", DEFAULT_RETRY_BASE_SECONDS))
     min_bytes = int(parallel.get("skip_if_exists_min_bytes", DEFAULT_SKIP_IF_EXISTS_MIN_BYTES))
 
     manifest = load_or_init_manifest(project, scene_plan)
+    manifest["max_concurrency"] = conc
+    manifest["account_tier"] = resolved["tier"]
     mark_existing_clips(project, manifest, scene_plan)
     save_manifest(project, manifest)
 
@@ -517,30 +647,50 @@ def run_parallel_generate(
             retry_base_seconds=retry_base,
         )
 
-    # Mark running
+    # Mark running (clear stale error from prior failed attempts)
     for sid in todo:
-        update_manifest_scene(manifest, sid, status=STATUS_RUNNING)
+        update_manifest_scene(manifest, sid, status=STATUS_RUNNING, error=None)
     save_manifest(project, manifest)
 
+    pending: deque[str] = deque(todo)
+    inflight: dict[Future[SceneGenerateResult], str] = {}
+    # Pool size = initial concurrency; sliding window enforces active cap (may drop to 1).
     with ThreadPoolExecutor(max_workers=max(1, conc)) as pool:
-        futures: dict[Future[SceneGenerateResult], str] = {
-            pool.submit(_worker, sid): sid for sid in todo
-        }
-        for fut in as_completed(futures):
-            result = fut.result()
-            update_manifest_scene(
-                manifest,
-                result.scene_id,
-                status=result.status,
-                attempts=result.attempts,
-                wall_seconds=result.wall_seconds,
-                duration_actual=result.duration_actual,
-                error=result.error,
-                asset=result.asset,
-            )
-            save_manifest(project, manifest)
-            if on_scene_done:
-                on_scene_done(result, manifest)
+        while pending or inflight:
+            while pending and len(inflight) < conc:
+                sid = pending.popleft()
+                fut = pool.submit(_worker, sid)
+                inflight[fut] = sid
+            if not inflight:
+                break
+            done, _ = wait(tuple(inflight.keys()), return_when=FIRST_COMPLETED)
+            for fut in done:
+                inflight.pop(fut, None)
+                result = fut.result()
+                update_manifest_scene(
+                    manifest,
+                    result.scene_id,
+                    status=result.status,
+                    attempts=result.attempts,
+                    wall_seconds=result.wall_seconds,
+                    duration_actual=result.duration_actual,
+                    error=result.error,
+                    asset=result.asset,
+                )
+                save_manifest(project, manifest)
+                if (
+                    result.status == STATUS_FAILED
+                    and is_rate_limit_error(result.error)
+                    and conc > 1
+                ):
+                    conc = 1
+                    manifest["max_concurrency"] = 1
+                    manifest["concurrency_reduced_reason"] = result.error
+                    save_manifest(project, manifest)
+                    if on_concurrency_reduced:
+                        on_concurrency_reduced(1, result.error or "rate_limit")
+                if on_scene_done:
+                    on_scene_done(result, manifest)
 
     return manifest
 
@@ -714,10 +864,12 @@ def planning_report(
     provider: str,
     model: str,
     subtitles: bool,
+    account_tier: str | None = None,
 ) -> str:
+    tier = normalize_agnes_account_tier(account_tier)
     est = estimate_wall_seconds(len(segments), max_concurrency=max_concurrency)
-    mins_lo = est["total_seconds"] / 60.0
-    mins_hi = mins_lo * 1.4  # allow 503 headroom
+    opt_min = est["optimistic_seconds"] / 60.0
+    cons_min = est["conservative_seconds"] / 60.0
     dur_note = ", ".join(f"{s.scene_id}={s.duration}s" for s in segments)
     return "\n".join(
         [
@@ -725,8 +877,11 @@ def planning_report(
             f"- 项目：`projects/{project_id}/`",
             f"- 目标时长：{target_seconds}s → {len(segments)} 段（{dur_note}）",
             f"- Provider：{provider} / {model}",
+            f"- 账号档位：{tier}（Agnes 视频并发上限见 Token Plan RPM）",
             f"- 并发：{max_concurrency}",
-            f"- 预估墙钟：约 {mins_lo:.0f}–{mins_hi:.0f} 分钟（含 API 排队）",
+            f"- 预估墙钟：",
+            f"  - 乐观：约 {opt_min:.0f} 分钟（各段一次成功）",
+            f"  - 保守：约 {cons_min:.0f} 分钟（含 503/429 重试与退避）",
             f"- 拼接：FFmpeg 直拼 + {'字幕' if subtitles else '无字幕'}",
             "",
             "确认后开始生成。",
@@ -739,7 +894,7 @@ def make_agnes_generate_fn(
     *,
     frame_rate: int = 24,
     aspect_ratio: str = "16:9",
-    poll_interval_seconds: int = 5,
+    poll_interval_seconds: int = DEFAULT_AGNES_POLL_INTERVAL_SECONDS,
     timeout_seconds: int = 900,
 ) -> GenerateFn:
     """Build a GenerateFn that calls tools.video.agnes_video.AgnesVideo."""
@@ -791,6 +946,9 @@ __all__ = [
     "plan_segments",
     "estimate_wall_seconds",
     "build_scene_plan",
+    "default_parallel_config",
+    "normalize_agnes_account_tier",
+    "resolve_agnes_concurrency",
     "init_generation_manifest",
     "load_or_init_manifest",
     "save_manifest",
@@ -799,6 +957,8 @@ __all__ = [
     "pending_scene_ids",
     "run_parallel_generate",
     "generate_one_scene_with_retries",
+    "is_rate_limit_error",
+    "retry_wait_seconds",
     "assemble_ffmpeg",
     "build_srt_from_scenes",
     "write_captions_srt",

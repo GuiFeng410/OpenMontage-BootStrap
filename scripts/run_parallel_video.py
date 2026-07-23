@@ -24,17 +24,20 @@ from lib.parallel_generate import (  # noqa: E402
     assemble_ffmpeg,
     brief_path,
     build_scene_plan,
+    default_parallel_config,
     estimate_wall_seconds,
     generation_manifest_path,
     init_generation_manifest,
     load_or_init_manifest,
     make_agnes_generate_fn,
     mark_existing_clips,
+    normalize_agnes_account_tier,
     plan_segments,
     planning_report,
     progress_report,
     project_dir,
     read_json,
+    resolve_agnes_concurrency,
     run_parallel_generate,
     save_manifest,
     scene_plan_path,
@@ -49,6 +52,23 @@ def _load_plan(project: Path) -> dict:
     return read_json(path)
 
 
+def _resolve_cli_concurrency(args: argparse.Namespace) -> dict:
+    requested = None if args.concurrency is None else int(args.concurrency)
+    resolved = resolve_agnes_concurrency(
+        requested,
+        force=bool(args.force_concurrency),
+        tier=args.account_tier,
+    )
+    if resolved["capped"] and requested is not None:
+        print(
+            f"NOTE: concurrency {requested} exceeds tier={resolved['tier']} "
+            f"cap={resolved['cap']}; using {resolved['concurrency']}. "
+            f"Pass --force-concurrency to override.",
+            file=sys.stderr,
+        )
+    return resolved
+
+
 def cmd_plan(args: argparse.Namespace) -> None:
     project = project_dir(args.project)
     project.mkdir(parents=True, exist_ok=True)
@@ -56,6 +76,7 @@ def cmd_plan(args: argparse.Namespace) -> None:
     (project / "assets" / "video").mkdir(parents=True, exist_ok=True)
     (project / "renders").mkdir(parents=True, exist_ok=True)
 
+    resolved = _resolve_cli_concurrency(args)
     segs = plan_segments(args.target_seconds, segment_seconds=args.segment_seconds)
     scenes = []
     for seg in segs:
@@ -78,17 +99,21 @@ def cmd_plan(args: argparse.Namespace) -> None:
             if s["id"] in by_id:
                 s.update({k: v for k, v in by_id[s["id"]].items() if k != "id"})
 
+    parallel = default_parallel_config(
+        max_concurrency=resolved["concurrency"],
+        force=True,  # already resolved/capped above
+        tier=resolved["tier"],
+    )
     plan = build_scene_plan(
         scenes,
         provider=args.provider,
         model=args.model,
-        parallel={
-            "max_concurrency": args.concurrency,
-            "retry_max": 4,
-            "retry_base_seconds": 20,
-            "skip_if_exists_min_bytes": 100000,
+        parallel=parallel,
+        extra={
+            "title": args.title,
+            "target_duration_sec": args.target_seconds,
+            "account_tier": resolved["tier"],
         },
-        extra={"title": args.title, "target_duration_sec": args.target_seconds},
     )
     write_json(scene_plan_path(project), plan)
 
@@ -97,6 +122,7 @@ def cmd_plan(args: argparse.Namespace) -> None:
         "duration_sec": args.target_seconds,
         "provider": args.provider,
         "model": args.model,
+        "account_tier": resolved["tier"],
         "audio": {
             "narration": False,
             "subtitles": not args.no_subtitles,
@@ -110,9 +136,10 @@ def cmd_plan(args: argparse.Namespace) -> None:
     manifest = init_generation_manifest(
         args.project,
         plan["scenes"],
-        max_concurrency=args.concurrency,
+        max_concurrency=resolved["concurrency"],
         provider=args.provider,
     )
+    manifest["account_tier"] = resolved["tier"]
     save_manifest(project, manifest)
 
     print(
@@ -120,10 +147,11 @@ def cmd_plan(args: argparse.Namespace) -> None:
             project_id=args.project,
             target_seconds=args.target_seconds,
             segments=segs,
-            max_concurrency=args.concurrency,
+            max_concurrency=resolved["concurrency"],
             provider=args.provider,
             model=args.model,
             subtitles=not args.no_subtitles,
+            account_tier=resolved["tier"],
         )
     )
     print(f"\nwrote {scene_plan_path(project)}")
@@ -138,11 +166,13 @@ def cmd_status(args: argparse.Namespace) -> None:
     mark_existing_clips(project, manifest, plan)
     save_manifest(project, manifest)
     print(progress_report(manifest))
-    est = estimate_wall_seconds(
-        len(plan.get("scenes") or []),
-        max_concurrency=int((plan.get("parallel") or {}).get("max_concurrency") or args.concurrency),
+    conc = int((plan.get("parallel") or {}).get("max_concurrency") or resolve_agnes_concurrency()["concurrency"])
+    est = estimate_wall_seconds(len(plan.get("scenes") or []), max_concurrency=conc)
+    print(
+        f"\nestimate_batches={int(est['batches'])} "
+        f"optimistic~{est['optimistic_seconds']/60:.1f}min "
+        f"conservative~{est['conservative_seconds']/60:.1f}min"
     )
-    print(f"\nestimate_batches={int(est['batches'])} ~{est['total_seconds']/60:.1f} min")
 
 
 def cmd_assemble(args: argparse.Namespace) -> None:
@@ -160,12 +190,17 @@ def cmd_generate(args: argparse.Namespace) -> None:
         )
     project = project_dir(args.project)
     plan = _load_plan(project)
-    if args.concurrency:
-        plan.setdefault("parallel", {})["max_concurrency"] = args.concurrency
+    resolved = _resolve_cli_concurrency(args)
+    plan.setdefault("parallel", {})["max_concurrency"] = resolved["concurrency"]
+    plan.setdefault("parallel", {})["account_tier"] = resolved["tier"]
+    plan["account_tier"] = resolved["tier"]
 
     def on_done(result, manifest):
         print(json.dumps(result.to_dict(), ensure_ascii=False))
         print(progress_report(manifest))
+
+    def on_reduced(new_conc: int, reason: str) -> None:
+        print(f"NOTE: concurrency reduced to {new_conc} due to rate limit: {reason}", file=sys.stderr)
 
     if args.provider != "agnes":
         raise SystemExit(f"CLI generate currently supports provider=agnes only, got {args.provider}")
@@ -174,12 +209,18 @@ def cmd_generate(args: argparse.Namespace) -> None:
         project,
         plan,
         make_agnes_generate_fn(),
-        max_concurrency=args.concurrency,
+        max_concurrency=resolved["concurrency"],
+        force_concurrency=bool(args.force_concurrency),
         on_scene_done=on_done,
+        on_concurrency_reduced=on_reduced,
     )
-    failed = [s for s in manifest.get("scenes") or [] if s.get("status") == "failed"]
-    if failed:
-        raise SystemExit(f"generate incomplete: {len(failed)} failed — {failed}")
+    incomplete = [
+        s
+        for s in manifest.get("scenes") or []
+        if s.get("status") not in ("completed", "skipped")
+    ]
+    if incomplete:
+        raise SystemExit(f"generate incomplete: {len(incomplete)} not done — {incomplete}")
     print(progress_report(manifest))
     if args.assemble_after:
         final = assemble_ffmpeg(project, plan, burn_subtitles=not args.no_subtitles)
@@ -197,7 +238,22 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--title", default="Untitled parallel video")
     p.add_argument("--target-seconds", type=float, default=30.0)
     p.add_argument("--segment-seconds", type=float, default=10.0)
-    p.add_argument("--concurrency", type=int, default=3)
+    p.add_argument(
+        "--concurrency",
+        type=int,
+        default=None,
+        help="override concurrency (capped by AGNES_ACCOUNT_TIER unless --force-concurrency)",
+    )
+    p.add_argument(
+        "--force-concurrency",
+        action="store_true",
+        help="allow concurrency above tier cap (not recommended)",
+    )
+    p.add_argument(
+        "--account-tier",
+        default=None,
+        help="default|enterprise|tokenplan (default: env AGNES_ACCOUNT_TIER or default)",
+    )
     p.add_argument("--provider", default="agnes")
     p.add_argument("--model", default="agnes-video-v2.0")
     p.add_argument("--scenes-json", default=None, help="optional JSON list/object to fill prompts")
@@ -221,6 +277,8 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> None:
     args = build_parser().parse_args(argv)
+    if args.account_tier is not None:
+        args.account_tier = normalize_agnes_account_tier(args.account_tier)
     if args.mode == "plan":
         cmd_plan(args)
     elif args.mode == "status":
