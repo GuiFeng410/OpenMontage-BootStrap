@@ -18,11 +18,11 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 
 PRODUCTION_TIERS = frozenset({"light", "medium", "heavy"})
 VISUAL_SOURCES = frozenset({"template", "stock", "paid_gen"})
-TTS_SOURCES = frozenset({"piper", "paid"})
+TTS_SOURCES = frozenset({"edge_tts", "piper", "paid"})
 _PROFILE_KEYS = ("production_tier", "visual_source", "tts_source")
 _TIER_DEFAULTS: dict[str, dict[str, str]] = {
-    "light": {"visual_source": "template", "tts_source": "piper"},
-    "medium": {"visual_source": "stock", "tts_source": "piper"},
+    "light": {"visual_source": "template", "tts_source": "edge_tts"},
+    "medium": {"visual_source": "stock", "tts_source": "edge_tts"},
     "heavy": {"visual_source": "paid_gen", "tts_source": "paid"},
 }
 

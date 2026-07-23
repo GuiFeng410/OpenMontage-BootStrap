@@ -13,8 +13,8 @@
   <a href="#pipelines">Pipelines</a> &nbsp;·&nbsp;
   <a href="#how-it-works">How It Works</a> &nbsp;·&nbsp;
   <a href="#sponsors">Sponsors</a> &nbsp;·&nbsp;
-  <a href="docs/PROVIDERS.md">Providers</a> &nbsp;·&nbsp;
-  <a href="docs/PR_REVIEW_GUIDE.md">Review Guide</a> &nbsp;·&nbsp;
+  <a href="docs/Source_File/PROVIDERS.md">Providers</a> &nbsp;·&nbsp;
+  <a href="docs/Source_File/PR_REVIEW_GUIDE.md">Review Guide</a> &nbsp;·&nbsp;
   <a href="AGENT_GUIDE.md">Agent Guide</a>
 </p>
 
@@ -470,7 +470,7 @@ Each tool declares which Layer 3 skills it relies on. The agent reads Layer 1 to
 
 ## Supported Providers
 
-> **Full setup guide with pricing and free tiers:** [`docs/PROVIDERS.md`](docs/PROVIDERS.md)
+> **Full setup guide with pricing and free tiers:** [`docs/Source_File/PROVIDERS.md`](docs/Source_File/PROVIDERS.md)
 
 <details>
 <summary><strong>Video Generation — 15 providers</strong></summary>
@@ -694,7 +694,7 @@ OpenMontage is built to be extended. The two most common contributions:
 2. Create stage director skills in `skills/pipelines/<your-pipeline>/`
 3. Reference existing tools — or add new ones if needed
 
-See `docs/ARCHITECTURE.md` for the full technical reference, `docs/PROVIDERS.md` for the complete provider guide (setup, pricing, free tiers), and `AGENT_GUIDE.md` for the agent contract.
+See `docs/Source_File/ARCHITECTURE.md` for the full technical reference, `docs/Source_File/PROVIDERS.md` for the complete provider guide (setup, pricing, free tiers), and `AGENT_GUIDE.md` for the agent contract.
 
 ### Join the Community
 

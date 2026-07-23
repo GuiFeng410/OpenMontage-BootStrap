@@ -6,7 +6,8 @@ Use this skill when the user wants a **multi-clip AI video** longer than one pro
 
 **Do NOT use** for: single-clip shorts; pure local footage trim/concat; slideshow-only jobs.
 
-**Full spec:** `docs/长视频并行编排/01-编排规范.md`  
+**Full spec:** `docs/Phase/A_01-长视频生成-steps/01-编排规范.md`  
+**Product flow (frozen):** `docs/Plan/A_01-长视频生成/01-总流程-v1.0.md`  
 **Code:** `lib/parallel_generate.py`
 
 ## Core Rule
@@ -51,7 +52,7 @@ resolved = resolve_agnes_concurrency()  # reads AGNES_ACCOUNT_TIER
 
 ### Phase B — Parallel generate
 
-**Preferred (Cursor):** dispatch one Task subagent per pending scene (pool size ≤ `max_concurrency`). Each subagent follows `docs/长视频并行编排/03-子Agent任务单模板.md`.
+**Preferred (Cursor):** dispatch one Task subagent per pending scene (pool size ≤ `max_concurrency`). Each subagent follows `docs/Phase/A_01-长视频生成-steps/03-子Agent任务单模板.md`.
 
 **Preferred (local/script):**
 

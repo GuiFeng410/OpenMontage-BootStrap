@@ -60,14 +60,14 @@ metadata:
 | 付费生图 | `openmontage-providers-image` | `openmontage-providers-image` |
 | 付费生视频 | `openmontage-providers-video` | `openmontage-providers-video` |
 
-零 Key 出片仍走门面 + Skill02（`openmontage-bootstrap-produce` / Piper）。
+零 Key 出片仍走门面 + Skill02（`openmontage-bootstrap-produce`）。中文旁白默认 **Edge-TTS 男声**（`edge-tts`，需联网、无 Key）；离线回退 Piper。本 Skill 只管**付费** TTS/图/视频 Key。
 
 ## 硬规则
 
 1. **不自动改** OpenClaw 配置；只口述步骤，等用户确认「已配好」。  
 2. 未注册对应 providers MCP 前，**禁止**代调付费生成。  
 3. 任何付费路径必须：`list → dry_run → sample(confirm_estimate) → generate(confirm + confirm_sample_ok)`。  
-4. 失败时**不静默换商**；让用户另选 provider 或退回 Piper / 零 Key。  
+4. 失败时**不静默换商**；让用户另选 provider，或退回 Edge 男声 / Piper / 零 Key。  
 5. Key **只**来自环境变量；禁止写入 Skill / extras / 对话明文长期保存。  
 6. 门面 MCP **保持独立**；providers 为并列 MCP（TTS + Image + Video）。
 

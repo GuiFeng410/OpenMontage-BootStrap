@@ -201,7 +201,7 @@ Token Plan 视频配额为 **每天 500 秒**（见 [tokenplan](https://agnes-ai
 1. `lib/parallel_generate.py`：按 `AGNES_ACCOUNT_TIER` 选择默认并发（tokenplan=3）；CLI `--concurrency` 不得超过档位上限（除非 `--force-concurrency`）  
 2. `retry_wait_seconds`：429 更长退避；`poll_interval_seconds` 默认 8s  
 3. `planning_report`：输出乐观/保守两行  
-4. skill `parallel-video-orchestration.md` 与 `docs/长视频并行编排` 已同步  
+4. skill `parallel-video-orchestration.md` 与 `docs/Phase/A_01-长视频生成-steps` / `docs/Plan/A_01-长视频生成` 已同步   
 
 ### P2 — 账号侧（可选）
 

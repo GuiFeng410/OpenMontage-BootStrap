@@ -3,7 +3,8 @@
 Python = persistence + concurrency + FFmpeg assemble.
 Creative decisions (prompts, theme, whether to generate) stay with the agent.
 
-See: docs/长视频并行编排/01-编排规范.md
+See: docs/Phase/A_01-长视频生成-steps/01-编排规范.md
+     docs/Plan/A_01-长视频生成/01-总流程-v1.0.md
      skills/meta/parallel-video-orchestration.md
 """
 

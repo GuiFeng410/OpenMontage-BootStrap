@@ -62,9 +62,9 @@ metadata:
 
 | 档位 | 画面 | 语音 | Key | 费用 |
 |------|------|------|-----|------|
-| **轻度** | 模板/字幕为主，无 Stock、无 AI 生图生视频 | Piper（零 Key） | 无 | $0 |
-| **中度** | Stock（Pexels/Pixabay）搜图/搜视频 → 下载进沙箱 | **默认 Piper**；若已配 TTS Key，可**手动**改云端 TTS | 至少一个免费 Stock Key | Stock $0 + 可选付费 TTS |
-| **重度** | 付费 AI 生图 + 付费 AI 生视频 | **付费高级 TTS**（不默认 Piper） | TTS + 图 + 视频 Key | 按 provider |
+| **轻度** | 模板/字幕为主，无 Stock、无 AI 生图生视频 | **Edge-TTS 男声**（零 Key、需联网；默认 `zh-CN-YunyangNeural`） | 无 | $0 |
+| **中度** | Stock（Pexels/Pixabay）搜图/搜视频 → 下载进沙箱 | **默认同上 Edge 男声**；若已配 TTS Key，可**手动**改付费云端 TTS | 至少一个免费 Stock Key | Stock $0 + 可选付费 TTS |
+| **重度** | 付费 AI 生图 + 付费 AI 生视频 | **付费高级 TTS**（不默认 Edge/Piper） | TTS + 图 + 视频 Key | 按 provider |
 
 用户可读版：`README/说明/02-免费与收费能力.md`。
 
@@ -106,8 +106,8 @@ produce_set_production_profile(
 
 | tier | visual_source | tts_source |
 |------|---------------|------------|
-| light | template | piper |
-| medium | stock | piper |
+| light | template | edge_tts |
+| medium | stock | edge_tts |
 | heavy | paid_gen | paid |
 
 也可用 `produce_write_checkpoint` 的 `artifacts_json` 带同名字段，会**同步写进** `project.json`。  
@@ -119,21 +119,34 @@ produce_set_production_profile(
 
 ### 3. 语音分支
 
-**轻度 / 中度（默认）：**
+**轻度 / 中度（默认 · 中文旁白）：Edge-TTS 男声**
 
-1. `produce_tts_preflight`  
-2. `produce_tts_sample` → 用户试听 OK  
-3. `produce_tts_generate(..., confirm_sample_ok=true)`  
+| 项 | 约定 |
+|----|------|
+| 音色 | `zh-CN-YunyangNeural`（男）；rate 建议 `-18%`，pitch 建议 `-2Hz` |
+| 依赖 | `requirements.txt` 的 `edge-tts`；**需联网**（Microsoft Edge TTS） |
+| 对齐 | **按字幕 SRT 每条 cue 合成并拟合到 cue 时间窗**，再拼接旁白轨 |
+| 禁止 | 整段一次合成后用静音「垫满」镜头（Piper 试片踩过的坑） |
+| 参考脚本 | `scripts/_edge_tts_preview_prompt_explainer.py`（按 cue 合成→fit→concat） |
+| 离线回退 | 无网 / edge-tts 失败 → 再问用户是否改用 Piper（门面 `produce_tts_*`） |
 
-**中度可选升级（仅当用户显式要云端语音）：**
+门面 `produce_tts_*` 若仍绑定 Piper：中文讲解片**优先用 Edge CLI/脚本**完成旁白；仅在用户选离线或 Edge 不可用时走门面 Piper。
 
-- 再问一次：「继续用 Piper / 改用云端 TTS？」  
-- 选云端 → 交接 `openmontage-providers-tts`（`list → dry_run → sample(confirm_estimate) → generate(confirm + confirm_sample_ok)`）  
+流程：
+
+1. 确认 SRT（或文稿切分后的字幕）已定稿  
+2. Edge：按 cue 生成样片 → 用户试听 OK  
+3. 全片旁白轨 → 写入 `assets/audio/`，再混流/烧字幕  
+
+**中度可选升级（仅当用户显式要付费云端语音）：**
+
+- 再问一次：「继续用 Edge 男声 / 改用付费云端 TTS / 离线 Piper？」  
+- 选付费 → 交接 `openmontage-providers-tts`（`list → dry_run → sample(confirm_estimate) → generate(confirm + confirm_sample_ok)`）  
 - **禁止**因「已配置 Key」就自动走付费  
 
 **重度：**
 
-- 必须付费 TTS（同上 providers-tts 门禁）；不要默认 Piper（除非用户明确降级）。
+- 必须付费 TTS（同上 providers-tts 门禁）；不要默认 Edge/Piper（除非用户明确降级）。
 
 产出音频路径记入项目沙箱，供字幕与 compose。
 

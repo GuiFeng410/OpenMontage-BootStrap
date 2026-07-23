@@ -33,6 +33,16 @@ metadata:
 
 边界：`README/说明/03-字幕与配乐.md`
 
+## 旁白与字幕对齐（BootStrap 默认）
+
+中文旁白默认走 Skill02：**Edge-TTS 男声**（`zh-CN-YunyangNeural`，需联网）。本 Skill 产出/确认字幕后，旁白应对齐本项目 `assets/subs/*.srt`：
+
+1. **按每条 cue 合成**（不是按视频镜头粗切，也不是整篇一口气）  
+2. 每条拟合到 cue 起止窗（略短则垫静音；略长可轻微 `atempo`）  
+3. 再与画面混流；烧录用已定稿 SRT  
+
+禁止：整段 Piper/TTS 后用长静音垫满镜头凑时长。参考：`scripts/_edge_tts_preview_prompt_explainer.py`。
+
 ## Required MCP
 
 `openmontage-bootstrap`

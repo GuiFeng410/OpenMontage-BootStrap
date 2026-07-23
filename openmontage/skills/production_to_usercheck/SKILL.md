@@ -58,10 +58,10 @@ metadata:
 | 时长 | 45–60 秒（竖屏短视频可建议 30–45） | 默认可改 · 无需 Key |
 | 平台 | 横屏 16:9 | 默认可改 · 无需 Key |
 | 画面 | 模板 + 字幕轨 | 默认 · 无需 Key |
-| 解说 | 本地 Piper | 默认 · 无需 Key |
+| 解说 | Edge-TTS 男声（`zh-CN-YunyangNeural`，需联网） | 默认 · 无需 Key |
 | 字幕 | 开（文稿→SRT） | 默认可关 · 无需 Key |
 
-**表 A 脚注（必写）：** 按此表 = **轻度零 Key**：不调用 Stock / 付费 TTS / AI 生图视频；画面以模板+字幕为主，适合先跑通。
+**表 A 脚注（必写）：** 按此表 = **轻度零 Key**：不调用 Stock / 付费 TTS / AI 生图视频；画面以模板+字幕为主，适合先跑通。中文旁白默认 **Edge-TTS 男声**（`edge-tts`，零 Key、需联网）；无网/失败再离线 Piper。旁白须**按字幕 cue 对齐**，禁止整段 Piper 后「静音垫满镜头」凑时长。
 
 **首句话术（必用，降低茫然）：**
 
@@ -81,7 +81,8 @@ metadata:
 | 想升级什么 | 怎么做 | Key |
 |------------|--------|-----|
 | 免费实拍/图素材 | 启用 Stock（中度） | **免费** Pexels/Pixabay → `.env-example.md` → `.env` / MCP `env` → 重启 → Skill `openmontage-providers-stock` |
-| 更好人声 | 云端 TTS | **付费** → 同上路径 → Skill `openmontage-providers-tts` |
+| 更好人声 | 付费云端 TTS（非 Edge） | **付费** → 同上路径 → Skill `openmontage-providers-tts` |
+| 离线旁白 | 本地 Piper | 无需 Key；仅无网或 Edge 失败时 |
 | AI 生图 / 生视频 | 付费模型 | **付费** → Skill `openmontage-providers-image` / `video` |
 | 自带 BGM / 图片 / 视频 | 放入本项目 `assets/music\|images\|video\|audio` | 无需 Key |
 

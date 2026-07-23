@@ -284,7 +284,7 @@ Cross-cutting skills that apply to all pipelines:
 | Animation Runtime Selector | `meta/animation-runtime-selector.md` | Choose render runtime + animation library per scene |
 | Taste Direction | `meta/taste-direction.md` | Convert a brief into taste dials, anti-patterns, and reference strategy for proposal/playbook/atelier work |
 | Bespoke Composition (Atelier) | `meta/bespoke-composition.md` | Hand-author a composition from scratch (hero work) — no stock scene-types; routes art-direction → motion principles → engine mechanics → atelier render |
-| Parallel Video Orchestration | `meta/parallel-video-orchestration.md` | Long AI video: plan 5–10s segments, parallel generate (concurrency 2–3), one FFmpeg assemble; see `lib/parallel_generate.py` + `docs/长视频并行编排/` |
+| Parallel Video Orchestration | `meta/parallel-video-orchestration.md` | Long AI video: plan 5–10s segments, parallel generate by tier, one FFmpeg assemble; see `lib/parallel_generate.py` + `docs/Phase/A_01-长视频生成-steps/` + product flow `docs/Plan/A_01-长视频生成/` |
 
 ## Style Playbooks
 

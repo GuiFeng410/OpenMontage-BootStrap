@@ -348,7 +348,7 @@ def test_env_example_documents_kling_official_keys():
 
 
 def test_provider_docs_distinguish_fal_and_official_kling():
-    providers = read("docs/PROVIDERS.md")
+    providers = read("docs/Source_File/PROVIDERS.md")
     assert "Kling Official" in providers
     assert "kling_official_video" in providers
     assert "kling_official_image" in providers
@@ -365,7 +365,7 @@ def test_provider_docs_distinguish_fal_and_official_kling():
 
 
 def test_architecture_env_mapping_includes_kling_official():
-    architecture = read("docs/ARCHITECTURE.md")
+    architecture = read("docs/Source_File/ARCHITECTURE.md")
     assert "`KLING_API_KEY` | kling_official_video, kling_official_image, kling_tts, kling_avatar, kling_lip_sync" in architecture
     assert "`KLING_API_BASE_URL` | kling_official_video, kling_official_image, kling_tts, kling_avatar, kling_lip_sync" in architecture
     assert "Elements and Account" in architecture

@@ -36,13 +36,13 @@ def test_set_profile_defaults_and_read_state(sandbox: Path) -> None:
     assert set_result["production_profile"] == {
         "production_tier": "medium",
         "visual_source": "stock",
-        "tts_source": "piper",
+        "tts_source": "edge_tts",
     }
     state = produce_read_state("tier_demo")
     assert state["production_profile"]["production_tier"] == "medium"
     assert state["production_profile"]["visual_source"] == "stock"
     marker = json.loads((sandbox / "tier_demo" / "project.json").read_text(encoding="utf-8"))
-    assert marker["production_profile"]["tts_source"] == "piper"
+    assert marker["production_profile"]["tts_source"] == "edge_tts"
 
 
 def test_medium_can_override_tts_to_paid(sandbox: Path) -> None:
@@ -55,6 +55,13 @@ def test_medium_can_override_tts_to_paid(sandbox: Path) -> None:
         "visual_source": "stock",
         "tts_source": "paid",
     }
+
+
+def test_medium_can_override_tts_to_piper(sandbox: Path) -> None:
+    produce_init_project("med_piper", "Med Piper", "animated-explainer")
+    produce_set_production_profile("med_piper", "medium", tts_source="piper")
+    state = produce_read_state("med_piper")
+    assert state["production_profile"]["tts_source"] == "piper"
 
 
 def test_heavy_defaults(sandbox: Path) -> None:
@@ -92,4 +99,4 @@ def test_checkpoint_artifacts_sync_to_marker(sandbox: Path) -> None:
     assert written["production_profile"]["production_tier"] == "light"
     assert written["production_profile"]["visual_source"] == "template"
     state = produce_read_state("cp_sync")
-    assert state["production_profile"]["tts_source"] == "piper"
+    assert state["production_profile"]["tts_source"] == "edge_tts"

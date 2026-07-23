@@ -36,6 +36,12 @@ metadata:
 7. If a tool returns `skipped_no_admin_or_failed` / `manual_commands`: show those commands; do not pretend success.
 8. `verify_ready` — only when `ready_for_skill02` / `can_produce_video_now` is true, hand off to Skill02.
 
+## 旁白依赖提醒（Skill02）
+
+- `install_python_deps` 会装上 `requirements.txt` 中的 **`edge-tts`**（轻度/中度中文旁白默认）。  
+- Edge 需**联网**；Piper 模型仍由 `ensure_piper_model` 安装，作**离线回退**。  
+- 出片旁白对齐与音色约定见 `openmontage-bootstrap-produce`（默认男声 `zh-CN-YunyangNeural`，按 SRT cue）。
+
 ## Optional
 
 `clone_repo` — only if the user asks to clone again into a new path; still dry_run first.

@@ -12,7 +12,7 @@
   <a href="#尝试这些提示词">尝试这些提示词</a> &nbsp;·&nbsp;
   <a href="#流水线">流水线</a> &nbsp;·&nbsp;
   <a href="#工作原理">工作原理</a> &nbsp;·&nbsp;
-  <a href="docs/PROVIDERS.md">提供商</a> &nbsp;·&nbsp;
+  <a href="docs/Source_File/PROVIDERS.md">提供商</a> &nbsp;·&nbsp;
   <a href="AGENT_GUIDE.md">智能体指南</a>
 </p>
 
@@ -409,7 +409,7 @@ OpenMontage/
 
 ## 支持的提供商
 
-> **包含定价与免费额度的完整设置指南：** [`docs/PROVIDERS.md`](docs/PROVIDERS.md)
+> **包含定价与免费额度的完整设置指南：** [`docs/Source_File/PROVIDERS.md`](docs/Source_File/PROVIDERS.md)
 
 <details>
 <summary><strong>视频生成 — 14 家提供商</strong></summary>
@@ -627,7 +627,7 @@ OpenMontage 被设计为高度可扩展的。最常见的两种贡献是：
 2. 在 `skills/pipelines/<你的流水线名称>/` 中创建阶段导演技能文件
 3. 引用现有的工具 — 或在需要时添加新工具
 
-详见 `docs/ARCHITECTURE.md` 获取完整的技术参考，`docs/PROVIDERS.md` 查看完整的提供商指南（设置、定价、免费额度），以及 `AGENT_GUIDE.md` 了解智能体契约。
+详见 `docs/Source_File/ARCHITECTURE.md` 获取完整的技术参考，`docs/Source_File/PROVIDERS.md` 查看完整的提供商指南（设置、定价、免费额度），以及 `AGENT_GUIDE.md` 了解智能体契约。
 
 ### 加入社区
 
