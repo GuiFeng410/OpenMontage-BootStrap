@@ -1,8 +1,9 @@
 ---
-name: openmontage-bootstrap-produce
+name: openmontage-bootstrap-04-produce
 description: >-
-  BootStrap Skill02 produce flow: after theme confirmation, present light/medium/heavy
-  production tiers, then run facade produce_* with optional stock and paid handoffs.
+  BootStrap produce flow (04): after theme/usercheck confirmation, present
+  light/medium/heavy production tiers, then run facade produce_* with optional
+  stock and paid handoffs.
 metadata:
   openclaw:
     requires:
@@ -29,7 +30,7 @@ metadata:
     emoji: "🎬"
 ---
 
-# OpenMontage BootStrap Produce（Skill02）
+# OpenMontage BootStrap Produce（04）
 
 ## Scope
 
@@ -46,7 +47,22 @@ metadata:
 `produce_init_project` / `produce_ensure_captions_music_dirs` 会预建上述目录。  
 用户自带图/音/视频放入**当前** `project_id` 对应目录；新项目不会自动继承旧项目素材。
 
-**不做：** 代用户选档、伪造 `approval_text`、静默调付费 API、静默换 provider。
+**不做：** 代用户选档、伪造 `approval_text`、静默调付费 API、静默换 provider / 视频渠道。
+
+## 遵守 openmontage-bootstrap-03-usercheck 锁定（强制）
+
+若简报阶段已确认并写入（`production_profile` 或项目 artifacts / 简报 JSON）：
+
+| 字段 | produce 必须 |
+|------|----------------|
+| `ai_video=disabled` 或不存在 | **禁止**调用付费 AI 视频生成 |
+| `ai_video=enabled` + `video_channel` / `video_model` | **只使用**该渠道与模型；禁止改用其它视频供应商 |
+| `ai_plan`（表 ③） | 按已确认分段的文案 / 提示词约束生成与拼接；不得擅自改段数或重写提示词而不再问用户 |
+
+**同渠限流：** 可先并行，遇 429/402/可重试错误后转**串行补片**；已有合格片段跳过。  
+**跨渠：** 即使另一渠道已填 Key，也**禁止静默切换**；须向用户提案并获同意，再更新简报锁定字段 / 决策记录后继续。
+
+缺少应有的简报锁定（启用了 AI 视频却无 channel/model，或应有 `ai_plan` 却无）→ **先回到 `openmontage-bootstrap-03-usercheck`**，不要在 produce 内临时编造规划。
 
 ## Required MCP
 
@@ -55,8 +71,8 @@ metadata:
 - 重度另需：`openmontage-providers-tts` / `image` / `video`  
 - 中度可选付费 TTS：同上 TTS MCP  
 
-前提：Skill01 `verify_ready` 通过（或等价 doctor ready）。  
-**模糊需求：** 若用户尚未确认成片简报，先读并执行 Skill **`production_to_usercheck`**，确认后再进入本 Skill 主流程。
+前提：`openmontage-bootstrap-02-setup` 的 `verify_ready` 通过（或等价 doctor ready）。  
+**模糊需求：** 若用户尚未确认成片简报，先读并执行 Skill **`openmontage-bootstrap-03-usercheck`**（表 A → 如需则表 ② 渠道/模型 → 如需则表 ③ AI 规划表），确认后再进入本 Skill 主流程。
 
 ## 档位定义（主题确认后必讲清并让用户选）
 
@@ -81,13 +97,13 @@ metadata:
 - 重度：+ 三个付费 MCP 能启动 + 对应 Key 已填 + 执行 Skill 已启用  
 - 中度要升 TTS：+ TTS MCP + Key + `openmontage-providers-tts`  
 
-缺前置 → 不硬升档；可退回上一档或先走 Skill03 / 05 补配置。
+缺前置 → 不硬升档；可退回上一档或先走 `06-providers` / providers 执行 Skill 补配置。
 
 ## Hard protocol（主流程）
 
 ### 0–1. 主题与档位
 
-0. 若需求仍模糊、无已确认简报 → **先交接 `production_to_usercheck`**（表格确认 + 默认零 Key），回来后再继续。  
+0. 若需求仍模糊、无已确认简报 → **先交接 `openmontage-bootstrap-03-usercheck`**（表 A；启用 AI 视频时还须表 ②/③），回来后再继续。遵守上一节「锁定」规则。  
 1. 确认主题/标题（人审；`approval_text` 用用户原话；若简报已确认可沿用）。  
 2. ★ **档位选择关卡**：若简报已写入档位可复查确认；否则讲清轻/中/重 → 用户选定 → 再继续。  
 3. `produce_init_project`（若简报阶段未建；`pipeline_type=animated-explainer`）→ 预建 `assets/*`。  
@@ -175,7 +191,7 @@ produce_set_production_profile(
 
 ### 5–7. 字幕与合成
 
-**字幕 / 文稿 / BGM：** Skill `openmontage-bootstrap-captions-music`（B+C）  
+**字幕 / 文稿 / BGM：** Skill `openmontage-bootstrap-05-captions-music`（B+C）  
 文稿→`segment_copy_to_subtitles`；BGM→`import/register_music`→`produce_build_compose_inputs`→交回 `compose_*`。  
 可选：`produce_mix_narration_and_music`（需 ffmpeg）；E01 静音 BGM 确认后可用 `produce_synthesize_bgm(confirm=true)`。  
 详见 `README/说明/03-字幕与配乐.md`。
@@ -186,7 +202,7 @@ produce_set_production_profile(
 2. `produce_compose_preflight` → `produce_compose_start` → 轮询 `produce_job_status`  
 3. 交付 `renders/final.mp4`；可用 `produce_probe_media` 抽检  
 
-**工具失败时（强制）：** 先读 Skill `openmontage-bootstrap-error-handling`（阶段 3），调用  
+**工具失败时（强制）：** 先读 Skill `openmontage-bootstrap-07-error-handling`（阶段 3），调用  
 `error_capture_context` → `error_plan_recovery` → `error_apply_recovery`（安全动作），再重试。  
 高危覆盖/付费/换 BGM 须 `confirm=true`（如 `action_ids="replace_bgm"`）。详见 `README/错误处理/`。
 
@@ -197,7 +213,7 @@ produce_set_production_profile(
 | Skill | 关系 |
 |-------|------|
 | setup (01) | 前置环境 |
-| production_to_usercheck | 模糊需求：成片简报表确认后再进入本 Skill |
+| openmontage-bootstrap-03-usercheck | 模糊需求：成片简报表确认后再进入本 Skill |
 | captions-music | 文稿→字幕；BGM 登记与 compose 输入打包（可选 ffmpeg 混音） |
 | error-handling | 工具失败：capture → plan → **apply**（≤3；高危须确认） |
 | providers (03) | 补 Key；重度/中度付费 TTS 前可先走 03 |

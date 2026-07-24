@@ -1,5 +1,5 @@
 ---
-name: openmontage-bootstrap-setup
+name: openmontage-bootstrap-02-setup
 description: Detect and install OpenMontage BootStrap environment via openmontage-bootstrap MCP with dry_run gates.
 metadata:
   openclaw:
@@ -40,7 +40,7 @@ metadata:
 
 - `install_python_deps` 会装上 `requirements.txt` 中的 **`edge-tts`**（轻度/中度中文旁白默认）。  
 - Edge 需**联网**；Piper 模型仍由 `ensure_piper_model` 安装，作**离线回退**。  
-- 出片旁白对齐与音色约定见 `openmontage-bootstrap-produce`（默认男声 `zh-CN-YunyangNeural`，按 SRT cue）。
+- 出片旁白对齐与音色约定见 `openmontage-bootstrap-04-produce`（默认男声 `zh-CN-YunyangNeural`，按 SRT cue）。
 
 ## Optional
 

@@ -5,7 +5,7 @@
 | [01-错误集合.md](./01-错误集合.md) | 已收集的典型错误与教训（含 Agnes 鉴权/取 URL/并行限流、manifest running 漏重试） |
 | [02-playbook说明.md](./02-playbook说明.md) | E01–E04 / E00 动作与 confirm 规则 |
 | [03-并行耗时与Agnes限流分析.md](./03-并行耗时与Agnes限流分析.md) | llm-explainer-30s 耗时复盘 + 官方视频 RPM 对照 + 并行策略改动建议 |
-| Skill | `openmontage-bootstrap-error-handling`（**阶段 3**：apply + 零 Key 合成 BGM） |
+| Skill | `openmontage-bootstrap-07-error-handling`（**阶段 3**：apply + 零 Key 合成 BGM） |
 
 ## 阶段 3 用法
 

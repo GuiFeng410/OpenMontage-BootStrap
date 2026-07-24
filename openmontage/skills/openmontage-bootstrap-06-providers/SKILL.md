@@ -1,5 +1,5 @@
 ---
-name: openmontage-bootstrap-providers
+name: openmontage-bootstrap-06-providers
 description: >-
   BootStrap Skill03: after install, guide filling paid TTS/image/video API Keys
   into already-registered provider MCPs and hand off gated generation. Does not
@@ -60,7 +60,7 @@ metadata:
 | 付费生图 | `openmontage-providers-image` | `openmontage-providers-image` |
 | 付费生视频 | `openmontage-providers-video` | `openmontage-providers-video` |
 
-零 Key 出片仍走门面 + Skill02（`openmontage-bootstrap-produce`）。中文旁白默认 **Edge-TTS 男声**（`edge-tts`，需联网、无 Key）；离线回退 Piper。本 Skill 只管**付费** TTS/图/视频 Key。
+零 Key 出片仍走门面 + Skill02（`openmontage-bootstrap-04-produce`）。中文旁白默认 **Edge-TTS 男声**（`edge-tts`，需联网、无 Key）；离线回退 Piper。本 Skill 只管**付费** TTS/图/视频 Key。
 
 ## 硬规则
 

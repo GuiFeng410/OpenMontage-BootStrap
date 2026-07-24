@@ -1,5 +1,5 @@
----
-name: openmontage-bootstrap-error-handling
+﻿---
+name: openmontage-bootstrap-07-error-handling
 description: >-
   BootStrap Error-Handling Skill: on tool failure, capture stderr, classify
   against E01–E04, plan and apply safe recoveries (max 3). High-risk

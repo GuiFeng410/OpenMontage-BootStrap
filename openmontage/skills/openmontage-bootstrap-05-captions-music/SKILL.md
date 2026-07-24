@@ -1,5 +1,5 @@
 ---
-name: openmontage-bootstrap-captions-music
+name: openmontage-bootstrap-05-captions-music
 description: >-
   BootStrap captions+BGM helper: copy→subs, import/register BGM, build compose
   input bundle, optional FFmpeg duck mix. Does not replace produce TTS or paid music.
@@ -82,7 +82,7 @@ metadata:
 
 ### 工具失败（强制交接）
 
-任一 `produce_*` / mix / compose 相关失败时：读 Skill `openmontage-bootstrap-error-handling`，  
+任一 `produce_*` / mix / compose 相关失败时：读 Skill `openmontage-bootstrap-07-error-handling`，  
 `error_capture_context` → `error_plan_recovery` → `error_apply_recovery`；E01/E04 常见。  
 E01 确认后可用 `produce_synthesize_bgm(confirm=true)` 或 `action_ids="replace_bgm"` 零 Key 换 BGM。
 

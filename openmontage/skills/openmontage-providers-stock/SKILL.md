@@ -65,7 +65,7 @@ metadata:
 
 ## 与 produce 交接（中度档）
 
-由 Skill02 `openmontage-bootstrap-produce` 在 **中度** 画面分支调用本 Skill。
+由 Skill02 `openmontage-bootstrap-04-produce` 在 **中度** 画面分支调用本 Skill。
 
 1. `stock_search` → 用户确认候选。  
 2. `stock_download(..., confirm=true, project_id=<项目ID>, scene_id=..., asset_id=...)`  
