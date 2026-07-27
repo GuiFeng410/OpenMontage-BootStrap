@@ -31,9 +31,9 @@ metadata:
 若启用 AI 视频（或用户要求 AI 设计文案）：按 **S2 分步**再确认 **表 ② 渠道/模型** → **表 ③ AI 规划表**，全部确认后才交接 `openmontage-bootstrap-04-produce`，并写入 `production_profile` / 简报 artifacts。
 
 **商品宣传/展示片：** 填表 ③ / `ai_plan` 前须先读  
-`references/product-prompt-template.md`（时长策略、重点段、槽位、英文组装）。非商品片不强制。
+`references/product-prompt-template.md`（素材分类、缺图补齐、时长策略、重点段、槽位、英文组装）。非商品片不强制。
 
-**不做：** 跳过确认直接 compose；一上来甩出完整升档大表或三张表堆在同一条消息；静默填 Key / 调 Stock/付费 API；伪造用户原话；有视频 Key 就自动开烧；静默更换视频渠道；商品片跳过上述 references 直接编造规划。
+**不做：** 跳过确认直接 compose；一上来甩出完整升档大表或三张表堆在同一条消息；静默填 Key / 调 Stock/付费 API；伪造用户原话；有视频 Key 就自动开烧；静默更换视频渠道；商品片跳过上述 references 直接编造规划；**缺图时静默图生图或静默硬烧佩戴支**。
 
 安装未闭环（5 MCP / 6 Skill 未齐）→ 先交接 `openmontage-bootstrap-01-installer`。
 
@@ -171,9 +171,11 @@ metadata:
 若主题/用途为**商品宣传、种草、详情展示、产品佩戴演示**等：
 
 1. **先读**本 Skill 目录下 `references/product-prompt-template.md`（完整策略与槽位）。  
-2. 按该参考的第 0 步选**切段策略**与**重点段**，再填下方总览/分段（中文槽位）；「提示词约束」列写**英文组装要点**或完整英文句。  
-3. 总览「叙事结构」商品片默认对齐参考中的 Hook → Hero → Detail → Close（段数可缩放）。  
-4. 硬约束冲突须用户「确认覆盖」后再改（见参考 §9）。
+2. **素材分类**（参考 §2.1）：出示分类简表；默认路径**纯产品**；佩戴须合格参考（§2.2）。  
+3. **缺图 / 不够段**时按参考 §2.3 **先问用户**（再上传 / 图生图 / 不补）；「按默认」「同意补图」→ **默认图生图**；禁止静默 I2I。缺口未关闭前**不出最终表 ③、不交接 produce 烧视频**。  
+4. 按参考选**切段策略**与**重点段**，再填下方总览/分段（中文槽位）；每段须有**主参考图**；「提示词约束」列写英文组装要点（佩戴支含人物硬约束）。  
+5. 总览「叙事结构」默认对齐 Hook → Hero → Detail → Close（段数可缩放）。  
+6. 硬约束冲突须用户「确认覆盖」后再改（见参考 §9）。
 
 非商品片：跳过本小节，按通用表 ③ 即可。
 
@@ -201,7 +203,7 @@ metadata:
 2. 可只改某一段后要求重贴。  
 3. 口播按段长控制（如约 10s）；过长须删句或拆段（可在脚注说明，不必每段强制「字数列」）。  
 4. 素材/参考图有则填。  
-5. **商品片**：已按 `references/product-prompt-template.md` 填切段/重点段/提示词；其它机器以仓内该参考为准。
+5. **商品片**：已按 `references/product-prompt-template.md` 完成分类/缺图策略/切段/重点段/每段参考图与提示词；其它机器以仓内该参考为准。
 
 **高级（折叠）：** 每段画面主体 · 运镜 · 衔接上一镜。
 
@@ -236,7 +238,7 @@ produce_set_production_profile(
 | `ai_video` | `enabled` / `disabled` |
 | `video_channel` | `agnes` / `erouter` / 空 |
 | `video_model` | 模型 id；未启用则空 |
-| `ai_plan` | 表 ③ 总览 + 分段列表（或等价结构）；商品片须含切段策略/重点段（见 references） |
+| `ai_plan` | 表 ③ 总览 + 分段；商品片须含：切段/重点段、`asset_classes`、`path`、`gap_fill`、每段 `ref_image`（见 references） |
 
 6. `approval_text` 用用户原话（禁止编造）。  
 7. 交接 **`openmontage-bootstrap-04-produce`**；字幕/BGM → `openmontage-bootstrap-05-captions-music`。  
@@ -267,6 +269,7 @@ produce_set_production_profile(
 - 表 A 脚注含：不启用=轻度、Key 范围、cue 对齐  
 - AI 视频启用时：表 ② 与表 ③ 均已确认后才交接 produce  
 - 触发规划表时：结构含总览强制项 + 分段强制列；无 AI 视频时提示词为 N/A  
-- 商品片出表 ③ 前已读 `references/product-prompt-template.md` 并按之填写  
+- 商品片出表 ③ 前已读 `references/product-prompt-template.md`：完成分类；缺图已询问（默认 I2I）；每段有参考图  
 - 已写 `production_profile`；扩展字段已写入 profile 或 artifacts  
-- 无 Key / 未启用时未调用付费 AI 视频 
+- 无 Key / 未启用时未调用付费 AI 视频  
+- 未在缺图或无佩戴参考时静默硬烧 
