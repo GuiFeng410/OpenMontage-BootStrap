@@ -56,7 +56,7 @@ def validate_num_frames(num_frames: int) -> int:
 
 class AgnesVideo(BaseTool):
     name = "agnes_video"
-    version = "0.1.0"
+    version = "0.1.1"
     tier = ToolTier.GENERATE
     capability = "video_generation"
     provider = "agnes"
@@ -147,7 +147,7 @@ class AgnesVideo(BaseTool):
     resource_profile = ResourceProfile(
         cpu_cores=1, ram_mb=512, vram_mb=0, disk_mb=500, network_required=True
     )
-    retry_policy = RetryPolicy(max_retries=2, retryable_errors=["rate_limit", "timeout"])
+    retry_policy = RetryPolicy(max_retries=3, retryable_errors=["rate_limit", "timeout", "ssl_error"])
     idempotency_key_fields = ["prompt", "operation", "num_frames", "frame_rate", "width", "height"]
     side_effects = ["writes video file to output_path", "calls Agnes videos API"]
     user_visible_verification = ["Watch generated clip for motion coherence and visual quality"]
@@ -235,7 +235,7 @@ class AgnesVideo(BaseTool):
                 error="AGNES_API_KEY not set. " + self.install_instructions,
             )
 
-        import requests
+        import requests as _requests
         from tools.video._shared import probe_output
 
         start = time.time()
@@ -246,7 +246,7 @@ class AgnesVideo(BaseTool):
 
         try:
             payload = self.build_payload(inputs)
-            create = requests.post(
+            create = _requests.post(
                 f"{AGNES_BASE}/v1/videos",
                 headers=headers,
                 json=payload,
@@ -254,40 +254,39 @@ class AgnesVideo(BaseTool):
             )
             create.raise_for_status()
             created = create.json()
-            video_id = created.get("video_id") or created.get("id") or created.get("task_id")
-            task_id = created.get("task_id") or created.get("id")
-            if not video_id and not task_id:
-                return ToolResult(success=False, error="Agnes create task returned no video_id/task_id")
+            task_id = created.get("task_id") or created.get("id") or created.get("video_id")
+            if not task_id:
+                return ToolResult(success=False, error="Agnes create task returned no task_id")
 
             timeout_seconds = int(inputs.get("timeout_seconds", 900))
             poll_interval = int(inputs.get("poll_interval_seconds", 5))
             deadline = time.time() + timeout_seconds
 
             result_data: dict[str, Any] | None = None
+            ssl_retries = 0
+            max_ssl_retries = 3
             while time.time() < deadline:
-                if video_id:
-                    result = requests.get(
-                        f"{AGNES_BASE}/agnesapi",
-                        params={"video_id": video_id, "model_name": _MODEL},
-                        headers={"Authorization": headers["Authorization"]},
-                        timeout=30,
-                    )
-                else:
-                    result = requests.get(
+                try:
+                    result = _requests.get(
                         f"{AGNES_BASE}/v1/videos/{task_id}",
                         headers={"Authorization": headers["Authorization"]},
                         timeout=30,
                     )
-                result.raise_for_status()
-                result_data = result.json()
-                status = str(result_data.get("status") or "").lower()
-                # Live API uses pending -> in_progress -> completed (docs also list queued).
-                if status == "completed":
-                    break
-                if status in {"failed", "error", "cancelled", "canceled"}:
-                    detail = result_data.get("error") or result_data.get("message") or status
-                    return ToolResult(success=False, error=f"Agnes video generation failed: {detail}")
-                time.sleep(poll_interval)
+                    result.raise_for_status()
+                    result_data = result.json()
+                    status = str(result_data.get("status") or "").lower()
+                    if status == "completed":
+                        break
+                    if status in {"failed", "error", "cancelled", "canceled"}:
+                        detail = result_data.get("error") or result_data.get("message") or status
+                        return ToolResult(success=False, error=f"Agnes video generation failed: {detail}")
+                    ssl_retries = 0  # Reset on success
+                    time.sleep(poll_interval)
+                except (_requests.exceptions.SSLError, _requests.exceptions.ConnectionError) as e:
+                    ssl_retries += 1
+                    if ssl_retries > max_ssl_retries:
+                        raise
+                    time.sleep(5 * ssl_retries)  # Linear backoff: 5s, 10s, 15s
 
             if not result_data or str(result_data.get("status") or "").lower() != "completed":
                 return ToolResult(success=False, error="Agnes video generation timed out")
@@ -306,7 +305,7 @@ class AgnesVideo(BaseTool):
                     error="Agnes video output missing url (checked top-level and metadata.url)",
                 )
 
-            download = requests.get(video_url, timeout=300)
+            download = _requests.get(video_url, timeout=300)
             download.raise_for_status()
             output_path = Path(inputs.get("output_path") or "agnes_video_output.mp4")
             output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -323,7 +322,7 @@ class AgnesVideo(BaseTool):
                 "model": payload["model"],
                 "prompt": inputs["prompt"],
                 "operation": inputs.get("operation", "text_to_video"),
-                "video_id": video_id,
+                "video_id": task_id,
                 "task_id": task_id,
                 "num_frames": payload["num_frames"],
                 "frame_rate": payload["frame_rate"],

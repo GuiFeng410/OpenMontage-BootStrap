@@ -22,13 +22,13 @@ from openmontage.mcp.providers_video.tools import (
 def test_list_image_providers_shape() -> None:
     data = list_image_providers()
     names = {p["provider"] for p in data["providers"]}
-    assert names == {"dashscope", "flux", "google", "grok", "kling", "openai"}
+    assert names == {"agnes", "dashscope", "flux", "google", "grok", "kling", "openai"}
 
 
 def test_list_video_providers_shape() -> None:
     data = list_video_providers()
     names = {p["provider"] for p in data["providers"]}
-    assert names == {"kling", "minimax", "runway", "seedance", "sora", "veo"}
+    assert names == {"agnes", "kling", "minimax", "runway", "seedance", "sora", "veo"}
     tools = {p["provider"]: p["tool_name"] for p in data["providers"]}
     assert tools["kling"] == "kling_official_video"
     assert tools["seedance"] == "seedance_video"
