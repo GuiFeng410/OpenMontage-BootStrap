@@ -12,7 +12,7 @@ openai>=2.44.0         # Videos API support for Sora 2
 edge-tts>=7.0          # Free online Chinese narration (Microsoft Edge TTS; needs network)
 
 # OpenClaw / eClaw MCP (P0 doctor)
-mcp>=1.0
+mcp>=1.0,<2              # 2.0 removed mcp.server.fastmcp; keep 1.x until servers migrate
 
 # Backlot - the living storyboard (local board server)
 fastapi>=0.110
