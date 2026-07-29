@@ -43,4 +43,4 @@ jobs:
         run: make lint
 
       - name: Run test suite
-        run: make test
+        run: make test-ci

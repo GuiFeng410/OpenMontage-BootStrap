@@ -6,7 +6,7 @@ PIP = $(RUN_PYTHON) -m pip
 
 .DEFAULT_GOAL := setup
 
-.PHONY: setup install install-dev install-gpu test test-contracts lint clean preflight demo demo-list hyperframes-doctor hyperframes-warm venv ensure-venv
+.PHONY: setup install install-dev install-gpu test test-ci test-contracts lint clean preflight demo demo-list hyperframes-doctor hyperframes-warm venv ensure-venv
 
 # ---- Virtual environment ----
 
@@ -89,8 +89,13 @@ install-gpu: ensure-venv
 
 # ---- Testing ----
 
+# Full local suite (may include slow / docs-dependent tests).
 test: ensure-venv
-	$(RUN_PYTHON) -m pytest tests/ -v
+	$(RUN_PYTHON) -m pytest tests/ -v --ignore=tests/qa
+
+# Fast CI smoke: BootStrap-relevant unit tests that do not need upstream docs/Source_File.
+test-ci: ensure-venv
+	$(RUN_PYTHON) -m pytest tests/mcp_providers_media tests/lib -q --tb=short
 
 test-contracts: ensure-venv
 	$(RUN_PYTHON) -m pytest tests/contracts/ -v
