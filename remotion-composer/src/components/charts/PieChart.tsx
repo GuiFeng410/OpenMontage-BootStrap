@@ -285,7 +285,7 @@ export const PieChart: React.FC<PieChartProps> = ({
                     fontFamily={fontFamily}
                     fontSize={22}
                     fontWeight={400}
-                    opacity={0.6}
+                    opacity={0.75}
                     textAnchor="end"
                     dx={280}
                   >

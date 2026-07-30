@@ -113,6 +113,9 @@ const OverlayContent: React.FC<{ overlay: TalkingHeadOverlay }> = ({
   overlay,
 }) => {
   const bgColor = overlay.backgroundColor || "#0F172A";
+  const textColor = overlay.color || "#F8FAFC";
+  const gridColor = "#94A3B8";
+  const surfaceColor = bgColor === "#0F172A" || bgColor === "#0f172a" ? "#1E293B" : bgColor;
 
   if (overlay.type === "text_card" && overlay.text) {
     return (
@@ -173,6 +176,8 @@ const OverlayContent: React.FC<{ overlay: TalkingHeadOverlay }> = ({
         animationStyle={(overlay.chartAnimation as any) || "grow-up"}
         showValues={overlay.showValues}
         backgroundColor={bgColor}
+        textColor={textColor}
+        gridColor={gridColor}
       />
     );
   }
@@ -187,6 +192,8 @@ const OverlayContent: React.FC<{ overlay: TalkingHeadOverlay }> = ({
         showMarkers={overlay.showMarkers}
         showLegend={overlay.showLegend}
         backgroundColor={bgColor}
+        textColor={textColor}
+        gridColor={gridColor}
       />
     );
   }
@@ -202,6 +209,7 @@ const OverlayContent: React.FC<{ overlay: TalkingHeadOverlay }> = ({
         centerValue={overlay.centerValue}
         showLegend={overlay.showLegend}
         backgroundColor={bgColor}
+        textColor={textColor}
       />
     );
   }
@@ -214,6 +222,8 @@ const OverlayContent: React.FC<{ overlay: TalkingHeadOverlay }> = ({
         colors={overlay.chartColors}
         animationStyle={(overlay.chartAnimation as any) || "count-up"}
         backgroundColor={bgColor}
+        textColor={textColor}
+        cardBackgroundColor={surfaceColor}
       />
     );
   }

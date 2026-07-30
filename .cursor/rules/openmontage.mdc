@@ -13,3 +13,9 @@ It contains routing rules that determine your first action based on what the use
 Skipping it WILL cause you to take the wrong action.
 
 There are no instructions in this file. All instructions are in AGENT_GUIDE.md.
+
+## Git push（Agent）
+
+- **双推** = `gitee` + `bootstrap` only.
+- **Never** `git push origin` (`origin` is upstream read-only).
+- Default `git push` → `gitee`. See **Git 推送** in `AGENT_GUIDE.md`.

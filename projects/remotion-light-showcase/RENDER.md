@@ -1,0 +1,50 @@
+# 渲染记录
+
+## 环境
+
+- 目录：`remotion-composer/`
+- 依赖：已存在 `node_modules`，无需额外安装
+- 平台：Windows PowerShell，相对路径 `..\projects\...` 可用
+
+## 使用的命令
+
+```powershell
+cd f:\small_work\vedio_github_project\OpenMontage\remotion-composer
+
+# 分段 1 — hero_title + text_card + comparison + stat_card (~18s)
+npx remotion render src/index.tsx Explainer `
+  "..\projects\remotion-light-showcase\renders\segment-01-intro-comparison.mp4" `
+  --props="..\projects\remotion-light-showcase\segment-01-intro-comparison.json"
+
+# 分段 2 — bar_chart + line_chart + pie_chart + kpi_grid (~24s)
+npx remotion render src/index.tsx Explainer `
+  "..\projects\remotion-light-showcase\renders\segment-02-charts.mp4" `
+  --props="..\projects\remotion-light-showcase\segment-02-charts.json"
+
+# 分段 3 — terminal_scene + callout + progress_bar + text_card + hero_title (~21s)
+npx remotion render src/index.tsx Explainer `
+  "..\projects\remotion-light-showcase\renders\segment-03-terminal-close.mp4" `
+  --props="..\projects\remotion-light-showcase\segment-03-terminal-close.json"
+
+# 完整 60s
+npx remotion render src/index.tsx Explainer `
+  "..\projects\remotion-light-showcase\renders\showcase-60s.mp4" `
+  --props="..\projects\remotion-light-showcase\explainer-props-60s.json"
+```
+
+## 渲染结果
+
+| 文件 | 时长 | 大小 | 耗时 |
+|------|------|------|------|
+| segment-01-intro-comparison.mp4 | ~18s | 3.2 MB | ~91s |
+| segment-02-charts.mp4 | ~24s | 4.3 MB | ~117s |
+| segment-03-terminal-close.mp4 | ~21s | 2.9 MB | ~119s |
+| showcase-60s.mp4 | ~61s | 10.4 MB | ~368s |
+
+**总渲染时间**：约 12.8 分钟（4 个文件）
+
+## 修复说明
+
+- **Phase A（图表深色主题）**：`Explainer` 已向 `BarChart` / `LineChart` / `PieChart` / `KPIGrid` 传递 `theme.textColor`（可由 `cut.color` 覆盖）；`segment-02-charts` 已按此重渲验证。
+- **Phase B（Agent 参考）**：规划与能力边界见 `openmontage/skills/openmontage-bootstrap-03-usercheck/references/light-remotion-showcase.md`；demo props 已同步至 `remotion-composer/public/demo-props/light-showcase-*.json`。
+- `calculateMetadata` 自动根据 `cuts[].out_seconds` 计算时长（末帧 +1s padding）。

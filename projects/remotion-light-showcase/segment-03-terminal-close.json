@@ -1,0 +1,83 @@
+{
+  "theme": "flat-motion-graphics",
+  "cuts": [
+    {
+      "id": "demo-terminal",
+      "source": "",
+      "type": "terminal_scene",
+      "in_seconds": 0,
+      "out_seconds": 6,
+      "terminalTitle": "vector-search-demo",
+      "prompt": "$",
+      "accentColor": "#22D3EE",
+      "backgroundColor": "#0F172A",
+      "steps": [
+        { "kind": "cmd", "text": "curl -X POST /v1/search -d '{\"query\":\"轻薄笔记本\"}'" },
+        { "kind": "out", "text": "→ embedding: [0.12, -0.34, 0.87, ...] (768d)" },
+        { "kind": "out", "text": "→ ANN hits: ultrabook-pro, slimbook-air, lite-14" },
+        { "kind": "pill", "text": "零密钥 · 纯组件渲染", "color": "#34D399" },
+        { "kind": "pause", "seconds": 0.8 }
+      ]
+    },
+    {
+      "id": "hybrid-tip",
+      "source": "",
+      "type": "callout",
+      "in_seconds": 6,
+      "out_seconds": 11,
+      "title": "最佳实践",
+      "text": "先用向量召回候选集，再用 BM25 重排 —— 兼顾语义覆盖与精确匹配。",
+      "callout_type": "tip",
+      "accentColor": "#34D399",
+      "backgroundColor": "#0F172A",
+      "color": "#F8FAFC"
+    },
+    {
+      "id": "adoption",
+      "source": "",
+      "type": "progress_bar",
+      "in_seconds": 11,
+      "out_seconds": 15,
+      "title": "企业采用混合检索",
+      "progress": 0.68,
+      "progressLabel": "68% 的团队已部署向量 + 关键词混合方案",
+      "progressColor": "#A78BFA",
+      "backgroundColor": "#0F172A"
+    },
+    {
+      "id": "takeaway",
+      "source": "",
+      "type": "text_card",
+      "in_seconds": 15,
+      "out_seconds": 17,
+      "text": "不是二选一，而是组合拳",
+      "subtitle": "向量懂意图，关键词保精确",
+      "color": "#F8FAFC",
+      "backgroundColor": "#0F172A"
+    },
+    {
+      "id": "end",
+      "source": "",
+      "type": "hero_title",
+      "in_seconds": 17,
+      "out_seconds": 20,
+      "text": "OpenMontage",
+      "subtitle": "Light Tier · Remotion 零密钥动效",
+      "backgroundColor": "#0F172A"
+    }
+  ],
+  "overlays": [
+    {
+      "type": "provider_chip",
+      "in_seconds": 0,
+      "out_seconds": 6,
+      "providers": ["Remotion", "Zero-Key", "Explainer"],
+      "cycleSeconds": 2,
+      "label": "Powered by",
+      "accentColor": "#22D3EE",
+      "position": "bottom-left"
+    }
+  ],
+  "captions": [],
+  "audio": {}
+}

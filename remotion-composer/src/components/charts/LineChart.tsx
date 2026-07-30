@@ -130,7 +130,7 @@ export const LineChart: React.FC<LineChartProps> = ({
         {/* Grid */}
         {showGrid && (
           <g
-            opacity={interpolate(frame, [0, 10], [0, 0.5], {
+            opacity={interpolate(frame, [0, 10], [0, 0.65], {
               extrapolateRight: "clamp",
             })}
           >

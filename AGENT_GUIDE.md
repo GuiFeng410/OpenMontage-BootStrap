@@ -699,8 +699,28 @@ The `.agents/skills/` directory is large. When you're not coming in through a to
 | How should this pipeline stage behave? | `skills/pipelines/<pipeline>/...` |
 | What is the checkpoint/review policy? | `skills/meta/` |
 
+## Git 推送（Agent 必守）
+
+本仓库日常发布**不是** `origin`（上游只读对照 `calesthio/OpenMontage`）。Agent 执行 push 时必须遵守：
+
+| 场景 | 行为 |
+|------|------|
+| 用户说「双推」 | 只推 **`gitee`** 与 **`bootstrap`** |
+| 默认 `git push`（未指定远程） | 推到 **`gitee`**（`main` 跟踪 `gitee/main`） |
+| **`origin`** | **禁止 push**；勿将 `origin` 当作发布目标 |
+
+显式双推命令：
+
+```bash
+git push gitee main
+git push bootstrap main
+```
+
+远程含义：`gitee` = Gitee BootStrap 仓；`bootstrap` = `GuiFeng410/OpenMontage-BootStrap`；`origin` = 上游 OpenMontage（fetch/对照用）。
+
 ## What Not To Do
 
+- **Do not push to `origin`.** Publish only to `gitee` and `bootstrap` unless the user explicitly names another remote.
 - **Do not bypass the pipeline.** Never write ad-hoc scripts to call tools directly. All production goes through pipeline stages with director skills. See Rule Zero.
 - **Do not call generation tools without reading their Layer 3 skill.** Check the tool's `agent_skills` field, read the referenced skill, then craft your prompts using that guidance.
 - **Do not skip stage director skills.** Before executing any pipeline stage, read its director skill. The skill contains the quality bar, the workflow, and the review criteria.

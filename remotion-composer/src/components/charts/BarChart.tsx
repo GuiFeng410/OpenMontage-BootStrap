@@ -105,7 +105,7 @@ export const BarChart: React.FC<BarChartProps> = ({
             const gridOpacity = interpolate(
               frame,
               [0, 10],
-              [0, 0.6],
+              [0, 0.75],
               { extrapolateRight: "clamp" }
             );
             return (

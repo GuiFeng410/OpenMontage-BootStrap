@@ -148,6 +148,8 @@ metadata:
 
 用户必须只选 **一项**。确认后进入表 3。
 
+**表 2.1 脚注（Remotion 行）：** 选 **Remotion 动画** 时，规划 cut 组合、60s 分段与渲染路径见 `references/light-remotion-showcase.md`（仓内样板 `projects/remotion-light-showcase/`）。
+
 写入字段建议：`light_presentation` = `still` / `image_carousel` / `motion_text` / `remotion`。
 
 #### 3.2 中度 — 表 2.2 素材来源 + 文案提示
