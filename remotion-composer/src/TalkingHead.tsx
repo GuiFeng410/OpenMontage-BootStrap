@@ -11,6 +11,7 @@ import { TextCard } from "./components/TextCard";
 import { StatCard } from "./components/StatCard";
 import { CalloutBox } from "./components/CalloutBox";
 import { ComparisonCard } from "./components/ComparisonCard";
+import { DataTable } from "./components/DataTable";
 import { BarChart } from "./components/charts/BarChart";
 import { LineChart } from "./components/charts/LineChart";
 import { PieChart } from "./components/charts/PieChart";
@@ -55,7 +56,17 @@ export interface TalkingHeadOverlay {
   showValues?: boolean;
   showLegend?: boolean;
   showMarkers?: boolean;
-  columns?: 2 | 3 | 4;
+  /** line_chart: numeric labels beside points (MVP: first series only) */
+  showPointLabels?: boolean;
+  /**
+   * kpi_grid: column count (2|3|4).
+   * comparison: multi-column cells array of {label, value, color?} (2-4).
+   */
+  columns?: 2 | 3 | 4 | Array<{ label: string; value: string; color?: string }>;
+  /** data_table: column headers (max 5). */
+  headers?: string[];
+  /** data_table: data rows (max 5). */
+  rows?: string[][];
   // Styling
   backgroundColor?: string;
   color?: string;
@@ -150,20 +161,44 @@ const OverlayContent: React.FC<{ overlay: TalkingHeadOverlay }> = ({
       />
     );
   }
+  if (overlay.type === "comparison") {
+    const comparisonColumns = Array.isArray(overlay.columns)
+      ? overlay.columns
+      : undefined;
+    const hasMulti = Boolean(comparisonColumns && comparisonColumns.length >= 2);
+    const hasDual = Boolean(overlay.leftLabel && overlay.rightLabel);
+    if (hasMulti || hasDual) {
+      return (
+        <ComparisonCard
+          leftLabel={overlay.leftLabel}
+          rightLabel={overlay.rightLabel}
+          leftValue={overlay.leftValue || ""}
+          rightValue={overlay.rightValue || ""}
+          columns={comparisonColumns}
+          title={overlay.title}
+          backgroundColor={bgColor}
+          textColor={textColor}
+          cardBackgroundColor={surfaceColor}
+        />
+      );
+    }
+  }
   if (
-    overlay.type === "comparison" &&
-    overlay.leftLabel &&
-    overlay.rightLabel
+    overlay.type === "data_table" &&
+    overlay.headers &&
+    overlay.headers.length > 0 &&
+    overlay.rows
   ) {
     return (
-      <ComparisonCard
-        leftLabel={overlay.leftLabel}
-        rightLabel={overlay.rightLabel}
-        leftValue={overlay.leftValue || ""}
-        rightValue={overlay.rightValue || ""}
+      <DataTable
+        headers={overlay.headers}
+        rows={overlay.rows}
         title={overlay.title}
         backgroundColor={bgColor}
-        textColor={overlay.color}
+        textColor={textColor}
+        mutedTextColor="#94A3B8"
+        accentColor={overlay.accentColor || "#22D3EE"}
+        cardBackgroundColor={surfaceColor}
       />
     );
   }
@@ -191,6 +226,7 @@ const OverlayContent: React.FC<{ overlay: TalkingHeadOverlay }> = ({
         showGrid={overlay.showGrid}
         showMarkers={overlay.showMarkers}
         showLegend={overlay.showLegend}
+        showPointLabels={overlay.showPointLabels}
         backgroundColor={bgColor}
         textColor={textColor}
         gridColor={gridColor}
@@ -214,11 +250,13 @@ const OverlayContent: React.FC<{ overlay: TalkingHeadOverlay }> = ({
     );
   }
   if (overlay.type === "kpi_grid" && overlay.chartData) {
+    const kpiColumns =
+      typeof overlay.columns === "number" ? overlay.columns : undefined;
     return (
       <KPIGrid
         metrics={overlay.chartData}
         title={overlay.title}
-        columns={overlay.columns}
+        columns={kpiColumns}
         colors={overlay.chartColors}
         animationStyle={(overlay.chartAnimation as any) || "count-up"}
         backgroundColor={bgColor}

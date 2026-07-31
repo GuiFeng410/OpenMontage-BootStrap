@@ -29,6 +29,8 @@ interface LineChartProps {
   gridColor?: string;
   showGrid?: boolean;
   showMarkers?: boolean;
+  /** When true, show numeric labels beside points. MVP: first series only (avoids overlap). */
+  showPointLabels?: boolean;
   showLegend?: boolean;
   xLabel?: string;
   yLabel?: string;
@@ -46,6 +48,7 @@ export const LineChart: React.FC<LineChartProps> = ({
   gridColor = "#E5E7EB",
   showGrid = true,
   showMarkers = true,
+  showPointLabels = false,
   showLegend = true,
   xLabel,
   yLabel,
@@ -332,6 +335,35 @@ export const LineChart: React.FC<LineChartProps> = ({
                       strokeWidth={2.5}
                       opacity={markerProgress * lineOpacity}
                     />
+                  );
+                })}
+
+              {/* Point value labels — MVP: first series only to avoid overlap */}
+              {showPointLabels &&
+                seriesIdx === 0 &&
+                sorted.map((p, pIdx) => {
+                  const labelProgress = interpolate(
+                    drawProgress,
+                    [pIdx / sorted.length, Math.min((pIdx + 1) / sorted.length, 1)],
+                    [0, 1],
+                    { extrapolateLeft: "clamp", extrapolateRight: "clamp" }
+                  );
+                  const cx = toSvgX(p.x);
+                  const cy = toSvgY(p.y);
+                  return (
+                    <text
+                      key={`${s.label}-lbl-${pIdx}`}
+                      x={cx}
+                      y={cy - 16}
+                      textAnchor="middle"
+                      fill={textColor}
+                      fontFamily={fontFamily}
+                      fontSize={20}
+                      fontWeight={600}
+                      opacity={labelProgress * lineOpacity}
+                    >
+                      {formatNumber(p.y)}
+                    </text>
                   );
                 })}
             </g>

@@ -38,6 +38,7 @@ import { TextCard } from "./components/TextCard";
 import { StatCard } from "./components/StatCard";
 import { CalloutBox } from "./components/CalloutBox";
 import { ComparisonCard } from "./components/ComparisonCard";
+import { DataTable } from "./components/DataTable";
 import { BarChart } from "./components/charts/BarChart";
 import { LineChart } from "./components/charts/LineChart";
 import { PieChart } from "./components/charts/PieChart";
@@ -230,9 +231,19 @@ interface Cut {
   showValues?: boolean;
   showLegend?: boolean;
   showMarkers?: boolean;
+  /** line_chart: show numeric labels beside points (MVP: first series only) */
+  showPointLabels?: boolean;
   xLabel?: string;
   yLabel?: string;
-  columns?: 2 | 3 | 4;
+  /**
+   * kpi_grid: column count (2|3|4).
+   * comparison: multi-column cells array of {label, value, color?} (2-4; overrides dual left/right).
+   */
+  columns?: 2 | 3 | 4 | Array<{ label: string; value: string; color?: string }>;
+  /** data_table: column headers (max 5). */
+  headers?: string[];
+  /** data_table: data rows (max 5); each row cells aligned to headers. Pure text / short numbers. */
+  rows?: string[][];
   // Progress bar props
   progress?: number;
   progressLabel?: string;
@@ -591,12 +602,44 @@ const SceneRenderer: React.FC<{ cut: Cut; theme: ThemeConfig }> = ({ cut, theme 
       />
     );
   }
-  if (cut.type === "comparison" && cut.leftLabel && cut.rightLabel && cut.leftValue && cut.rightValue) {
+  if (cut.type === "comparison") {
+    const comparisonColumns = Array.isArray(cut.columns) ? cut.columns : undefined;
+    const hasMulti = Boolean(comparisonColumns && comparisonColumns.length >= 2);
+    const hasDual = Boolean(
+      cut.leftLabel && cut.rightLabel && cut.leftValue && cut.rightValue
+    );
+    if (hasMulti || hasDual) {
+      return maybeWrapWithBg(
+        <ComparisonCard
+          leftLabel={cut.leftLabel}
+          rightLabel={cut.rightLabel}
+          leftValue={cut.leftValue}
+          rightValue={cut.rightValue}
+          columns={comparisonColumns}
+          title={cut.title}
+          backgroundColor={bgColor}
+          textColor={textColor}
+          cardBackgroundColor={theme.surfaceColor}
+        />
+      );
+    }
+  }
+  if (
+    cut.type === "data_table" &&
+    cut.headers &&
+    cut.headers.length > 0 &&
+    cut.rows
+  ) {
     return maybeWrapWithBg(
-      <ComparisonCard
-        leftLabel={cut.leftLabel} rightLabel={cut.rightLabel}
-        leftValue={cut.leftValue} rightValue={cut.rightValue}
-        title={cut.title} backgroundColor={bgColor} textColor={textColor}
+      <DataTable
+        headers={cut.headers}
+        rows={cut.rows}
+        title={cut.title}
+        backgroundColor={bgColor}
+        textColor={textColor}
+        mutedTextColor={theme.mutedTextColor}
+        accentColor={accent}
+        cardBackgroundColor={theme.surfaceColor}
       />
     );
   }
@@ -645,6 +688,7 @@ const SceneRenderer: React.FC<{ cut: Cut; theme: ThemeConfig }> = ({ cut, theme 
         series={cut.chartSeries} title={cut.title} colors={cut.chartColors || theme.chartColors}
         animationStyle={(cut.chartAnimation as any) || "draw"}
         showGrid={cut.showGrid} showMarkers={cut.showMarkers} showLegend={cut.showLegend}
+        showPointLabels={cut.showPointLabels}
         xLabel={cut.xLabel} yLabel={cut.yLabel} backgroundColor={bgColor}
         textColor={textColor} gridColor={theme.mutedTextColor}
       />
@@ -662,9 +706,11 @@ const SceneRenderer: React.FC<{ cut: Cut; theme: ThemeConfig }> = ({ cut, theme 
     );
   }
   if (cut.type === "kpi_grid" && cut.chartData) {
+    const kpiColumns =
+      typeof cut.columns === "number" ? cut.columns : undefined;
     return maybeWrapWithBg(
       <KPIGrid
-        metrics={cut.chartData} title={cut.title} columns={cut.columns}
+        metrics={cut.chartData} title={cut.title} columns={kpiColumns}
         colors={cut.chartColors || theme.chartColors} animationStyle={(cut.chartAnimation as any) || "count-up"}
         backgroundColor={bgColor}
         textColor={textColor} cardBackgroundColor={theme.surfaceColor}

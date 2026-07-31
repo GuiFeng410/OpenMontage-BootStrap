@@ -3,6 +3,8 @@ export { StatCard } from "./StatCard";
 export { ProgressBar } from "./ProgressBar";
 export { CalloutBox } from "./CalloutBox";
 export { ComparisonCard } from "./ComparisonCard";
+export { DataTable } from "./DataTable";
+export type { DataTableProps } from "./DataTable";
 export { BarChart, LineChart, PieChart, KPIGrid } from "./charts";
 export { CaptionOverlay } from "./CaptionOverlay";
 export { SectionTitle } from "./SectionTitle";

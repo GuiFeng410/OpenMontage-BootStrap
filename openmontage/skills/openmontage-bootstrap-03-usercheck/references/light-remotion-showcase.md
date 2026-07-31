@@ -150,9 +150,9 @@ npx remotion render src/index.tsx Explainer `
 
 | 能力 | 状态 | Agent 建议 |
 |------|------|------------|
-| `comparison` | ✅ 双栏 | 仅 2 列；3 项以上对比改用 `bar_chart` 或 `kpi_grid` |
-| `data_table` | ❌ 未实现 | **勿规划**；复杂表格用 `screenshot_scene`（截图 + 叠加动画）或拆成 `kpi_grid` / `callout` |
-| `line_chart` 数据点标签 | ❌ | 仅有轴标签与图例；要点数字用 `stat_card` 或 `stat_reveal` overlay |
+| `comparison` | ✅ 双栏 / 多栏（≤4） | 双栏或 `columns`；超过 4 栏改 `bar_chart` / `kpi_grid` |
+| `data_table` | ✅ MVP | ≤5 列 × ≤5 行数据（+表头）；无合并；复杂表仍用 `screenshot_scene` |
+| `line_chart` 数据点标签 | ✅ MVP | `showPointLabels`（默认关；仅第一条 series） |
 | `terminal_scene` | ✅ | 适合 CLI/API 演示；步骤用 `steps[]`（`cmd` / `out` / `pill` / `pause`） |
 | `screenshot_scene` | ✅ 组件已有 | 本样板未用；产品 UI _walkthrough 优先此 type |
 | `anime_scene` | ✅ | 需图片资产；零密钥叙事优先本样板 11 类型组合 |

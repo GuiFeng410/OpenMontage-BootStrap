@@ -1,6 +1,5 @@
 import {
   AbsoluteFill,
-  interpolate,
   spring,
   useCurrentFrame,
   useVideoConfig,
@@ -8,13 +7,34 @@ import {
 
 type ChangeDirection = "up" | "down" | "neutral";
 
+export interface ComparisonColumn {
+  label: string;
+  value: string;
+  color?: string;
+}
+
+const DEFAULT_COLUMN_COLORS = [
+  "#2563EB",
+  "#10B981",
+  "#F59E0B",
+  "#EC4899",
+];
+
+const MAX_COLUMNS = 4;
+
 interface ComparisonCardProps {
-  leftLabel: string;
-  rightLabel: string;
-  leftValue: string;
-  rightValue: string;
+  /** Dual-column API (compat). Required unless `columns` has length >= 2. */
+  leftLabel?: string;
+  rightLabel?: string;
+  leftValue?: string;
+  rightValue?: string;
   leftColor?: string;
   rightColor?: string;
+  /**
+   * Multi-column layout. When length >= 2, overrides dual-column API.
+   * Hard cap: 4 columns (extras sliced with console warning).
+   */
+  columns?: ComparisonColumn[];
   title?: string;
   changeIndicator?: string;
   changeDirection?: ChangeDirection;
@@ -27,6 +47,37 @@ interface ComparisonCardProps {
   valueFontSize?: number;
 }
 
+function resolveColumns(props: ComparisonCardProps): ComparisonColumn[] | null {
+  if (props.columns && props.columns.length >= 2) {
+    if (props.columns.length > MAX_COLUMNS) {
+      console.warn(
+        `[ComparisonCard] columns.length=${props.columns.length} exceeds max ${MAX_COLUMNS}; slicing extras.`
+      );
+    }
+    return props.columns.slice(0, MAX_COLUMNS);
+  }
+  if (
+    props.leftLabel &&
+    props.rightLabel &&
+    props.leftValue !== undefined &&
+    props.rightValue !== undefined
+  ) {
+    return [
+      {
+        label: props.leftLabel,
+        value: props.leftValue,
+        color: props.leftColor ?? DEFAULT_COLUMN_COLORS[0],
+      },
+      {
+        label: props.rightLabel,
+        value: props.rightValue,
+        color: props.rightColor ?? DEFAULT_COLUMN_COLORS[1],
+      },
+    ];
+  }
+  return null;
+}
+
 export const ComparisonCard: React.FC<ComparisonCardProps> = ({
   leftLabel,
   rightLabel,
@@ -34,6 +85,7 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
   rightValue,
   leftColor = "#2563EB",
   rightColor = "#10B981",
+  columns: columnsProp,
   title,
   changeIndicator,
   changeDirection = "neutral",
@@ -48,62 +100,29 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
 
-  // Phase 1: Title + left side appears
+  const columns = resolveColumns({
+    leftLabel,
+    rightLabel,
+    leftValue,
+    rightValue,
+    leftColor,
+    rightColor,
+    columns: columnsProp,
+  });
+
   const titleOpacity = spring({
     frame,
     fps,
     config: { damping: 20 },
   });
 
-  const leftOpacity = spring({
-    frame: frame - 6,
-    fps,
-    config: { damping: 18 },
-  });
-  const leftSlide = spring({
-    frame: frame - 6,
-    fps,
-    config: { damping: 14, stiffness: 90 },
-    from: -40,
-    to: 0,
-  });
-  const leftScale = spring({
-    frame: frame - 6,
-    fps,
-    config: { damping: 12, stiffness: 100 },
-    from: 0.9,
-    to: 1,
-  });
-
-  // Phase 2: Divider draws in (vertical line)
+  // Dual-column change indicator only (legacy)
+  const isDual = columns !== null && columns.length === 2 && !columnsProp;
   const dividerDraw = spring({
     frame: frame - 16,
     fps,
     config: { damping: 14, stiffness: 80 },
   });
-
-  // Phase 3: Right side appears
-  const rightOpacity = spring({
-    frame: frame - 24,
-    fps,
-    config: { damping: 18 },
-  });
-  const rightSlide = spring({
-    frame: frame - 24,
-    fps,
-    config: { damping: 14, stiffness: 90 },
-    from: 40,
-    to: 0,
-  });
-  const rightScale = spring({
-    frame: frame - 24,
-    fps,
-    config: { damping: 12, stiffness: 100 },
-    from: 0.9,
-    to: 1,
-  });
-
-  // Phase 4: Change indicator
   const indicatorOpacity = spring({
     frame: frame - 32,
     fps,
@@ -117,7 +136,6 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
     to: 1,
   });
 
-  // Arrow glyph based on direction
   const directionArrow =
     changeDirection === "up"
       ? "\u2191"
@@ -130,6 +148,29 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
       : changeDirection === "down"
         ? "#EF4444"
         : "#9CA3AF";
+
+  const scaledValueFontSize =
+    columns && columns.length >= 3
+      ? Math.round(valueFontSize * (columns.length === 4 ? 0.72 : 0.85))
+      : valueFontSize;
+  const scaledLabelFontSize =
+    columns && columns.length >= 3
+      ? Math.round(labelFontSize * 0.9)
+      : labelFontSize;
+
+  if (!columns) {
+    return (
+      <AbsoluteFill
+        style={{
+          background: backgroundColor,
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      />
+    );
+  }
+
+  const useMultiLayout = Boolean(columnsProp && columnsProp.length >= 2);
 
   return (
     <AbsoluteFill
@@ -149,7 +190,6 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
           gap: 32,
         }}
       >
-        {/* Title */}
         {title && (
           <div
             style={{
@@ -166,7 +206,6 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
           </div>
         )}
 
-        {/* Comparison container */}
         <div
           style={{
             display: "flex",
@@ -180,179 +219,186 @@ export const ComparisonCard: React.FC<ComparisonCardProps> = ({
             minHeight: 280,
           }}
         >
-          {/* Left side */}
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              alignItems: "center",
-              padding: "48px 32px",
-              opacity: leftOpacity,
-              transform: `translateX(${leftSlide}px) scale(${leftScale})`,
-              gap: 16,
-            }}
-          >
-            {/* Left color accent bar */}
-            <div
-              style={{
-                width: 48,
-                height: 4,
-                backgroundColor: leftColor,
-                borderRadius: 2,
-                marginBottom: 8,
-              }}
-            />
-            <div
-              style={{
-                fontFamily,
-                fontWeight: 600,
-                fontSize: labelFontSize,
-                color: textColor,
-                opacity: 0.7,
-                textTransform: "uppercase" as const,
-                letterSpacing: "0.05em",
-              }}
-            >
-              {leftLabel}
-            </div>
-            <div
-              style={{
-                fontFamily,
-                fontWeight: 800,
-                fontSize: valueFontSize,
-                color: leftColor,
-                lineHeight: 1.1,
-              }}
-            >
-              {leftValue}
-            </div>
-          </div>
+          {columns.map((col, idx) => {
+            const color =
+              col.color || DEFAULT_COLUMN_COLORS[idx % DEFAULT_COLUMN_COLORS.length];
+            const stagger = 6 + idx * 10;
+            const opacity = spring({
+              frame: frame - stagger,
+              fps,
+              config: { damping: 18 },
+            });
+            const slide = spring({
+              frame: frame - stagger,
+              fps,
+              config: { damping: 14, stiffness: 90 },
+              from: -28,
+              to: 0,
+            });
+            const scale = spring({
+              frame: frame - stagger,
+              fps,
+              config: { damping: 12, stiffness: 100 },
+              from: 0.9,
+              to: 1,
+            });
 
-          {/* Center divider + change indicator */}
-          <div
-            style={{
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              width: 80,
-              position: "relative",
-            }}
-          >
-            {/* Vertical divider line */}
-            <div
-              style={{
-                width: 2,
-                height: `${dividerDraw * 100}%`,
-                backgroundColor: "#D1D5DB",
-                position: "absolute",
-                top: `${((1 - dividerDraw) / 2) * 100}%`,
-              }}
-            />
+            const showLegacyDivider =
+              !useMultiLayout && isDual && idx === 0 && columns.length === 2;
 
-            {/* Change indicator badge */}
-            {changeIndicator && (
+            return (
               <div
+                key={`col-${idx}-${col.label}`}
                 style={{
-                  position: "relative",
-                  zIndex: 1,
                   display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 4,
-                  opacity: indicatorOpacity,
-                  transform: `scale(${indicatorScale})`,
+                  flexDirection: "row",
+                  flex: 1,
+                  minWidth: 0,
                 }}
               >
                 <div
                   style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 24,
-                    backgroundColor,
+                    flex: 1,
                     display: "flex",
+                    flexDirection: "column",
                     justifyContent: "center",
                     alignItems: "center",
-                    boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+                    padding: columns.length >= 4 ? "40px 16px" : "48px 32px",
+                    opacity,
+                    transform: `translateX(${slide}px) scale(${scale})`,
+                    gap: 16,
                   }}
                 >
-                  <span
+                  <div
+                    style={{
+                      width: 48,
+                      height: 4,
+                      backgroundColor: color,
+                      borderRadius: 2,
+                      marginBottom: 8,
+                    }}
+                  />
+                  <div
                     style={{
                       fontFamily,
-                      fontWeight: 700,
-                      fontSize: 24,
-                      color: directionColor,
+                      fontWeight: 600,
+                      fontSize: scaledLabelFontSize,
+                      color: textColor,
+                      opacity: 0.7,
+                      textTransform: "uppercase" as const,
+                      letterSpacing: "0.05em",
+                      textAlign: "center",
                     }}
                   >
-                    {directionArrow}
-                  </span>
+                    {col.label}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily,
+                      fontWeight: 800,
+                      fontSize: scaledValueFontSize,
+                      color,
+                      lineHeight: 1.1,
+                      textAlign: "center",
+                    }}
+                  >
+                    {col.value}
+                  </div>
                 </div>
-                <div
-                  style={{
-                    fontFamily,
-                    fontWeight: 700,
-                    fontSize: 18,
-                    color: directionColor,
-                    whiteSpace: "nowrap" as const,
-                  }}
-                >
-                  {changeIndicator}
-                </div>
-              </div>
-            )}
-          </div>
 
-          {/* Right side */}
-          <div
-            style={{
-              flex: 1,
-              display: "flex",
-              flexDirection: "column",
-              justifyContent: "center",
-              alignItems: "center",
-              padding: "48px 32px",
-              opacity: rightOpacity,
-              transform: `translateX(${rightSlide}px) scale(${rightScale})`,
-              gap: 16,
-            }}
-          >
-            {/* Right color accent bar */}
-            <div
-              style={{
-                width: 48,
-                height: 4,
-                backgroundColor: rightColor,
-                borderRadius: 2,
-                marginBottom: 8,
-              }}
-            />
-            <div
-              style={{
-                fontFamily,
-                fontWeight: 600,
-                fontSize: labelFontSize,
-                color: textColor,
-                opacity: 0.7,
-                textTransform: "uppercase" as const,
-                letterSpacing: "0.05em",
-              }}
-            >
-              {rightLabel}
-            </div>
-            <div
-              style={{
-                fontFamily,
-                fontWeight: 800,
-                fontSize: valueFontSize,
-                color: rightColor,
-                lineHeight: 1.1,
-              }}
-            >
-              {rightValue}
-            </div>
-          </div>
+                {/* Legacy dual-column center divider + change indicator */}
+                {showLegacyDivider && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      width: 80,
+                      position: "relative",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 2,
+                        height: `${dividerDraw * 100}%`,
+                        backgroundColor: "#D1D5DB",
+                        position: "absolute",
+                        top: `${((1 - dividerDraw) / 2) * 100}%`,
+                      }}
+                    />
+                    {changeIndicator && (
+                      <div
+                        style={{
+                          position: "relative",
+                          zIndex: 1,
+                          display: "flex",
+                          flexDirection: "column",
+                          alignItems: "center",
+                          gap: 4,
+                          opacity: indicatorOpacity,
+                          transform: `scale(${indicatorScale})`,
+                        }}
+                      >
+                        <div
+                          style={{
+                            width: 48,
+                            height: 48,
+                            borderRadius: 24,
+                            backgroundColor,
+                            display: "flex",
+                            justifyContent: "center",
+                            alignItems: "center",
+                            boxShadow: "0 1px 4px rgba(0,0,0,0.1)",
+                          }}
+                        >
+                          <span
+                            style={{
+                              fontFamily,
+                              fontWeight: 700,
+                              fontSize: 24,
+                              color: directionColor,
+                            }}
+                          >
+                            {directionArrow}
+                          </span>
+                        </div>
+                        <div
+                          style={{
+                            fontFamily,
+                            fontWeight: 700,
+                            fontSize: 18,
+                            color: directionColor,
+                            whiteSpace: "nowrap" as const,
+                          }}
+                        >
+                          {changeIndicator}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Thin dividers between multi-columns */}
+                {useMultiLayout && idx < columns.length - 1 && (
+                  <div
+                    style={{
+                      width: 1,
+                      alignSelf: "stretch",
+                      backgroundColor: "rgba(148,163,184,0.35)",
+                      flexShrink: 0,
+                      opacity: spring({
+                        frame: frame - (stagger + 8),
+                        fps,
+                        config: { damping: 16 },
+                      }),
+                    }}
+                  />
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     </AbsoluteFill>
