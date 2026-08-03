@@ -215,6 +215,27 @@ produce_set_production_profile(
 | providers-tts/image/video | 按需；不挡「先出画面」 |
 | installer | 只配 MCP/Skill |
 
+## 商品片执行前素材复查
+
+进入商品片执行前，读取 `asset_requirements` 和 `video_plan`，并逐段核对：
+
+1. 是否存在商品主图（`product_hero`）；
+2. 当前图片数是否达到该时长的最低数量；
+3. 是否已列出缺少的图片类型；
+4. 每个重点段是否有参考图片（`ref_image`）；
+5. 缺图处理（`gap_fill`）为图生图时，补图是否已经完成并经过检查；
+6. 素材状态是否为“就绪”，或用户已经确认风险的“降级继续”。
+
+执行顺序必须是：
+
+```text
+素材复查 → 用户已确认的缺图补充 → 检查补充图片 → I2V/T2V → 拼接出片
+```
+
+没有商品主图、状态为“等待用户选择”、或用户尚未确认降级风险时，**禁止**在本 Skill 内自行猜测商品、静默改成概念片或直接烧视频；应退回 `openmontage-bootstrap-03-usercheck`。
+
+`asset_classes`、`ref_image`、`gap_fill` 在执行层继续作为机器字段读取，面向用户的素材类型、参考图片、缺图处理和状态说明统一使用中文。
+
 ## Related
 
 - `README/说明/02-免费与收费能力.md`  
