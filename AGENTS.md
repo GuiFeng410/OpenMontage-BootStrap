@@ -11,8 +11,21 @@
 ## 新会话先看
 
 1. [`AGENT_GUIDE.md`](AGENT_GUIDE.md)（总契约 + BootStrap 路由）
-2. 本地交接：`docs/会话交接/00-新对话请先读.md` → 同目录**日期最新**长篇交接（该目录在 `.gitignore`，仅本机）
-3. 操作说明：[`README/00-INDEX.md`](README/00-INDEX.md)
+2. 本地交接：`Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md` → 同目录**日期最新**长篇交接（本机工作区，gitignore）
+3. 操作说明：[`Agent-ReadMe/00-INDEX.md`](Agent-ReadMe/00-INDEX.md)
+
+## 本机工作区（name-to-workspace）
+
+因 Windows 大小写不敏感，不用 `Docs/`/`ReadMe/`/`Temp/`（会与 `docs/`/`README/` 冲突），改用：
+
+| 目录 | 用途 | Git |
+|------|------|-----|
+| `Agent-Docs/` | 对话、要点、计划、阶段（套 **name-to-docs**：Goal/Plan/Phase/Platform…） | **默认不提交** |
+| `Agent-ReadMe/` | 中文人读说明（自 README + 新机导入三步副本） | **默认不提交** |
+| `Agent-Temp/` | `mats/` 素材 · `results/` 产物 · `other/` 暂存 | **默认不提交** |
+
+- **之后读写以 Agent-\* 为主**；仓内 `docs/`、`README/`、`reports/` 为遗留快照（可继续跟踪/发布），不删。
+- 未获用户明确要求时，禁止对 Agent-\* 做 `add` / `commit` / `push`。
 
 ## 七个 BootStrap Skill（路由摘要）
 
@@ -22,7 +35,7 @@
 |---|--------|----------------|
 | **01** | `openmontage-bootstrap-01-installer` | 新装 / 更新仓库、补齐 **5 MCP + 6 Skill** |
 | **02** | `openmontage-bootstrap-02-setup` | 环境检测 → 计划确认 → 装依赖 → `verify_ready` |
-| **03** | `openmontage-bootstrap-03-usercheck` | 模糊「做个视频」：表 1→2→3 成片简报（**出片主链入口**） |
+| **03** | `openmontage-bootstrap-03-usercheck` | 模糊「做个视频」：先推荐首次轻度短 Demo（可跳过）→ 或表 1→2→3 |
 | **04** | `openmontage-bootstrap-04-produce` | 按 03 已锁定简报执行出片（默认不重选档） |
 | **05** | `openmontage-bootstrap-05-captions-music` | 字幕 / 本地 BGM（可后置，不挡画面） |
 | **06** | `openmontage-bootstrap-06-providers` | 收费 / Stock Key 引导（空 Key 禁止调用） |
@@ -30,7 +43,7 @@
 
 ```text
 【装机】01-installer → 02-setup（verify_ready）
-【出片主链】03-usercheck（表1→2→3）→ 04-produce → renders/final.mp4
+【出片主链】03-usercheck（推荐 Demo 或表1→2→3）→ 04-produce → renders/final.mp4
 【补充】05 字幕配乐 · 06 Key · 07 排错（按需）
 ```
 

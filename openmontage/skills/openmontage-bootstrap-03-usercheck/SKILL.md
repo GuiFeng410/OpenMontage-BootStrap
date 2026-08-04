@@ -1,9 +1,9 @@
 ---
 name: openmontage-bootstrap-03-usercheck
 description: >-
-  BootStrap brief before produce: Table 1 (theme + tier), Table 2 (tier branch:
-  light presentation / medium stock|assets / heavy paid video channel+model),
-  Table 3 (segment video_plan for all tiers). Writes production_profile +
+  BootStrap brief before produce: optional first-run light demo card (10s/30s,
+  recommend available Remotion/HyperFrames only), then Table 1 (theme + tier),
+  Table 2 (tier branch), Table 3 (video_plan). Writes production_profile +
   artifacts, then hands off to produce. Narration/BGM deferred.
 metadata:
   openclaw:
@@ -73,26 +73,52 @@ metadata:
 
 ### 就绪接话（02 已通过 · 进入 03 时必用）
 
-当安装闭环已通过且 `verify_ready` 为真（或等价 ready），用户说「生成视频」类话术时，**先**用类似接话（可略改，勿省略要点）：
+当安装闭环已通过且 `verify_ready` 为真（或等价 ready），用户说「生成视频」类话术时：
+
+**A. 尚无锁定简报（首次 / 新会话出片）→ 先走「首次 Demo 引导」（推荐非强制）**，读 `references/first-run-demo.md`，再用类似接话：
 
 > **可以开始出片了。** 环境已就绪。  
-> 接下来分三步和你确认：**① 主题与档位 → ② 画面方式 → ③ 分段规划**。  
-> 旁白**默认推荐** Edge-TTS 男声，可以画面做好再加；字幕与 BGM 也可稍后。  
-> 我先出 **表 1**，你确认后我们再往下。
+> **推荐**：先试一支 **10s 或 30s（默认推荐 30s）** 的**轻度短解说 / 品牌 demo**，熟悉流程；旁白与 BGM 可后置。  
+> 也可以 **跳过**，按你自己的主题走完整三步简报（主题档位 → 画面方式 → 分段规划）。  
+> 我先根据本机可用引擎给出 **Demo 确认卡**（有啥推啥）。
 
-若用户此前只完成 01/02、从未走过 03：仍用上述接话，**不要**假设已有简报。
+**B. 用户跳过 Demo / 已有部分简报** → 再用完整三表路径：
 
-若简报已部分确认（例如只有表 1）：接话改为说明**卡在哪一步**，只补未确认表，勿三张重头来（除非用户说改档或重来）。
+> 接下来分三步确认：**① 主题与档位 → ② 画面方式 → ③ 分段规划**。  
+> 旁白默认推荐 Edge-TTS 男声，可后置。我先出 **表 1**。
+
+若简报已部分确认（例如只有表 1）：说明**卡在哪一步**，只补未确认表，勿三张重头来（除非用户说改档或重来）。  
+非首次（已有完成简报/成片）：可一句带过「也可再试短 demo」，默认进完整三表。
+
+### 首次 Demo 引导（推荐 · 非强制）
+
+**硬规则：** 不静默开烧；用户可随时说「跳过」进表 1；**只推荐本机已就绪的引擎**（有啥推啥）。
+
+1. 探测 `video_compose` / doctor 的 Remotion、HyperFrames 是否可用（见 `references/first-run-demo.md` §2）。  
+2. 出示 **一张 Demo 确认卡**（可与就绪接话同条或紧随下一条）：
+
+| 项 | 提案 |
+|----|------|
+| 档位 | 轻度（锁死） |
+| 时长 | **30s（推荐）** / 10s |
+| 引擎路径 | 仅列出可用项：Remotion（图表+双栏）和/或 HyperFrames（品牌渐显 logo/字） |
+| 主题 | 预设（见 reference）或 AI 现拟同结构 |
+| 旁白/BGM | 可后置 |
+
+3. 用户确认「按推荐开始 / 用 10s / …」后：按 reference 写入 `production_tier=light`、`light_presentation`、`duration_seconds`、`video_plan` 等 → 交接 **04-produce**。  
+4. Remotion 样板反推：`projects/remotion-light-showcase/`（成片 `renders/showcase-60s.mp4`）。  
+5. HyperFrames 样板反推：`projects/hyperframes-jewelry-demo/`（成片 `renders/hyperframes_jewelry_20s.mp4`）。
 
 ## 出示节奏（强制）
 
 | 步骤 | 何时出示 | 同一条消息？ |
 |------|----------|--------------|
-| **消息 1 · 表 1** | 始终先出 | 仅表 1（+ 短脚注） |
+| **消息 0 · Demo 确认卡** | 首次且无锁定简报时**推荐先出**（可跳过） | 仅确认卡（+ 短脚注）；**不要**同时堆表 1–3 |
+| **消息 1 · 表 1** | 跳过 Demo 后，或非首次完整简报 | 仅表 1（+ 短脚注） |
 | **消息 2 · 表 2** | 表 1 已确认档位后 | 仅表 2（按档分支 2.1 / 2.2 / 2.3） |
 | **消息 3 · 表 3** | 表 2 已确认后；**三档都出** | 仅表 3；「确认规划」后才可交接 produce |
 
-禁止把表 1 + 表 2 + 表 3 堆在同一条回复里。
+禁止把表 1 + 表 2 + 表 3 堆在同一条回复里。Demo 确认卡确认后**不必**再走完整三表（已写入等价锁定字段）。
 
 ## Hard protocol
 
@@ -144,13 +170,18 @@ metadata:
 | 1 | 静态图片 | 少图/单图 + 字幕卡 |
 | 2 | 多图顺序轮播（可带文案） | 多张图按序切换，可叠文案 |
 | 3 | 动态文字解说 | 以文字动效为主 |
-| 4 | Remotion 动画 | 效果较好，可能更耗时；**可标推荐** |
+| 4 | Remotion 动画 | 图表 / 双栏对比 / 技术讲解；本机可用时 **可标推荐** |
+| 5 | HyperFrames 动画 | 品牌渐显 logo/动能文字；本机可用时 **可标推荐** |
 
-用户必须只选 **一项**。确认后进入表 3。
+用户必须只选 **一项**。确认后进入表 3。  
+**有啥推啥：** 选项 4/5 仅在本机对应引擎就绪时标为推荐；不可用则注明并勿当作默认。
 
-**表 2.1 脚注（Remotion 行）：** 选 **Remotion 动画** 时，规划 cut 组合、60s 分段与渲染路径见 `references/light-remotion-showcase.md`（仓内样板 `projects/remotion-light-showcase/`）。
+**表 2.1 脚注：**  
+- **Remotion：** cut 组合与样板见 `references/light-remotion-showcase.md`（`projects/remotion-light-showcase/`，成片 `showcase-60s.mp4`）。  
+- **HyperFrames：** 品牌渐进结构见 `references/first-run-demo.md` §5（`projects/hyperframes-jewelry-demo/`，成片 `hyperframes_jewelry_20s.mp4`）。  
+- **首次短 demo：** 优先读 `references/first-run-demo.md`。
 
-写入字段建议：`light_presentation` = `still` / `image_carousel` / `motion_text` / `remotion`。
+写入字段建议：`light_presentation` = `still` / `image_carousel` / `motion_text` / `remotion` / `hyperframes`。
 
 #### 3.2 中度 — 表 2.2 素材来源 + 文案提示
 
@@ -266,7 +297,8 @@ produce_set_production_profile(
 | `theme` | 表 1 主题 |
 | `duration_seconds` | 表 1 时长 |
 | `production_tier` | `light` / `medium` / `heavy` |
-| `light_presentation` | 轻度四选一；非轻度可空 |
+| `light_presentation` | 轻度表现方式（含 `remotion` / `hyperframes`）；非轻度可空 |
+| `first_run_demo` | 可选；首次 Demo 确认卡路径为 `true` |
 | `medium_source` | `stock` / `user_assets`；非中度可空 |
 | `ai_video` | 重度且已锁渠模 → `enabled`；否则 `disabled` |
 | `video_channel` | `agnes` / `tokenhub` / …；非重度空 |
@@ -332,11 +364,13 @@ produce_set_production_profile(
 
 ## 成功标准
 
-- 用户说「生成视频」且环境已就绪时，已按「就绪接话」进入表 1（或说明卡在哪一步）  
+- 用户说「生成视频」且环境已就绪、无锁定简报时：已按「就绪接话」**先推荐**首次 Demo（可跳过），引擎 **有啥推啥**；读过 `references/first-run-demo.md`  
+- 用户确认 Demo 卡后：已写入轻度锁定字段并交接 04，**未**静默开烧  
+- 用户跳过 Demo 或非首次：已进入表 1（或说明卡在哪一步）  
 - 缺步时已按「缺步路由」交接 01/02，未越级开烧  
-- 用户确认过 **表 1**（主题 + 档位 + 时长）  
-- 按档确认过 **表 2**；轻度为四选一互斥；中度遵守 Stock Key 闸门；重度遵守视频 Key 闸门与推荐规则  
-- **表 3** 三档都已确认；无全文旁白强求；无文案时已给 AI 提案并获「确认规划」  
+- 完整简报路径：用户确认过 **表 1**（主题 + 档位 + 时长）  
+- 按档确认过 **表 2**；轻度互斥单选（含 Remotion/HyperFrames，按可用性推荐）；中度遵守 Stock Key 闸门；重度遵守视频 Key 闸门与推荐规则  
+- **表 3** 三档都已确认（Demo 卡路径除外）；无全文旁白强求；无文案时已给 AI 提案并获「确认规划」  
 - 重度商品已强制走 `product-prompt-template.md`  
 - 已写 `production_profile` 与 `video_plan` 等扩展字段  
 - 未在轻度/中度展示付费视频渠模；无 Key 时未假装可烧重度  

@@ -3,7 +3,7 @@
 Start here. This is the complete operating guide and agent contract for **OpenMontage-BootStrap** (this fork) and the underlying OpenMontage pipeline system.
 
 For architecture, key files, and conventions see [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md).  
-For day-to-day ops (install / free vs paid / captions) see [`README/00-INDEX.md`](README/00-INDEX.md).
+For day-to-day ops (install / free vs paid / captions) see [`Agent-ReadMe/00-INDEX.md`](Agent-ReadMe/00-INDEX.md) (local primary; shipped mirror: `README/00-INDEX.md`).
 
 ---
 
@@ -19,9 +19,9 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 | **发布远程** | 日常双推 **`gitee` + `bootstrap`**；**禁止** `git push origin`（上游只读对照） |
 | **默认配齐** | **5 MCP**（门面 + tts/image/video/stock）+ **6 Skill**（02–07）；Key 可空 |
 | **出片三档** | 轻度（零 Key / Remotion 等）→ 中度（Stock）→ 重度（付费生图+生视频） |
-| **简报主链** | `03-usercheck` 表 1（主题+档位）→ 表 2（按档画面）→ 表 3（`video_plan`）→ `04-produce` |
+| **简报主链** | `03-usercheck`：就绪后**推荐**首次 10s/30s 轻度 Demo（可跳过；有啥推啥 Remotion/HF）→ 或表 1→2→3 → `04-produce` |
 | **旁白默认** | Edge-TTS 男声（可后置）；Piper 离线回退；字幕/BGM 走 05 |
-| **本机会话** | 新对话先读 `docs/会话交接/00-新对话请先读.md` → 同目录日期最新长篇交接（**本地 gitignore，勿主动提交**） |
+| **本机会话** | 新对话先读 `Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md` → 同目录日期最新长篇交接（**Agent-\* 本机区，gitignore，勿主动提交**；遗留镜像仍在 `docs/会话交接/`） |
 
 操作细节以 Skill 正文为准；`README/说明/` 是人读入口。
 
@@ -33,7 +33,7 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 |---|--------|------|---------|
 | **01** | `openmontage-bootstrap-01-installer` | Clone/pull、注册 5 MCP、启用 6 Skill、闭环检查 | 「安装 / 更新 BootStrap / 我想生成视频」且未配齐 |
 | **02** | `openmontage-bootstrap-02-setup` | `detect` → `plan_install` → 批准后装依赖 → `verify_ready` | 仓库已在，环境未就绪 |
-| **03** | `openmontage-bootstrap-03-usercheck` | 成片简报：表 1→2→3；写入锁定字段；商品片读 `product-prompt-template` | 模糊出片、改档、缺已确认简报 |
+| **03** | `openmontage-bootstrap-03-usercheck` | 成片简报：可选首次 Demo 确认卡 → 表 1→2→3；商品片读 `product-prompt-template` | 模糊出片、改档、缺已确认简报 |
 | **04** | `openmontage-bootstrap-04-produce` | 按锁定档位跑门面 `produce_*` → `renders/final.mp4` | 简报已确认；**默认不重选档** |
 | **05** | `openmontage-bootstrap-05-captions-music` | 文稿→字幕、本地 BGM、duck 混音 | 画面后补字幕/配乐 |
 | **06** | `openmontage-bootstrap-06-providers` | 收费 / Stock Key 引导（不代调付费 API） | 中重度缺 Key |
@@ -78,9 +78,9 @@ Use full `pipeline_defs/` + stage directors when the user explicitly wants an up
 
 When the user's first message is vague, exploratory, or asks what you can do ("make me a video", "what can you do?", "help me create something", "I want to make content"):
 
-1. **BootStrap path (default on this fork):** follow **缺步路由** above — usually read `openmontage-bootstrap-03-usercheck` (or 01/02 if install/env incomplete). Use the Skill's 就绪接话 when `verify_ready` is already true.
+1. **BootStrap path (default on this fork):** follow **缺步路由** above — usually read `openmontage-bootstrap-03-usercheck` (or 01/02 if install/env incomplete). When env is ready and no brief is locked, **recommend** the first-run light Demo card (`references/first-run-demo.md`) before full tables — skippable; engines **only if available**.
 2. **Optional discovery:** `skills/meta/onboarding.md` or `openmontage-router` if you need a capability menu before briefing.
-3. **Session continuity:** if continuing prior work, read `docs/会话交接/00-新对话请先读.md` and the latest dated handoff first.
+3. **Session continuity:** if continuing prior work, read `Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md` and the latest dated handoff first (legacy mirror: `docs/会话交接/`).
 
 **Skip the vague-onboarding loop** when the user arrives with a specific, actionable request *and* install+brief are already locked — go to **04-produce** or Rule Zero (upstream pipeline) as appropriate.
 
@@ -765,8 +765,8 @@ The `.agents/skills/` directory is large. When you're not coming in through a to
 | Question | Where to look |
 |----------|---------------|
 | 做个视频 / 装机缺步走哪？ | 上文 **BootStrap First** + `openmontage/skills/openmontage-bootstrap-0N-*/SKILL.md` |
-| 操作说明（人读）？ | `README/00-INDEX.md` |
-| 本机会话续作？ | `docs/会话交接/00-新对话请先读.md`（本地，勿默认提交） |
+| 操作说明（人读）？ | `Agent-ReadMe/00-INDEX.md`（本机主读；仓内镜像 `README/00-INDEX.md`） |
+| 本机会话续作？ | `Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md`（本机，勿默认提交） |
 | What tools exist? | `tools/tool_registry.py` and `registry.support_envelope()` |
 | What providers are available for a capability? | `registry.capability_catalog()` |
 | What tools exist for a vendor? | `registry.provider_catalog()` |

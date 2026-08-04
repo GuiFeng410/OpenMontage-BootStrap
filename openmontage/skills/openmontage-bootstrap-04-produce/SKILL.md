@@ -57,7 +57,7 @@ metadata:
 | 字段 | produce 必须 |
 |------|----------------|
 | `production_tier` | 按 `light` / `medium` / `heavy` 执行；**不重出**轻中重选档大表 |
-| `light_presentation`（轻度） | 按 `still` / `image_carousel` / `motion_text` / `remotion` 编排画面 |
+| `light_presentation`（轻度） | 按 `still` / `image_carousel` / `motion_text` / `remotion` / `hyperframes` 编排画面 |
 | `medium_source`（中度） | `stock` 才走 Stock 下载；`user_assets` 只用项目内素材；无 Stock Key 禁止走 stock |
 | `ai_video=disabled` 或不存在 | **禁止**调用付费 AI 视频生成 |
 | `ai_video=enabled` + `video_channel` / `video_model` | **只使用**该渠道与模型；禁止改用其它视频供应商 |
@@ -84,7 +84,7 @@ metadata:
 
 | 档位 | 画面怎么来 | 旁白 / BGM（本阶段） |
 |------|------------|----------------------|
-| **轻度** | 模板/静图/轮播/动字/Remotion（看 `light_presentation`）；无 Stock、无付费 AI 视频 | **可选后置**；不挡出片 |
+| **轻度** | 模板/静图/轮播/动字/Remotion/HyperFrames（看 `light_presentation`）；无 Stock、无付费 AI 视频 | **可选后置**；不挡出片 |
 | **中度** | Stock 或自带（看 `medium_source`） | **可选后置**；不挡出片 |
 | **重度** | 付费 AI 视频（锁定渠模）+ `video_plan` 分段 | **可选后置**；付费 TTS **非**出片前置条件 |
 
@@ -166,7 +166,8 @@ produce_set_production_profile(
 **轻度：** 不调 stock / 付费 AI 视频。按 `light_presentation`：
 
 - `still` / `image_carousel` / `motion_text` → 模板与字幕/图卡路径  
-- `remotion` → Remotion/atelier 等现有 compose 能力（耗时可能更长，提前说明）
+- `remotion` → Remotion/`Explainer`（图表+对比等）；首次 Demo 参照 `03-usercheck/references/first-run-demo.md` §4 与 `projects/remotion-light-showcase/`  
+- `hyperframes` → HyperFrames HTML/GSAP（品牌渐显等）；参照 `first-run-demo.md` §5 与 `projects/hyperframes-jewelry-demo/`；`render_runtime` 须为 hyperframes 且本机可用，否则回 03 改路径，禁止静默换 Remotion
 
 **中度：**
 

@@ -36,7 +36,7 @@ metadata:
    - `configure_sandbox`  
 6. Never call high-risk tools with `confirm_execute=true` while `dry_run` is still true-only preview without user OK.  
 7. If a tool returns `skipped_no_admin_or_failed` / `manual_commands`: show those commands; do not pretend success.  
-8. `verify_ready` — only when ready flags indicate produce is possible（如 `can_produce_video_now` / 等价 ready），交接下游：模糊需求 → **`openmontage-bootstrap-03-usercheck`**；简报已锁定 → **`openmontage-bootstrap-04-produce`**。
+8. `verify_ready` — only when ready flags indicate produce is possible（如 `can_produce_video_now` / 等价 ready），交接下游：模糊需求 → **`openmontage-bootstrap-03-usercheck`**（**先推荐**首次轻度短 Demo 确认卡，可跳过；见 `03-usercheck/references/first-run-demo.md`）；简报已锁定 → **`openmontage-bootstrap-04-produce`**。
 
 ## 旁白依赖提醒
 
@@ -53,4 +53,5 @@ metadata:
 ## Success
 
 Environment ready for zero-key light produce path; MCP `command` preferably points at `.venv` python after install.  
-Hand-off: **03-usercheck**（表 1→2→3）→ **04-produce**.
+Hand-off: **03-usercheck**（推荐首次 10s/30s Demo → 或表 1→2→3）→ **04-produce**。  
+向用户可加一句：「环境已就绪；接下来建议先试一支短 demo，或跳过按自己的主题出片。」
