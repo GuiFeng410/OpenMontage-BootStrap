@@ -1,9 +1,39 @@
-# OpenMontage
+# OpenMontage BootStrap — Agent 入口
 
-**MANDATORY: Read `AGENT_GUIDE.md` before responding to ANY user message.**
+**MANDATORY: 回复任意用户消息前，先读 [`AGENT_GUIDE.md`](AGENT_GUIDE.md)。**
 
-Do not act on the user's request until you have read AGENT_GUIDE.md.
-It contains routing rules that determine your first action based on what the user asked.
-Skipping it WILL cause you to take the wrong action.
+未读完不要动手。其中有路由规则：先走哪条 Skill、何时进 pipeline、Git 推送约定。跳过会导致装错环境或越级出片。
 
-There are no instructions in this file. All instructions are in AGENT_GUIDE.md.
+## 本仓是什么
+
+本仓库是 **OpenMontage-BootStrap**（日常发布到 `gitee` + `bootstrap`），在上游 OpenMontage 之上叠了 **门面 MCP + BootStrap Skills**，让 Agent 用「安装 → 环境 → 简报 → 出片」闭环出片。上游完整 pipeline 规则仍在 `AGENT_GUIDE.md`，日常「做个视频」**优先走 BootStrap 七 Skill**，不要直接 improvise 调工具。
+
+## 新会话先看
+
+1. [`AGENT_GUIDE.md`](AGENT_GUIDE.md)（总契约 + BootStrap 路由）
+2. 本地交接：`docs/会话交接/00-新对话请先读.md` → 同目录**日期最新**长篇交接（该目录在 `.gitignore`，仅本机）
+3. 操作说明：[`README/00-INDEX.md`](README/00-INDEX.md)
+
+## 七个 BootStrap Skill（路由摘要）
+
+仓内路径：`openmontage/skills/`。安装默认启用 02–07；`01-installer` 常外置拷贝（更新后须再同步）。
+
+| # | Skill | 何时读 / 启用 |
+|---|--------|----------------|
+| **01** | `openmontage-bootstrap-01-installer` | 新装 / 更新仓库、补齐 **5 MCP + 6 Skill** |
+| **02** | `openmontage-bootstrap-02-setup` | 环境检测 → 计划确认 → 装依赖 → `verify_ready` |
+| **03** | `openmontage-bootstrap-03-usercheck` | 模糊「做个视频」：表 1→2→3 成片简报（**出片主链入口**） |
+| **04** | `openmontage-bootstrap-04-produce` | 按 03 已锁定简报执行出片（默认不重选档） |
+| **05** | `openmontage-bootstrap-05-captions-music` | 字幕 / 本地 BGM（可后置，不挡画面） |
+| **06** | `openmontage-bootstrap-06-providers` | 收费 / Stock Key 引导（空 Key 禁止调用） |
+| **07** | `openmontage-bootstrap-07-error-handling` | 工具失败：capture → plan → apply（≤3） |
+
+```text
+【装机】01-installer → 02-setup（verify_ready）
+【出片主链】03-usercheck（表1→2→3）→ 04-produce → renders/final.mp4
+【补充】05 字幕配乐 · 06 Key · 07 排错（按需）
+```
+
+**硬规则：** 安装/环境未就绪 → 禁止进表 1；表 2/3 未确认 → 禁止交接 04；先口述计划 → 用户确认 → 再改系统；不静默付费、不静默换渠道。
+
+细节、缺步路由、Git 双推、与上游 pipeline 的关系 → **全部见 `AGENT_GUIDE.md`**。

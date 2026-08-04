@@ -1,18 +1,88 @@
 # OpenMontage - Agent Guide
 
-Start here. This is the complete operating guide and agent contract for OpenMontage.
+Start here. This is the complete operating guide and agent contract for **OpenMontage-BootStrap** (this fork) and the underlying OpenMontage pipeline system.
 
-For architecture, key files, and conventions see [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md).
+For architecture, key files, and conventions see [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md).  
+For day-to-day ops (install / free vs paid / captions) see [`README/00-INDEX.md`](README/00-INDEX.md).
+
+---
+
+## BootStrap First — This Fork's Default Path
+
+This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily work is driven by **facade MCP + BootStrap Skills** under `openmontage/skills/`. Upstream pipeline manifests (`pipeline_defs/`) and stage directors (`skills/pipelines/`) remain valid for deep / advanced production — but **typical "做个视频" requests must NOT skip BootStrap**.
+
+### Project snapshot (keep current)
+
+| 维度 | 现状 |
+|------|------|
+| **身份** | Agent 编排出片；Python = 工具 + 持久化；智能在 Skill / manifest |
+| **发布远程** | 日常双推 **`gitee` + `bootstrap`**；**禁止** `git push origin`（上游只读对照） |
+| **默认配齐** | **5 MCP**（门面 + tts/image/video/stock）+ **6 Skill**（02–07）；Key 可空 |
+| **出片三档** | 轻度（零 Key / Remotion 等）→ 中度（Stock）→ 重度（付费生图+生视频） |
+| **简报主链** | `03-usercheck` 表 1（主题+档位）→ 表 2（按档画面）→ 表 3（`video_plan`）→ `04-produce` |
+| **旁白默认** | Edge-TTS 男声（可后置）；Piper 离线回退；字幕/BGM 走 05 |
+| **本机会话** | 新对话先读 `docs/会话交接/00-新对话请先读.md` → 同目录日期最新长篇交接（**本地 gitignore，勿主动提交**） |
+
+操作细节以 Skill 正文为准；`README/说明/` 是人读入口。
+
+### Seven BootStrap Skills（01–07）
+
+**Read the matching Skill file before acting.** Paths: `openmontage/skills/openmontage-bootstrap-0N-*/SKILL.md`.
+
+| # | Skill | Role | Trigger |
+|---|--------|------|---------|
+| **01** | `openmontage-bootstrap-01-installer` | Clone/pull、注册 5 MCP、启用 6 Skill、闭环检查 | 「安装 / 更新 BootStrap / 我想生成视频」且未配齐 |
+| **02** | `openmontage-bootstrap-02-setup` | `detect` → `plan_install` → 批准后装依赖 → `verify_ready` | 仓库已在，环境未就绪 |
+| **03** | `openmontage-bootstrap-03-usercheck` | 成片简报：表 1→2→3；写入锁定字段；商品片读 `product-prompt-template` | 模糊出片、改档、缺已确认简报 |
+| **04** | `openmontage-bootstrap-04-produce` | 按锁定档位跑门面 `produce_*` → `renders/final.mp4` | 简报已确认；**默认不重选档** |
+| **05** | `openmontage-bootstrap-05-captions-music` | 文稿→字幕、本地 BGM、duck 混音 | 画面后补字幕/配乐 |
+| **06** | `openmontage-bootstrap-06-providers` | 收费 / Stock Key 引导（不代调付费 API） | 中重度缺 Key |
+| **07** | `openmontage-bootstrap-07-error-handling` | capture → plan → apply（≤3）；高危须 confirm | 任一工具失败 |
+
+```text
+【装机层】  01-installer  →  02-setup（verify_ready）
+【出片主链】03-usercheck（表1→2→3）  →  04-produce
+【补充层】  05 字幕配乐  ·  06 Key 引导  ·  07 错误修复（按需）
+```
+
+**缺步路由（禁止越级）：**
+
+| 检查未过 | 交接 |
+|----------|------|
+| 5 MCP / 6 Skill 未齐 | **01** |
+| `verify_ready` 未过 | **02** |
+| 无已确认表 1–3 / `video_plan` | **03** |
+| 简报已锁、用户确认开烧 | **04** |
+| 要字幕/BGM | **05**（后置） |
+| 缺 Stock/视频/付费 Key | **06** |
+| 工具失败 | **07** |
+
+Installer 默认：**5 MCP 一并注册** + **6 Skill（02–07）一并启用**；`01` 常外置拷贝到宿主 Skill 目录，仓内 `git pull` 后须再覆盖同步。付费执行 Skill（`openmontage-providers-tts/image/video/stock`）在已填 Key 且要用时再开。
+
+### BootStrap hard rules
+
+1. **先口述计划 → 用户确认 → 再改系统 / 代跑命令。**
+2. **表 2/3 未确认 → 禁止交接 04、禁止付费视频生成。**
+3. **空 Key → 禁止调用** Stock 下载与付费 generate。
+4. **不静默换档、换渠道、换模型、图生图硬烧。** 改档回 **03** 重走三表。
+5. **04 只执行已锁定简报**；商品片图片数量/类型/缺图由 **03** 负责。
+6. 素材按项目隔离：`$OPENMONTAGE_PROJECTS_DIR/<project_id>/assets/{images,video,music,audio,copy,subs,stock}/`。
+
+### When to use upstream pipelines (Rule Zero below)
+
+Use full `pipeline_defs/` + stage directors when the user explicitly wants an upstream pipeline (e.g. `animated-explainer`, `cinematic`, `character-animation`), atelier/bespoke composition, or BootStrap produce cannot cover the brief. Even then: run preflight, read stage directors, and obey decision/checkpoint contracts in this guide.
+
+---
 
 ## First Interaction — Onboarding
 
-When the user's first message is vague, exploratory, or asks what you can do ("make me a video", "what can you do?", "help me create something", "I want to make content"), read the onboarding skill **before** doing anything else:
+When the user's first message is vague, exploratory, or asks what you can do ("make me a video", "what can you do?", "help me create something", "I want to make content"):
 
-**Read:** `skills/meta/onboarding.md`
+1. **BootStrap path (default on this fork):** follow **缺步路由** above — usually read `openmontage-bootstrap-03-usercheck` (or 01/02 if install/env incomplete). Use the Skill's 就绪接话 when `verify_ready` is already true.
+2. **Optional discovery:** `skills/meta/onboarding.md` or `openmontage-router` if you need a capability menu before briefing.
+3. **Session continuity:** if continuing prior work, read `docs/会话交接/00-新对话请先读.md` and the latest dated handoff first.
 
-This skill teaches you to run discovery, classify the user's setup, present capabilities in plain language, and offer starter prompts tailored to their available tools. The goal: get the user from "curious" to "making a video" in under 60 seconds.
-
-**Skip onboarding** when the user arrives with a specific, actionable request (e.g., "Make a 60-second explainer about black holes"). Go directly to Rule Zero.
+**Skip the vague-onboarding loop** when the user arrives with a specific, actionable request *and* install+brief are already locked — go to **04-produce** or Rule Zero (upstream pipeline) as appropriate.
 
 ## Reference Video Entry Point
 
@@ -70,6 +140,8 @@ The intelligence is in the skills, not in improvised code. An agent that reads t
 ## What OpenMontage Is
 
 OpenMontage is an instruction-driven video production system. The AI agent IS the intelligence — it reads instructions (pipeline manifests + stage director skills + meta skills) and drives the pipeline using tools.
+
+**On this BootStrap fork**, the everyday control plane for “做个视频” is the **01–07 Skill chain + facade MCP** (`openmontage.mcp.bootstrap` / provider MCPs). The YAML pipeline loop below is the deeper production contract (and the path for explicit pipeline jobs).
 
 ```
 Agent reads pipeline manifest (YAML) -> reads stage director skill (MD)
@@ -692,6 +764,9 @@ The `.agents/skills/` directory is large. When you're not coming in through a to
 
 | Question | Where to look |
 |----------|---------------|
+| 做个视频 / 装机缺步走哪？ | 上文 **BootStrap First** + `openmontage/skills/openmontage-bootstrap-0N-*/SKILL.md` |
+| 操作说明（人读）？ | `README/00-INDEX.md` |
+| 本机会话续作？ | `docs/会话交接/00-新对话请先读.md`（本地，勿默认提交） |
 | What tools exist? | `tools/tool_registry.py` and `registry.support_envelope()` |
 | What providers are available for a capability? | `registry.capability_catalog()` |
 | What tools exist for a vendor? | `registry.provider_catalog()` |
@@ -721,7 +796,8 @@ git push bootstrap main
 ## What Not To Do
 
 - **Do not push to `origin`.** Publish only to `gitee` and `bootstrap` unless the user explicitly names another remote.
-- **Do not bypass the pipeline.** Never write ad-hoc scripts to call tools directly. All production goes through pipeline stages with director skills. See Rule Zero.
+- **Do not skip BootStrap 03/04 on this fork** for ordinary “做个视频” — do not jump to paid APIs or ad-hoc scripts before 缺步路由 and locked `video_plan`.
+- **Do not bypass the pipeline** when the user selected an upstream pipeline job. Never write ad-hoc scripts to call tools directly. All production goes through pipeline stages with director skills. See Rule Zero.
 - **Do not call generation tools without reading their Layer 3 skill.** Check the tool's `agent_skills` field, read the referenced skill, then craft your prompts using that guidance.
 - **Do not skip stage director skills.** Before executing any pipeline stage, read its director skill. The skill contains the quality bar, the workflow, and the review criteria.
 - Do not use deleted legacy names such as `tts_cloud`, `tts_engine`, or `video_gen`.

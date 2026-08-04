@@ -1,9 +1,7 @@
-# OpenMontage
+# OpenMontage BootStrap
 
-**MANDATORY: Read [`AGENT_GUIDE.md`](AGENT_GUIDE.md) before responding to ANY user message.**
+**MANDATORY: 回复任意用户消息前，先读 [`AGENT_GUIDE.md`](AGENT_GUIDE.md)。**
 
-Do not act on the user's request until you have read AGENT_GUIDE.md.
-It contains routing rules that determine your first action based on what the user asked.
-Skipping it WILL cause you to take the wrong action.
+BootStrap 七 Skill 路由摘要与新会话入口见 [`AGENTS.md`](AGENTS.md)。完整契约、缺步路由、pipeline 与 Git 双推均在 `AGENT_GUIDE.md`。
 
-There are no instructions in this file. All instructions are in AGENT_GUIDE.md.
+未读完不要动手；跳过会导致装错环境或越级出片。
