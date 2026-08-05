@@ -20,7 +20,8 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 | **默认配齐** | **5 MCP**（门面 + tts/image/video/stock）+ **6 Skill**（02–07）；Key 可空 |
 | **出片三档** | 轻度（零 Key / Remotion 等）→ 中度（Stock）→ 重度（付费生图+生视频） |
 | **简报主链** | `03-usercheck`：就绪后**推荐**首次 10s/30s 轻度 Demo（可跳过；有啥推啥 Remotion/HF）→ 或表 1→2→3 → `04-produce` |
-| **旁白默认** | Edge-TTS 男声（可后置）；Piper 离线回退；字幕/BGM 走 05 |
+| **旁白默认** | **Edge-TTS** 男声（主推，可后置）；Piper **仅离线可选**（setup 默认不装）；字幕/BGM 走 05 |
+| **合成引擎** | Remotion 为轻度常用必装路径；**HyperFrames 建议装、可跳过**（Node≥22；不挡 `verify_ready`） |
 | **本机会话** | 新对话先读 `Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md` → 同目录日期最新长篇交接（**Agent-\* 本机区，gitignore，勿主动提交**；遗留镜像仍在 `docs/会话交接/`） |
 
 操作细节以 Skill 正文为准；`README/说明/` 是人读入口。
@@ -32,7 +33,7 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 | # | Skill | Role | Trigger |
 |---|--------|------|---------|
 | **01** | `openmontage-bootstrap-01-installer` | Clone/pull、注册 5 MCP、启用 6 Skill、闭环检查 | 「安装 / 更新 BootStrap / 我想生成视频」且未配齐 |
-| **02** | `openmontage-bootstrap-02-setup` | `detect` → `plan_install` → 批准后装依赖 → `verify_ready` | 仓库已在，环境未就绪 |
+| **02** | `openmontage-bootstrap-02-setup` | `detect` → `plan_install`（Edge 主推 / HF 建议可跳过 / Piper 可选）→ 批准后装依赖 → `verify_ready` | 仓库已在，环境未就绪 |
 | **03** | `openmontage-bootstrap-03-usercheck` | 成片简报：可选首次 Demo 确认卡 → 表 1→2→3；商品片读 `product-prompt-template` | 模糊出片、改档、缺已确认简报 |
 | **04** | `openmontage-bootstrap-04-produce` | 按锁定档位跑门面 `produce_*` → `renders/final.mp4` | 简报已确认；**默认不重选档** |
 | **05** | `openmontage-bootstrap-05-captions-music` | 文稿→字幕、本地 BGM、duck 混音 | 画面后补字幕/配乐 |

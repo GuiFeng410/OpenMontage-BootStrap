@@ -67,6 +67,8 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "install_python_deps",
             "install_node_deps",
             "ensure_ffmpeg",
+            "probe_edge_tts",
+            "probe_hyperframes",
             "ensure_piper_model",
             "configure_sandbox",
             "verify_ready",
@@ -191,11 +193,18 @@ def clone_repo(
 
 def detect_environment(deep: bool = False) -> dict[str, Any]:
     data = doctor_tools.run_doctor(deep=deep)
+    edge = probe_edge_tts()
+    hf = probe_hyperframes(run_doctor=bool(deep))
     return {
         "doctor": data,
         "can_produce_video_now": data.get("can_produce_video_now"),
         "next_install_for_p1": data.get("next_install_for_p1"),
         "repo_root": str(REPO_ROOT),
+        "tts_primary": "edge-tts",
+        "tts_fallback": "piper (optional, offline)",
+        "edge_tts": edge,
+        "hyperframes": hf,
+        "recommendations": _install_recommendations(edge=edge, hf=hf),
     }
 
 
@@ -203,22 +212,220 @@ def plan_install(
     projects_dir: str = "",
     piper_model_dir: str = "",
     piper_model: str = "",
+    include_piper: bool = False,
 ) -> dict[str, Any]:
-    """Aggregate dry-run plans for Skill01 to present to the user."""
+    """Aggregate dry-run plans for setup Skill to present to the user.
+
+    Default path: Python (incl. edge-tts) → Remotion npm → FFmpeg → Edge probe →
+    HyperFrames (recommended, skippable) → sandbox.
+    Piper is optional offline TTS and is only included when include_piper=true
+    or the user explicitly asks for offline narration.
+    """
     py = install_python_deps(dry_run=True, confirm_execute=False)
     node = install_node_deps(dry_run=True, confirm_execute=False)
     ffmpeg = ensure_ffmpeg(dry_run=True, confirm_execute=False)
-    piper = ensure_piper_model(
-        model=piper_model or DEFAULT_PIPER_MODEL,
-        model_dir=piper_model_dir,
-        dry_run=True,
-        confirm_execute=False,
-    )
+    edge = probe_edge_tts()
+    # Shallow by default (Node/npx/ffmpeg). User can run probe_hyperframes(run_doctor=true) after install.
+    hf = probe_hyperframes(run_doctor=False)
     sandbox = configure_sandbox(projects_dir=projects_dir or "", dry_run=True, confirm_execute=False)
+
+    steps: list[dict[str, Any]] = [
+        {**py, "priority": "required", "label": "Python venv + requirements (includes edge-tts)"},
+        {**node, "priority": "required", "label": "Remotion (remotion-composer npm install)"},
+        {**ffmpeg, "priority": "required", "label": "FFmpeg"},
+        {**edge, "priority": "required", "label": "Edge-TTS (primary narration; needs network at use time)"},
+        {
+            **hf,
+            "priority": "recommended",
+            "skippable": True,
+            "label": "HyperFrames (recommended; skip does not block verify_ready)",
+        },
+        {**sandbox, "priority": "required", "label": "Projects sandbox + env"},
+    ]
+
+    if include_piper:
+        piper = ensure_piper_model(
+            model=piper_model or DEFAULT_PIPER_MODEL,
+            model_dir=piper_model_dir,
+            dry_run=True,
+            confirm_execute=False,
+        )
+        steps.append(
+            {
+                **piper,
+                "priority": "optional",
+                "skippable": True,
+                "label": "Piper voice model (offline TTS fallback only)",
+            }
+        )
+
     return {
-        "summary": "Preview only — no system changes. After user OK, re-call each tool with dry_run=false and confirm_execute=true.",
-        "steps": [py, node, ffmpeg, piper, sandbox],
+        "summary": (
+            "Preview only — no system changes. After user OK, re-call required tools with "
+            "dry_run=false and confirm_execute=true. HyperFrames is recommended but skippable. "
+            "Primary TTS is Edge-TTS; Piper is optional offline fallback "
+            f"(include_piper={include_piper})."
+        ),
+        "tts_policy": {
+            "primary": "edge-tts",
+            "fallback": "piper",
+            "piper_included_in_plan": include_piper,
+        },
+        "steps": steps,
+        "recommendations": _install_recommendations(edge=edge, hf=hf),
         "manual_fallback_note": "If a step lacks admin rights, use the returned manual_commands.",
+    }
+
+
+def _install_recommendations(*, edge: dict[str, Any], hf: dict[str, Any]) -> list[str]:
+    tips: list[str] = []
+    if not edge.get("ready"):
+        tips.append(
+            "Install Python deps so edge-tts is importable; narration defaults to Edge-TTS (needs network)."
+        )
+    else:
+        tips.append("Edge-TTS is ready (primary narration). Piper remains optional for offline use.")
+    if not hf.get("ready"):
+        tips.append(
+            "Recommend HyperFrames: Node.js >= 22 + npx + ffmpeg, then run `npx hyperframes doctor`. "
+            "Skipping does not block light Remotion produce."
+        )
+    else:
+        tips.append("HyperFrames probe looks ready; first-run demo may offer Remotion and HyperFrames.")
+    return tips
+
+
+def _venv_python() -> Path:
+    if sys.platform == "win32":
+        return REPO_ROOT / ".venv" / "Scripts" / "python.exe"
+    return REPO_ROOT / ".venv" / "bin" / "python"
+
+
+def _parse_node_major(version_text: str) -> int | None:
+    text = (version_text or "").strip().lstrip("v")
+    if not text:
+        return None
+    major = text.split(".", 1)[0]
+    try:
+        return int(major)
+    except ValueError:
+        return None
+
+
+def probe_edge_tts() -> dict[str, Any]:
+    """Check whether edge-tts is importable (primary BootStrap TTS)."""
+    py = _venv_python()
+    python_exe = str(py if py.exists() else Path(sys.executable))
+    plan = {
+        "action": "probe_edge_tts",
+        "priority": "required",
+        "python": python_exe,
+        "commands": [
+            f'"{python_exe}" -c "import edge_tts; print(edge_tts.__name__)"',
+        ],
+        "note": "Primary Chinese narration voice: zh-CN-YunyangNeural (needs network when synthesizing).",
+    }
+    proc = subprocess.run(
+        [python_exe, "-c", "import edge_tts; print('ok')"],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    ready = proc.returncode == 0 and "ok" in (proc.stdout or "")
+    return {
+        "dry_run": True,
+        "executed": False,
+        "ready": ready,
+        "import_ok": ready,
+        "error": None if ready else (proc.stderr or proc.stdout or "").strip()[:1000],
+        "plan": plan,
+    }
+
+
+def probe_hyperframes(run_doctor: bool = False) -> dict[str, Any]:
+    """Recommended HyperFrames readiness probe (skippable; does not install).
+
+    Default is a shallow toolchain check (Node>=22, npx, ffmpeg).
+    Set run_doctor=true to also execute `npx hyperframes doctor` (may download / take time).
+    """
+    node = shutil.which("node")
+    npm = shutil.which("npm")
+    npx = shutil.which("npx")
+    ffmpeg = shutil.which("ffmpeg")
+    node_version = ""
+    node_major: int | None = None
+    if node:
+        proc = subprocess.run([node, "-v"], capture_output=True, text=True, check=False)
+        node_version = (proc.stdout or proc.stderr or "").strip()
+        node_major = _parse_node_major(node_version)
+
+    node_ok = bool(node) and node_major is not None and node_major >= 22
+    toolchain_ok = bool(node_ok and npx and ffmpeg)
+    manual = [
+        "Install Node.js 22+ from https://nodejs.org/ (HyperFrames requires Node >= 22).",
+        "Ensure ffmpeg and npx are on PATH.",
+        "Then run: npx hyperframes doctor",
+    ]
+    if sys.platform == "win32":
+        manual.insert(0, "winget install OpenJS.NodeJS.LTS  # prefer a 22+ release if LTS is older")
+
+    plan = {
+        "action": "probe_hyperframes",
+        "priority": "recommended",
+        "skippable": True,
+        "blocks_verify_ready": False,
+        "run_doctor": run_doctor,
+        "node_path": node,
+        "node_version": node_version,
+        "node_major": node_major,
+        "node_ok_ge_22": node_ok,
+        "npm_on_path": bool(npm),
+        "npx_on_path": bool(npx),
+        "ffmpeg_on_path": bool(ffmpeg),
+        "commands": ["npx hyperframes doctor"],
+        "manual_commands": manual,
+        "note": (
+            "Phase-1 guidance only: detect + tell user how to install. "
+            "Do not treat HyperFrames as required for verify_ready / light Remotion."
+        ),
+    }
+
+    doctor: dict[str, Any] | None = None
+    ready = toolchain_ok
+    if not toolchain_ok:
+        plan["doctor_note"] = "Node>=22 / npx / ffmpeg missing — install before verifying HyperFrames."
+    elif run_doctor:
+        try:
+            doc = subprocess.run(
+                ["npx", "--yes", "hyperframes", "doctor"],
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=90,
+                cwd=str(REPO_ROOT),
+            )
+            out = ((doc.stdout or "") + "\n" + (doc.stderr or "")).strip()
+            ready = doc.returncode == 0
+            doctor = {"returncode": doc.returncode, "output_tail": out[-2000:]}
+        except (subprocess.TimeoutExpired, OSError) as exc:
+            doctor = {"error": str(exc)[:500]}
+            plan["doctor_note"] = "doctor not completed; treat HyperFrames as not yet verified."
+            ready = False
+    else:
+        plan["doctor_note"] = (
+            "Shallow probe only (toolchain). After Node 22+ is installed, "
+            "call probe_hyperframes(run_doctor=true) or: npx hyperframes doctor"
+        )
+
+    return {
+        "dry_run": True,
+        "executed": False,
+        "ready": ready,
+        "toolchain_ok": toolchain_ok,
+        "recommended": True,
+        "skippable": True,
+        "doctor": doctor,
+        "plan": plan,
     }
 
 
@@ -254,12 +461,14 @@ def install_python_deps(
         "action": "python_venv_and_requirements",
         "venv_dir": str(venv_dir),
         "requirements": str(req),
+        "includes_edge_tts": True,
         "commands": [
             " ".join(create_cmd),
             f"{venv_python} -m pip install -U pip",
             f"{venv_python} -m pip install -r {req}",
         ],
         "requirements_exists": req.exists(),
+        "note": "requirements.txt installs edge-tts (primary BootStrap narration).",
     }
     if dry_run:
         return {"dry_run": True, "executed": False, "plan": plan}
@@ -404,6 +613,7 @@ def ensure_piper_model(
     dry_run: bool = True,
     confirm_execute: bool = False,
 ) -> dict[str, Any]:
+    """Optional offline TTS fallback. Default setup plan does not call this."""
     model = model or DEFAULT_PIPER_MODEL
     dest = Path(
         model_dir
@@ -413,6 +623,9 @@ def ensure_piper_model(
     onnx = dest / f"{model}.onnx"
     plan = {
         "action": "download_piper_voice",
+        "priority": "optional",
+        "skippable": True,
+        "role": "offline_tts_fallback",
         "model": model,
         "model_dir": str(dest),
         "onnx_path": str(onnx),
@@ -425,6 +638,7 @@ def ensure_piper_model(
             "PIPER_MODEL_DIR": str(dest),
             "OPENMONTAGE_PIPER_MODEL": model,
         },
+        "note": "Primary narration is Edge-TTS. Only download Piper when offline TTS is needed.",
     }
     if onnx.exists():
         return {"dry_run": dry_run, "ready": True, "executed": False, "plan": plan}
@@ -493,12 +707,24 @@ def configure_sandbox(
 
 def verify_ready(deep: bool = False) -> dict[str, Any]:
     data = doctor_tools.run_doctor(deep=deep)
+    edge = probe_edge_tts()
+    hf = probe_hyperframes(run_doctor=bool(deep))
+    can = bool(data.get("can_produce_video_now"))
     return {
-        "can_produce_video_now": bool(data.get("can_produce_video_now")),
+        "can_produce_video_now": can,
         "next_install_for_p1": data.get("next_install_for_p1"),
         "tier": data.get("tier"),
         "doctor_summary_keys": sorted(data.keys()),
-        "ready_for_skill02": bool(data.get("can_produce_video_now")),
+        "ready_for_skill02": can,
+        "tts_primary_ready": bool(edge.get("ready")),
+        "hyperframes_ready": bool(hf.get("ready")),
+        "hyperframes_toolchain_ok": bool(hf.get("toolchain_ok")),
+        "hyperframes_recommended_if_missing": not bool(hf.get("ready")),
+        "recommendations": _install_recommendations(edge=edge, hf=hf),
+        "note": (
+            "HyperFrames missing does not block verify_ready. "
+            "Primary TTS is Edge-TTS; Piper is optional offline fallback."
+        ),
     }
 
 

@@ -68,14 +68,19 @@ def plan_install(
     projects_dir: str = "",
     piper_model_dir: str = "",
     piper_model: str = "",
+    include_piper: bool = False,
 ) -> dict[str, Any]:
-    """Aggregate dry-run install plans for user review (no side effects)."""
-    return _wrap(T.plan_install, projects_dir, piper_model_dir, piper_model)
+    """Aggregate dry-run install plans for user review (no side effects).
+
+    Default: Edge-TTS primary, HyperFrames recommended/skippable, Piper omitted
+    unless include_piper=true (offline TTS fallback).
+    """
+    return _wrap(T.plan_install, projects_dir, piper_model_dir, piper_model, include_piper)
 
 
 @mcp.tool()
 def install_python_deps(dry_run: bool = True, confirm_execute: bool = False) -> dict[str, Any]:
-    """Create .venv and pip install -r requirements.txt (dry_run by default)."""
+    """Create .venv and pip install -r requirements.txt (includes edge-tts; dry_run by default)."""
     return _wrap(T.install_python_deps, dry_run, confirm_execute)
 
 
@@ -92,13 +97,25 @@ def ensure_ffmpeg(dry_run: bool = True, confirm_execute: bool = False) -> dict[s
 
 
 @mcp.tool()
+def probe_edge_tts() -> dict[str, Any]:
+    """Check Edge-TTS import (primary BootStrap narration; needs network when synthesizing)."""
+    return _wrap(T.probe_edge_tts)
+
+
+@mcp.tool()
+def probe_hyperframes(run_doctor: bool = False) -> dict[str, Any]:
+    """Probe HyperFrames readiness (recommended, skippable). Shallow unless run_doctor=true."""
+    return _wrap(T.probe_hyperframes, run_doctor)
+
+
+@mcp.tool()
 def ensure_piper_model(
     model: str = "zh_CN-huayan-medium",
     model_dir: str = "",
     dry_run: bool = True,
     confirm_execute: bool = False,
 ) -> dict[str, Any]:
-    """Download Piper voice model (dry_run by default)."""
+    """Optional offline Piper voice download. Not in default plan_install; use when offline TTS needed."""
     return _wrap(T.ensure_piper_model, model, model_dir, dry_run, confirm_execute)
 
 
@@ -114,7 +131,10 @@ def configure_sandbox(
 
 @mcp.tool()
 def verify_ready(deep: bool = False) -> dict[str, Any]:
-    """Return whether Skill02 may start (can_produce_video_now)."""
+    """Return whether produce can start (can_produce_video_now).
+
+    HyperFrames absence does not block readiness; recommendations still list it.
+    """
     return _wrap(T.verify_ready, deep)
 
 

@@ -10,6 +10,8 @@ from openmontage.mcp.bootstrap.tools import (
     install_python_deps,
     list_bootstrap_tools,
     plan_install,
+    probe_edge_tts,
+    probe_hyperframes,
 )
 from openmontage.mcp.common.errors import ConfigError
 
@@ -17,6 +19,8 @@ from openmontage.mcp.common.errors import ConfigError
 def test_list_bootstrap_tools_minimal_surface() -> None:
     data = list_bootstrap_tools()
     assert "install_python_deps" in data["bootstrap"]
+    assert "probe_edge_tts" in data["bootstrap"]
+    assert "probe_hyperframes" in data["bootstrap"]
     assert "produce_compose_start" in data["produce_minimal"]
     assert "diagram" in data["not_in_v1"]
     assert "stitch" in data["not_in_v1"]
@@ -57,3 +61,27 @@ def test_plan_install_is_preview_only() -> None:
     data = plan_install()
     assert "steps" in data
     assert all(step.get("dry_run") is True or step.get("executed") is False for step in data["steps"])
+    assert data["tts_policy"]["primary"] == "edge-tts"
+    assert data["tts_policy"]["piper_included_in_plan"] is False
+    labels = [s.get("label", "") for s in data["steps"]]
+    assert any("HyperFrames" in label for label in labels)
+    assert not any("Piper" in label for label in labels)
+
+
+def test_plan_install_include_piper_adds_optional_step() -> None:
+    data = plan_install(include_piper=True)
+    assert data["tts_policy"]["piper_included_in_plan"] is True
+    assert any("Piper" in (s.get("label") or "") for s in data["steps"])
+
+
+def test_probe_edge_tts_shape() -> None:
+    data = probe_edge_tts()
+    assert "ready" in data
+    assert data["plan"]["action"] == "probe_edge_tts"
+
+
+def test_probe_hyperframes_shallow_skippable() -> None:
+    data = probe_hyperframes(run_doctor=False)
+    assert data["skippable"] is True
+    assert data["recommended"] is True
+    assert data["plan"]["blocks_verify_ready"] is False
