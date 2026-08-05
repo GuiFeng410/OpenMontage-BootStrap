@@ -23,6 +23,18 @@ metadata:
     emoji: "📋"
 ---
 
+# 30 秒以上商品视频路由
+
+当视频用途属于商品宣传、电商商品展示或佩戴演示，且 `duration_seconds >= 30` 时，必须读取并执行：
+
+`references/commercial-video-30s-review.md`
+
+该参考文档规定长商品视频的简洁总览表、三状态展示、3-4 个 beat 分批审查、逐段审查卡、问题选项、修改清单确认门和 Remotion 回退规则。
+
+本路由不替代当前 03 -> 04 主链，也不改变已经确认的 provider、模型或 render runtime。它只增加长商品视频的展示、暂停、修改和用户确认方式。
+
+判断条件不明确时先询问用户，不要仅根据时长自动认定为商品视频。
+
 # openmontage-bootstrap-03-usercheck（成片简报 · 用户确认）
 
 ## Scope

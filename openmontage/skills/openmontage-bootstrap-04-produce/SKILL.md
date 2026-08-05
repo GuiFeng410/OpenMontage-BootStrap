@@ -31,6 +31,16 @@ metadata:
     emoji: "🎬"
 ---
 
+# 长商品视频执行引用
+
+当当前项目是商品视频且 `duration_seconds >= 30` 时，执行过程中必须遵守：
+
+`openmontage/skills/openmontage-bootstrap-03-usercheck/references/commercial-video-30s-review.md`
+
+该规则要求按 3-4 个 beat 分批展示预览，AI 先做初审，用户反馈后先生成修改清单，并在用户回复 `1` 同意后才执行修改。默认只修改被指出的 beat；衔接问题才扩大到相邻片段。所有批次确认后，才能进行最终 Remotion 时间线合成。
+
+本 Skill 不得在执行中自行改变已锁定的 provider、模型、视频计划或 render runtime。若用户改变生产方向，应返回 `03-usercheck` 重新确认。
+
 # OpenMontage BootStrap Produce（04）
 
 ## Scope
