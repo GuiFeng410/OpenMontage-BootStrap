@@ -693,6 +693,8 @@ class VideoCompose(BaseTool):
         "cinematic-trailer": "CinematicRenderer",
         "documentary-montage": "CinematicRenderer",
         "product-reveal": "Explainer",
+        # Project-specific review composition for the Tianshancui I2I gate.
+        "bangle-i2i-review": "BangleI2ISampleReview",
         "screen-demo": "Explainer",
         "presenter": "TalkingHead",
         "animation-first": "Explainer",

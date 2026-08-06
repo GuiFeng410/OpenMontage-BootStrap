@@ -66,6 +66,11 @@ docs/Mcp_Entity/
 # Local session handoffs — never push (new chats read here first)
 docs/会话交接/
 
+# name-to-workspace local trees (do not commit unless user asks)
+/Agent-Docs/
+/Agent-ReadMe/
+/Agent-Temp/
+
 # Local voice / model caches (fetched at install time — *.onnx already ignored above)
 piper_models/
 .piper/

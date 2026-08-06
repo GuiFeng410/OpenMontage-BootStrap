@@ -154,14 +154,47 @@ def produce_set_production_profile(
     production_tier: str,
     visual_source: str = "",
     tts_source: str = "",
+    api_budget_tier: str = "",
+    budget_cny: str = "",
+    review_mode: str = "",
+    candidate_mode: str = "",
+    motion_target_band: str = "",
+    style_label_zh: str = "",
+    style_playbook: str = "",
+    usd_cny_rate: str = "",
 ) -> dict[str, Any]:
-    """Persist light/medium/heavy profile on project.json after the user picks a tier."""
+    """Persist tier + optional experiment API budget / review fields on project.json."""
     return _wrap(
         T.produce_set_production_profile,
         project_id,
         production_tier,
         visual_source,
         tts_source,
+        api_budget_tier,
+        budget_cny,
+        review_mode,
+        candidate_mode,
+        motion_target_band,
+        style_label_zh,
+        style_playbook,
+        usd_cny_rate,
+    )
+
+
+@mcp.tool()
+def produce_budget_cny_snapshot(
+    project_id: str,
+    spent_usd: float = 0.0,
+    reserved_usd: float = 0.0,
+    next_estimate_usd: float = 0.0,
+) -> dict[str, Any]:
+    """CNY view + experimental budget gate over CostTracker USD totals."""
+    return _wrap(
+        T.produce_budget_cny_snapshot,
+        project_id,
+        spent_usd,
+        reserved_usd,
+        next_estimate_usd,
     )
 
 

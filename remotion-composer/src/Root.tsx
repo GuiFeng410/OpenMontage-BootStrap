@@ -16,6 +16,25 @@ import { ProductReveal, ProductRevealProps } from "./components/ProductReveal";
 import { CaptionOverlay, WordCaption } from "./components/CaptionOverlay";
 import { CollageBurst, CollageBurstProps } from "./CollageBurst";
 import { LyricOverlay, LyricOverlayProps } from "./LyricOverlay";
+import { BangleMotionTest, BANGLE_MOTION_TEST_DURATION } from "./BangleMotionTest";
+import { BangleCoverageTest, BANGLE_COVERAGE_TEST_DURATION } from "./BangleCoverageTest";
+import { BangleI2ISampleReview, BANGLE_I2I_SAMPLE_REVIEW_DURATION } from "./BangleI2ISampleReview";
+import {
+  BangleI2INaturalTransitionReview,
+  BANGLE_I2I_NATURAL_TRANSITION_DURATION,
+} from "./BangleI2INaturalTransitionReview";
+import {
+  Bangle60sMotionStructureV4,
+  BANGLE_60S_MOTION_STRUCTURE_V4_DURATION,
+} from "./Bangle60sMotionStructureV4";
+import {
+  Bangle60sMotionStructureV5,
+  BANGLE_60S_MOTION_STRUCTURE_V5_DURATION,
+} from "./Bangle60sMotionStructureV5";
+import {
+  Bangle60sMotionStructureV6,
+  BANGLE_60S_MOTION_STRUCTURE_V6_DURATION,
+} from "./Bangle60sMotionStructureV6";
 
 // ---------------------------------------------------------------------------
 // Theme System — prevents every video from looking like dark fintech
@@ -164,6 +183,69 @@ export const Root: React.FC = () => {
           signalLineCount: 18,
         }}
         calculateMetadata={calculateCinematicMetadata}
+      />
+      <Composition
+        id="BangleMotionTest"
+        component={BangleMotionTest}
+        durationInFrames={BANGLE_MOTION_TEST_DURATION}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={{}}
+      />
+      <Composition
+        id="BangleCoverageTest"
+        component={BangleCoverageTest}
+        durationInFrames={BANGLE_COVERAGE_TEST_DURATION}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={{}}
+      />
+      <Composition
+        id="BangleI2ISampleReview"
+        component={BangleI2ISampleReview}
+        durationInFrames={BANGLE_I2I_SAMPLE_REVIEW_DURATION}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={{}}
+      />
+      <Composition
+        id="BangleI2INaturalTransitionReview"
+        component={BangleI2INaturalTransitionReview}
+        durationInFrames={BANGLE_I2I_NATURAL_TRANSITION_DURATION}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={{}}
+      />
+      <Composition
+        id="Bangle60sMotionStructureV4"
+        component={Bangle60sMotionStructureV4}
+        durationInFrames={BANGLE_60S_MOTION_STRUCTURE_V4_DURATION}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={{}}
+      />
+      <Composition
+        id="Bangle60sMotionStructureV5"
+        component={Bangle60sMotionStructureV5}
+        durationInFrames={BANGLE_60S_MOTION_STRUCTURE_V5_DURATION}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={{}}
+      />
+      <Composition
+        id="Bangle60sMotionStructureV6"
+        component={Bangle60sMotionStructureV6}
+        durationInFrames={BANGLE_60S_MOTION_STRUCTURE_V6_DURATION}
+        fps={30}
+        width={1920}
+        height={1080}
+        defaultProps={{}}
       />
       <Composition
         id="SignalFromTomorrowWithMusic"

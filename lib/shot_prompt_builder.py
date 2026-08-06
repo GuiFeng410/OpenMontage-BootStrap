@@ -16,6 +16,73 @@ from __future__ import annotations
 from typing import Any
 
 
+def _manifest_data(product_manifest: Any) -> dict[str, Any]:
+    """Return raw manifest data from either ProductManifest or a plain dict."""
+    if hasattr(product_manifest, "data"):
+        data = getattr(product_manifest, "data")
+    else:
+        data = product_manifest
+    return data if isinstance(data, dict) else {}
+
+
+def _identity_anchor(product_manifest: Any) -> dict[str, Any]:
+    data = _manifest_data(product_manifest)
+    anchor = data.get("identity_anchor")
+    return anchor if isinstance(anchor, dict) else {}
+
+
+def build_product_negative_prompt(product_manifest: Any) -> str:
+    """Build a provider-ready negative prompt from identity constraints."""
+    anchor = _identity_anchor(product_manifest)
+    forbidden = anchor.get("forbidden_changes") or []
+    if not isinstance(forbidden, list):
+        forbidden = [forbidden]
+    constraints = [str(item).strip() for item in forbidden if str(item).strip()]
+    if not constraints:
+        return ""
+    return "Do not: " + "; ".join(constraints) + "."
+
+
+def build_product_prompt(
+    scene: dict[str, Any],
+    product_manifest: Any,
+    angle: str | None = None,
+    style_context: dict[str, Any] | None = None,
+) -> str:
+    """Build a shot prompt with the product identity contract injected.
+
+    The existing five-layer shot prompt remains the creative description. This
+    function appends only identity-critical constraints so product-aware calls
+    are explicit while legacy scenes can continue using ``build_shot_prompt``.
+    """
+    base = build_shot_prompt(scene, style_context)
+    data = _manifest_data(product_manifest)
+    anchor = _identity_anchor(product_manifest)
+    product_name = str(data.get("product_name") or data.get("product_id") or "the product")
+    primary_color = str(anchor.get("primary_color") or "")
+
+    geometry = anchor.get("geometry_constraints") or []
+    if not isinstance(geometry, list):
+        geometry = [geometry]
+    geometry_text = "; ".join(str(item).strip() for item in geometry if str(item).strip())
+
+    parts = [base] if base else []
+    identity_parts = [f"Product identity: {product_name}"]
+    if primary_color:
+        identity_parts.append(f"primary color/material: {primary_color}")
+    if angle:
+        identity_parts.append(f"approved shot angle: {angle}")
+    if geometry_text:
+        identity_parts.append(f"preserve geometry: {geometry_text}")
+    identity_parts.append("show one consistent product only")
+    parts.append(". ".join(identity_parts) + ".")
+
+    negative = build_product_negative_prompt(product_manifest)
+    if negative:
+        parts.append(negative)
+    return ". ".join(part.rstrip(".") for part in parts if part.strip()) + "."
+
+
 # Mapping from shot_language enums to natural language for prompting
 _SHOT_SIZE_PHRASES = {
     "extreme_wide": "extreme wide shot showing vast environment",
@@ -146,6 +213,7 @@ def build_shot_prompt(
 def build_batch_prompts(
     scenes: list[dict[str, Any]],
     style_context: dict[str, Any] | None = None,
+    product_manifest: Any | None = None,
 ) -> list[dict[str, str]]:
     """Build prompts for all visual scenes in a scene plan.
 
@@ -157,7 +225,16 @@ def build_batch_prompts(
         scene_type = scene.get("type", "")
         if scene_type in ("transition",):
             continue
-        prompt = build_shot_prompt(scene, style_context)
+        prompt = (
+            build_product_prompt(
+                scene,
+                product_manifest,
+                angle=scene.get("angle") or scene.get("shot_language", {}).get("angle"),
+                style_context=style_context,
+            )
+            if product_manifest is not None
+            else build_shot_prompt(scene, style_context)
+        )
         results.append({
             "scene_id": scene.get("id", "unknown"),
             "prompt": prompt,

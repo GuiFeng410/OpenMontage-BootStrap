@@ -56,7 +56,20 @@ STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
 STATUS_SKIPPED = "skipped"
 
-RETRYABLE_MARKERS = ("503", "502", "429", "timeout", "Unavailable", "timed out")
+RETRYABLE_MARKERS = (
+    "503",
+    "502",
+    "429",
+    "timeout",
+    "Unavailable",
+    "timed out",
+    "Connection aborted",
+    "ConnectionReset",
+    "ConnectionError",
+    "10053",
+    "10054",
+    "SSLError",
+)
 RATE_LIMIT_MARKERS = ("503", "502", "429", "Unavailable")
 
 
@@ -268,6 +281,8 @@ def build_scene_plan(
     *,
     provider: str = "agnes",
     model: str = "agnes-video-v2.0",
+    product_id: str | None = None,
+    product_manifest_path: str | None = None,
     parallel: dict[str, Any] | None = None,
     extra: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
@@ -301,6 +316,10 @@ def build_scene_plan(
         for k, v in extra.items():
             if k not in plan:
                 plan[k] = v
+    if product_id:
+        plan["product_id"] = str(product_id)
+    if product_manifest_path:
+        plan["product_manifest_path"] = str(product_manifest_path)
     return plan
 
 
@@ -897,27 +916,100 @@ def make_agnes_generate_fn(
     aspect_ratio: str = "16:9",
     poll_interval_seconds: int = DEFAULT_AGNES_POLL_INTERVAL_SECONDS,
     timeout_seconds: int = 900,
+    project: Path | None = None,
+    default_operation: str = "text_to_video",
+    product_manifest: Any | None = None,
+    product_id: str | None = None,
 ) -> GenerateFn:
-    """Build a GenerateFn that calls tools.video.agnes_video.AgnesVideo."""
+    """Build a GenerateFn that calls tools.video.agnes_video.AgnesVideo.
+
+    Scene may override ``operation`` (``text_to_video`` / ``image_to_video``) and
+    supply ``image_path`` / ``image_url`` (or reference_* aliases). Relative
+    ``image_path`` resolves against ``project`` when provided.
+    """
 
     from tools.video.agnes_video import AgnesVideo
 
+    manifest = product_manifest
+    if isinstance(manifest, (str, Path)):
+        from lib.product_identity import load_manifest
+
+        manifest = load_manifest(manifest, repo_root=REPO_ROOT)
+    if manifest is None and product_id and project is not None:
+        from lib.product_identity import load_manifest
+
+        candidates = [
+            project / "products" / str(product_id) / "identity_anchor.json",
+            REPO_ROOT / "projects" / f"{project.name}-v6" / "products" / str(product_id) / "identity_anchor.json",
+        ]
+        candidates.extend((REPO_ROOT / "projects").glob(f"*v6/products/{product_id}/identity_anchor.json"))
+        manifest_path = next((candidate for candidate in candidates if candidate.is_file()), None)
+        if manifest_path is not None:
+            manifest = load_manifest(manifest_path, repo_root=REPO_ROOT)
+
     tool = AgnesVideo()
+
+    def _resolve_image_path(raw: str) -> str:
+        p = Path(raw)
+        if not p.is_absolute() and project is not None:
+            p = (project / p).resolve()
+        return str(p)
 
     def _fn(scene: dict[str, Any], output_path: Path) -> dict[str, Any]:
         t0 = time.perf_counter()
-        result = tool.execute(
-            {
-                "prompt": scene["prompt"],
-                "operation": "text_to_video",
-                "duration": float(scene["duration"]),
-                "frame_rate": frame_rate,
-                "aspect_ratio": aspect_ratio,
-                "output_path": str(output_path),
-                "poll_interval_seconds": poll_interval_seconds,
-                "timeout_seconds": timeout_seconds,
-            }
-        )
+        prompt = str(scene.get("prompt") or "")
+        product_negative = ""
+        if manifest is not None:
+            from lib.shot_prompt_builder import build_product_negative_prompt, build_product_prompt
+
+            prompt = build_product_prompt(
+                scene,
+                manifest,
+                angle=scene.get("angle") or scene.get("shot_language", {}).get("angle"),
+            )
+            product_negative = build_product_negative_prompt(manifest)
+        operation = str(scene.get("operation") or default_operation)
+        payload: dict[str, Any] = {
+            "prompt": prompt,
+            "operation": operation,
+            "duration": float(scene["duration"]),
+            "frame_rate": frame_rate,
+            "aspect_ratio": aspect_ratio,
+            "output_path": str(output_path),
+            "poll_interval_seconds": poll_interval_seconds,
+            "timeout_seconds": timeout_seconds,
+        }
+        if scene.get("model"):
+            payload["model"] = scene["model"]
+        negative_prompt = str(scene.get("negative_prompt") or "").strip()
+        if product_negative:
+            negative_prompt = "; ".join(filter(None, (negative_prompt, product_negative)))
+        if negative_prompt:
+            payload["negative_prompt"] = negative_prompt
+        if scene.get("seed") is not None:
+            payload["seed"] = scene["seed"]
+
+        image_url = scene.get("image_url") or scene.get("reference_image_url")
+        image_path = scene.get("image_path") or scene.get("reference_image_path")
+        if operation == "image_to_video":
+            if image_url:
+                payload["image_url"] = str(image_url)
+            elif image_path:
+                payload["image_path"] = _resolve_image_path(str(image_path))
+            else:
+                return {
+                    "success": False,
+                    "error": "image_to_video requires image_path or image_url on scene",
+                    "wall_seconds": time.perf_counter() - t0,
+                    "duration_actual": None,
+                }
+        elif image_path:
+            # Allow optional reference even on T2V if caller set it
+            payload["image_path"] = _resolve_image_path(str(image_path))
+        elif image_url:
+            payload["image_url"] = str(image_url)
+
+        result = tool.execute(payload)
         wall = result.duration_seconds if result.duration_seconds is not None else (time.perf_counter() - t0)
         if not result.success:
             return {"success": False, "error": result.error or "unknown", "wall_seconds": wall}

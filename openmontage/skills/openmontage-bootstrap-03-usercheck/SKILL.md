@@ -29,7 +29,7 @@ metadata:
 
 `references/commercial-video-30s-review.md`
 
-该参考文档规定长商品视频的简洁总览表、三状态展示、3-4 个 beat 分批审查、逐段审查卡、问题选项、修改清单确认门和 Remotion 回退规则。
+该参考文档规定：默认**普通评审**（方案→试片→初稿/问题片段）；**专业模式**才强制总览表与 3–4 beat 分批逐段卡。另含三状态、修改清单确认门和 Remotion 回退规则。
 
 本路由不替代当前 03 -> 04 主链，也不改变已经确认的 provider、模型或 render runtime。它只增加长商品视频的展示、暂停、修改和用户确认方式。
 
@@ -148,6 +148,8 @@ metadata:
 | 主题 | （已有则照写；否则先给 2–3 个候选再填入选定） | 默认可改 |
 | 档位 | 轻度 / 中度 / 重度（见下方说明表） | **必选** |
 | 时长 | 默认 30 秒（竖屏短视频可建议 15–30；商品试片常 10/30） | 默认可改 |
+| 实验 API 预算 | 经济 ¥5 / **标准 ¥8（默认）** / 充裕 ¥12 | 重度或商品片**建议确认**；非售价 |
+| 评审模式 | **普通（默认）** / 专业 | 默认可改；可脚注提示切换 |
 
 **档位说明（出示给用户）**
 
@@ -162,12 +164,15 @@ metadata:
 1. 第一次使用建议先生成 **10s–30s** 以内；熟悉后再做 45s–60s；**不建议超过 60s**（越长越慢，也更易报错）。  
 2. 本轮主流程**先定视频**；旁白与 BGM **可以后置**。旁白**默认推荐** Edge-TTS 男声（`zh-CN-YunyangNeural`），不在本表强制选定。  
 3. 付费视频渠道/模型**仅在选重度之后**才出示。  
-4. 确认本表后，将**另开消息**出示表 2。
+4. **实验 API 预算**（¥5/¥8/¥12）= 单次任务 API 生成预算上限，**不是售价/套餐价**；默认标准 ¥8。首次达标成本含被拒候选。  
+5. **普通评审**：方案 → 试片 → 初稿/问题片段。需要更细的逐 beat 审查可切 **专业模式**（本表可选，或稍后说「切专业」）。  
+6. 确认本表后，将**另开消息**出示表 2。
 
 **首句话术（必用）：**
 
 > 先看表 1：确认主题与档位（轻度 / 中度 / 重度）。  
-> 首次建议时长 10–30s。旁白默认推荐 Edge-TTS，可后置；BGM 稍后。选重度后才会出现付费视频渠道选项。
+> 首次建议时长 10–30s。旁白默认推荐 Edge-TTS，可后置；BGM 稍后。选重度后才会出现付费视频渠道选项。  
+> 商品/重度建议一并确认实验 API 预算（默认 ¥8，非售价）与评审模式（默认普通）。
 
 主题没有时：在贴表前或表内注明 2–3 个候选，等用户选后再定「提案」。
 
@@ -280,7 +285,9 @@ eRouter    │ （视频）        │ ❌ 未实现 │ 仅探讨，勿当可�
 1. 回复「确认规划」后才写入简报并交接 produce。  
 2. 可只改某一段后要求重贴。  
 3. **旁白与 BGM 稍后安排**（本表不定声线）。  
-4. 商品片：已按 `product-prompt-template.md` 完成分类/缺图/切段/参考图（若适用）。
+4. 商品片：已按 `product-prompt-template.md` 完成分类/缺图/切段/参考图（若适用）。  
+5. **可交付硬门槛**：商品身份一致、无结构断裂、流畅可播且动态不单调。AI 动态秒数是**实验目标**（60s 参考 16–24s，高动态实验可记 40–45s），**不是**单独否决成片的硬门槛。  
+6. 出片顺序：先 **10–15s 试片** 确认，再全长；普通模式只展开问题片段（可说「切专业」看逐 beat）。
 
 ### 5. 全部确认后写入并交接
 
@@ -298,9 +305,20 @@ produce_set_production_profile(
   project_id,
   production_tier="light|medium|heavy",
   visual_source="",   # light→template；medium→stock|user；heavy→paid_gen（可按锁定细化）
-  tts_source=""       # 本轮可空或暂缓；旁白后置
+  tts_source="",      # 本轮可空或暂缓；旁白后置
+  api_budget_tier="standard",   # economy|standard|ample；默认 standard
+  budget_cny="8",               # 5|8|12；实验 API 预算上限，非售价
+  review_mode="normal",         # normal|pro；默认普通
+  candidate_mode="adaptive",    # adaptive=单候选+条件重试；stable_dual=关键 beat 双候选
+  motion_target_band="60s_cost_ref",  # 30s_ref|60s_cost_ref|60s_high_motion
+  style_label_zh="",            # 可选中文名：高端极简/生活方式/电商清晰展示
+  style_playbook=""             # 可选内部 styles id；勿强制第四表
 )
 ```
+
+商品/重度未明示预算时：**默认** `api_budget_tier=standard`、`budget_cny=8`。  
+未明示评审模式时：**默认** `review_mode=normal`。  
+未明示候选策略时：**默认** `candidate_mode=adaptive`（禁止默认双候选）。
 
 5. **简报扩展字段**（写入项目 artifacts / 简报 JSON，交接时点明）：
 
@@ -309,6 +327,11 @@ produce_set_production_profile(
 | `theme` | 表 1 主题 |
 | `duration_seconds` | 表 1 时长 |
 | `production_tier` | `light` / `medium` / `heavy` |
+| `api_budget_tier` | `economy` / `standard` / `ample`（实验 API 预算档） |
+| `budget_cny` | `5` / `8` / `12`（实验上限，非售价） |
+| `review_mode` | `normal` / `pro` |
+| `candidate_mode` | `adaptive` / `stable_dual` |
+| `motion_target_band` | `30s_ref` / `60s_cost_ref` / `60s_high_motion`（实验目标，非硬门槛） |
 | `light_presentation` | 轻度表现方式（含 `remotion` / `hyperframes`）；非轻度可空 |
 | `first_run_demo` | 可选；首次 Demo 确认卡路径为 `true` |
 | `medium_source` | `stock` / `user_assets`；非中度可空 |
@@ -361,7 +384,7 @@ produce_set_production_profile(
 
 写入简报时，保留 `asset_classes`、`ref_image`、`gap_fill` 作为程序字段；它们的用户可读含义分别是“素材类型”“参考图片”“缺图处理”。商品片还应写入素材需求摘要 `asset_requirements`，至少包含：时长档位（`duration_profile`）、最低图片数（`minimum_image_count`）、建议图片数（`recommended_image_count`）、已有图片数（`available_image_count`）、已有/缺少图片类型（`available_asset_classes` / `missing_asset_classes`）、素材状态（`status`）、补图方式（`fallback`）、质量风险提示（`quality_warning`）和用户是否确认缺口（`user_confirmed_shortage`）。
 
-生成最终表 3 前，必须完成：数量检查 → 图片类型检查 → 缺失类型提示 → 用户补图或允许补图确认 → 记录素材状态。没有商品主图时不能静默生成具体商品；允许图生图时必须明确“先补图，再 I2V”，并提示商品细节可能不一致。
+生成最终表 3 前，必须完成：数量检查 → 图片类型检查 → **分辨率粗检**（过小细节图勿当全屏主参考）→ **身份冲突提示**（色温/款式明显不一致须标待确认）→ 缺失类型提示 → 用户补图或允许补图确认 → 记录素材状态。没有商品主图时不能静默生成具体商品；允许图生图时必须明确“先补图，再 I2V”，并提示商品细节可能不一致。典型用户按 **5 张有效角色图** 模拟（主图/角度/佩戴或使用/细节/背面或场景）；重复同构图不算 5 张有效。
 
 ## 与其它 Skill
 
@@ -380,10 +403,12 @@ produce_set_production_profile(
 - 用户确认 Demo 卡后：已写入轻度锁定字段并交接 04，**未**静默开烧  
 - 用户跳过 Demo 或非首次：已进入表 1（或说明卡在哪一步）  
 - 缺步时已按「缺步路由」交接 01/02，未越级开烧  
-- 完整简报路径：用户确认过 **表 1**（主题 + 档位 + 时长）  
+- 完整简报路径：用户确认过 **表 1**（主题 + 档位 + 时长；商品/重度含实验 API 预算默认 ¥8、评审模式默认普通）  
 - 按档确认过 **表 2**；轻度互斥单选（含 Remotion/HyperFrames，按可用性推荐）；中度遵守 Stock Key 闸门；重度遵守视频 Key 闸门与推荐规则  
-- **表 3** 三档都已确认（Demo 卡路径除外）；无全文旁白强求；无文案时已给 AI 提案并获「确认规划」  
+- **表 3** 三档都已确认（Demo 卡路径除外）；无全文旁白强求；无文案时已给 AI 提案并获「确认规划」；已说明硬门槛与动态秒数实验目标  
 - 重度商品已强制走 `product-prompt-template.md`  
-- 已写 `production_profile` 与 `video_plan` 等扩展字段  
+- 已写 `production_profile`（含 `api_budget_tier`/`budget_cny`/`review_mode`/`candidate_mode`）与 `video_plan` 等扩展字段  
 - 未在轻度/中度展示付费视频渠模；无 Key 时未假装可烧重度  
 - 未静默换渠、未静默 I2I、未跳过确认开烧  
+- 未把实验 API 预算说成售价；未默认开启双候选  
+

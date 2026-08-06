@@ -105,8 +105,10 @@ metadata:
 进入本 Skill 时：
 
 1. 若无 03 锁定 → 交接 03。  
-2. 若有锁定 → **一句复查**，例如：`当前锁定：重度 / Agnes / hy… / 三段 video_plan，确认开始出片？`  
-3. **不要**再完整展示轻/中/重选型大表。
+2. 若有锁定 → **一句复查**，必须点出：档位 / 渠模（重度）/ **实验 API 预算（¥5|8|12，非售价）** / 段数 / **评审模式（普通|专业）** / 候选模式（自适应|稳定双候选）。例如：  
+   `当前锁定：重度 / Agnes / 实验预算¥8（非售价）/ 普通评审 / 自适应候选 / 6 段 video_plan，确认开始出片？`  
+3. **不要**再完整展示轻/中/重选型大表。  
+4. 用户未确认「开始」前：**禁止**任何付费 API。
 
 ### 改档回流（强制）
 
@@ -115,6 +117,79 @@ metadata:
 1. **禁止**在 04 内静默改 `production_tier` 后继续烧。  
 2. 交接回 **`03-usercheck`**：重走表 1（至少新档位）→ 表 2 → 表 3。  
 3. 新简报写入后再回到 04。
+
+## P0 商品/重度出片闸门（冻结口径）
+
+适用：商品宣传，或重度付费视频。轻/中非商品可跳过试片硬闸，但仍遵守费用闸（若已写预算）。
+
+### B1 试片关（强制）
+
+付费批量生成全长 **之前**，先完成 **10–15s 试片**，须同时包含：
+
+1. 一段商品身份建立（静帧或微运镜即可）；  
+2. 一段真实 AI 动态（Agnes 等已锁渠道）；  
+3. 一段 Remotion（或已锁确定性）运镜/转场。
+
+写入 `artifacts/sample_reel.json`（或等价），至少含：路径、时长、`approved`/`pending`、用户确认原文。  
+**试片未通过 → 禁止**进入完整 60s 批量 Agnes。  
+用户可选反馈：效果可以继续 / 商品不一致 / 动态太少 / 抖动或变形 / 节奏不合适。
+
+### B2 自适应候选（默认）
+
+| `candidate_mode` | 行为 |
+|------------------|------|
+| `adaptive`（默认） | 每关键 beat **1** 个候选 → 初审 → 不合格才条件重试 |
+| `stable_dual` | 关键 beat 直接 2 候选（须简报显式开启） |
+
+拒绝/失败候选仍计入首次达标成本；不得入正式时间线。
+
+### B3 抽帧与预审
+
+- 内部：用 `visual_qa` / `frame_sampler` 至少抽 **首、25%、50%、75%、尾**；异常点附近加帧。  
+- 用户默认展示：首/中/尾三张代表帧；有异常再展开。  
+- `review_mode=normal`：整片初稿 + AI 标问题段 → 只展开问题片段 → 修改清单确认。  
+- `review_mode=pro`：可走 `commercial-video-30s-review.md` 总分批/逐 beat。  
+流程中可提示：「需要更细逐段审查可切换专业模式」。
+
+### B4 动态指标（记录，非硬门槛）
+
+成片/规划须记录：
+
+- `true_video_seconds`：合格 AI 动态秒数  
+- `meaningful_composed_motion_seconds`：含 Remotion 有效运镜  
+
+实验目标带（写入 profile 的 `motion_target_band`）：
+
+- 30s → 约 8–12s AI  
+- 60s 成本对照 → 约 16–24s AI  
+- 60s 高动态实验 → 约 40–45s AI（勿与默认 ¥8 强绑）  
+
+**禁止**仅因 AI 秒数未达目标就宣称质量失败；硬门槛见 B7。
+
+### B5 初稿合成
+
+试片通过且素材齐后：按锁定时间线 Remotion 合成；文案/Logo 仅确定性层；失败动态回退已批准静帧/运镜。交付 `renders/` 初稿（如 `final.mp4` 或带版本名）。
+
+### B6 费用闸（强制）
+
+1. 权威账本 = `CostTracker`（USD：estimate → reserve → reconcile）。  
+2. 展示/熔断用 `produce_budget_cny_snapshot(project_id, spent_usd, reserved_usd, next_estimate_usd)`（CNY 展示层，**禁止**另起人民币平行账本）。  
+3. 「首次达标成本」= 首个可接受版本前所有成功/失败/被拒付费尝试。  
+4. `allow_paid_call=false` 时：**停烧**，向用户给出选项：回退确定性段 / 升实验档 / 降 AI 占比；禁止静默续烧。  
+5. 文案始终称 **实验 API 预算上限**，禁止称售价。
+
+### B7 最终裁定
+
+交付前输出：
+
+| 项 | 通过条件 |
+|----|----------|
+| H1 身份 | 相对锚点同一商品，无明显重构 |
+| H2 结构 | 无断裂/融化/换形 |
+| H3 播放与节奏 | 流畅可播；动态不单调（Remotion 有效运镜可计入观感） |
+
+附：动态秒数摘要 + 成本摘要（USD 账本 + CNY 展示）。  
+未通过 → **不得**宣称达标。
 
 ## Hard protocol（主流程）
 
@@ -129,21 +204,22 @@ metadata:
 produce_set_production_profile(
   project_id,
   production_tier="light|medium|heavy",
-  visual_source="",   # 可空：按锁定与档位默认
-  tts_source=""       # 旁白后置时可空；用户明确要旁白后再写 edge_tts|paid|…
+  visual_source="",
+  tts_source="",
+  api_budget_tier="standard",
+  budget_cny="8",
+  review_mode="normal",
+  candidate_mode="adaptive",
+  motion_target_band="60s_cost_ref"
 )
 ```
 
-默认映射（无更细锁定时）：
-
-| tier | visual_source | tts_source（可后置） |
-|------|---------------|----------------------|
-| light | template（或按 light_presentation） | （暂缓） |
-| medium | stock 或 user | （暂缓） |
-| heavy | paid_gen | （暂缓） |
+缺 `api_budget_tier`/`budget_cny` 的商品或重度简报：按默认 **standard / 8** 补写后再开烧，并口头告知用户「实验 API 预算默认 ¥8（非售价）」。  
+缺 `review_mode` → 默认 `normal`；缺 `candidate_mode` → 默认 `adaptive`。
 
 也可用 `produce_write_checkpoint` 的 `artifacts_json` 带同名字段。  
-用 `produce_read_state` → 顶层 `production_profile` 读取。
+用 `produce_read_state` → 顶层 `production_profile` 读取。  
+付费前调用 `produce_budget_cny_snapshot` 做熔断检查。
 
 ### 2. 脚本等人审关卡（共用）
 
@@ -193,7 +269,15 @@ produce_set_production_profile(
 失败不静默换源。无 Key 却锁了 stock → 回 03 改 `medium_source` 或补 Key。
 
 **重度：** 严格按 `video_channel` / `video_model` / `video_plan` 分段生成（Agnes / TokenHub / 已接线的 providers-video 等）。  
-产物写入 `asset_manifest`。本 Skill **编排与人审**；禁止换渠硬烧。重度商品须已满足 03 侧 `product-prompt-template` 闸门。
+产物写入 `asset_manifest`。本 Skill **编排与人审**；禁止换渠硬烧。重度商品须已满足 03 侧 `product-prompt-template` 闸门。  
+执行顺序（商品/重度）：
+
+```text
+开烧确认 → 试片关(B1) →（通过后）按 beat 自适应候选生成(B2)
+→ 抽帧预审(B3) → 费用闸贯穿(B6) → 初稿合成(B5) → 最终裁定(B7)
+```
+
+普通评审不强制用户确认每一个 beat；专业模式才启用完整分批逐段卡（见 `commercial-video-30s-review.md` §0）。
 
 ### 5–7. 字幕、BGM 与合成
 
@@ -240,7 +324,7 @@ produce_set_production_profile(
 执行顺序必须是：
 
 ```text
-素材复查 → 用户已确认的缺图补充 → 检查补充图片 → I2V/T2V → 拼接出片
+素材复查 → 用户已确认的缺图补充 → 检查补充图片 → 试片关 → I2V/T2V（自适应候选）→ 初稿合成 → 裁定
 ```
 
 没有商品主图、状态为“等待用户选择”、或用户尚未确认降级风险时，**禁止**在本 Skill 内自行猜测商品、静默改成概念片或直接烧视频；应退回 `openmontage-bootstrap-03-usercheck`。

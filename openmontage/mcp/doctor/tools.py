@@ -20,6 +20,23 @@ PRODUCTION_TIERS = frozenset({"light", "medium", "heavy"})
 VISUAL_SOURCES = frozenset({"template", "stock", "paid_gen"})
 TTS_SOURCES = frozenset({"edge_tts", "piper", "paid"})
 _PROFILE_KEYS = ("production_tier", "visual_source", "tts_source")
+_EXPERIMENT_PROFILE_KEYS = (
+    "api_budget_tier",
+    "budget_cny",
+    "budget_total_usd",
+    "usd_cny_rate",
+    "label_zh",
+    "pricing_note",
+    "review_mode",
+    "candidate_mode",
+    "motion_target_band",
+    "true_video_seconds_target_min",
+    "true_video_seconds_target_max",
+    "is_hard_gate",
+    "note_zh",
+    "style_label_zh",
+    "style_playbook",
+)
 _TIER_DEFAULTS: dict[str, dict[str, str]] = {
     "light": {"visual_source": "template", "tts_source": "edge_tts"},
     "medium": {"visual_source": "stock", "tts_source": "edge_tts"},
@@ -430,19 +447,39 @@ def _normalize_production_profile(
     }
 
 
+def _pick_experiment_fields(mapping: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(mapping, dict):
+        return {}
+    nested = mapping.get("production_profile")
+    source = nested if isinstance(nested, dict) else mapping
+    out: dict[str, Any] = {}
+    for key in _EXPERIMENT_PROFILE_KEYS:
+        if key not in source:
+            continue
+        value = source.get(key)
+        if value is None:
+            continue
+        if isinstance(value, str) and not value.strip():
+            continue
+        out[key] = value
+    return out
+
+
 def resolve_production_profile(
     marker: dict[str, Any] | None,
     latest_checkpoint: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Prefer project.json profile; fall back to latest checkpoint artifacts."""
     picked = _pick_profile_fields(marker)
+    experiment = _pick_experiment_fields(marker)
     if "production_tier" not in picked and isinstance(latest_checkpoint, dict):
         artifacts = latest_checkpoint.get("artifacts")
         picked = {**_pick_profile_fields(artifacts), **picked}
+        experiment = {**_pick_experiment_fields(artifacts), **experiment}
     if "production_tier" not in picked:
         return None
     try:
-        return _normalize_production_profile(
+        profile = _normalize_production_profile(
             picked.get("production_tier", ""),
             picked.get("visual_source", ""),
             picked.get("tts_source", ""),
@@ -454,10 +491,14 @@ def resolve_production_profile(
             "visual_source": picked.get("visual_source"),
             "tts_source": picked.get("tts_source"),
             "valid": False,
+            **experiment,
         }
+    if experiment:
+        profile = {**profile, **experiment}
+    return profile
 
 
-def _sync_production_profile_to_marker(project_id: str, fields: dict[str, Any]) -> dict[str, str] | None:
+def _sync_production_profile_to_marker(project_id: str, fields: dict[str, Any]) -> dict[str, Any] | None:
     picked = _pick_profile_fields(fields)
     if "production_tier" not in picked:
         return None
@@ -466,9 +507,30 @@ def _sync_production_profile_to_marker(project_id: str, fields: dict[str, Any]) 
         picked.get("visual_source", ""),
         picked.get("tts_source", ""),
     )
+    experiment = _pick_experiment_fields(fields)
+    if experiment:
+        _ensure_repo_on_path()
+        from lib.experiment_budget import merge_experiment_fields_into_profile
+
+        profile = merge_experiment_fields_into_profile(
+            profile,
+            api_budget_tier=str(experiment.get("api_budget_tier") or "") or None,
+            budget_cny=experiment.get("budget_cny"),
+            review_mode=str(experiment.get("review_mode") or "") or None,
+            candidate_mode=str(experiment.get("candidate_mode") or "") or None,
+            motion_target_band=str(experiment.get("motion_target_band") or "") or None,
+            style_label_zh=str(experiment.get("style_label_zh") or "") or None,
+            style_playbook=str(experiment.get("style_playbook") or "") or None,
+        )
     marker = _read_marker(project_id)
     if not marker.get("project_id"):
         raise DoctorError(f"Project not found: {project_id}", code="not_found")
+    # Preserve previously stored experiment fields when checkpoint omits them.
+    existing = marker.get("production_profile")
+    if isinstance(existing, dict):
+        for key in _EXPERIMENT_PROFILE_KEYS:
+            if key not in profile and key in existing:
+                profile[key] = existing[key]
     marker["production_profile"] = profile
     _write_marker(project_id, marker)
     return profile
@@ -479,16 +541,63 @@ def run_set_production_profile(
     production_tier: str,
     visual_source: str = "",
     tts_source: str = "",
+    api_budget_tier: str = "",
+    budget_cny: str = "",
+    review_mode: str = "",
+    candidate_mode: str = "",
+    motion_target_band: str = "",
+    style_label_zh: str = "",
+    style_playbook: str = "",
+    usd_cny_rate: str = "",
 ) -> dict[str, Any]:
-    """Persist light/medium/heavy profile onto project.json (requires P1 writes)."""
+    """Persist light/medium/heavy profile onto project.json (requires P1 writes).
+
+    Optional experiment fields (api budget / review mode / candidate mode) are
+    merged into the same production_profile object. They are experimental API
+    budget caps, not selling prices.
+    """
     require_p1_writes()
     pdir = project_dir(project_id)
     if not pdir.exists():
         raise DoctorError(f"Project not found: {project_id}", code="not_found")
-    profile = _normalize_production_profile(production_tier, visual_source, tts_source)
+    profile: dict[str, Any] = _normalize_production_profile(
+        production_tier, visual_source, tts_source
+    )
+    wants_experiment = any(
+        [
+            str(api_budget_tier).strip(),
+            str(budget_cny).strip(),
+            str(review_mode).strip(),
+            str(candidate_mode).strip(),
+            str(motion_target_band).strip(),
+            str(style_label_zh).strip(),
+            str(style_playbook).strip(),
+            str(usd_cny_rate).strip(),
+        ]
+    )
     marker = _read_marker(project_id)
     if not marker:
         raise DoctorError(f"Project marker missing for: {project_id}", code="not_found")
+    existing = marker.get("production_profile") if isinstance(marker.get("production_profile"), dict) else {}
+    has_existing_experiment = any(k in existing for k in ("api_budget_tier", "budget_cny", "review_mode"))
+    if wants_experiment or has_existing_experiment:
+        _ensure_repo_on_path()
+        from lib.experiment_budget import DEFAULT_USD_CNY, merge_experiment_fields_into_profile
+
+        rate = float(usd_cny_rate) if str(usd_cny_rate).strip() else float(
+            existing.get("usd_cny_rate") or DEFAULT_USD_CNY
+        )
+        profile = merge_experiment_fields_into_profile(
+            profile,
+            api_budget_tier=(api_budget_tier or existing.get("api_budget_tier") or "standard"),
+            budget_cny=budget_cny or existing.get("budget_cny"),
+            review_mode=review_mode or existing.get("review_mode") or "normal",
+            candidate_mode=candidate_mode or existing.get("candidate_mode") or "adaptive",
+            motion_target_band=motion_target_band or existing.get("motion_target_band"),
+            style_label_zh=style_label_zh or existing.get("style_label_zh"),
+            style_playbook=style_playbook or existing.get("style_playbook"),
+            usd_cny_rate=rate,
+        )
     marker["production_profile"] = profile
     path = _write_marker(project_id, marker)
     return {

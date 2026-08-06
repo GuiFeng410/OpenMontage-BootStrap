@@ -308,7 +308,12 @@ class VideoSelector(BaseTool):
         if adapted.get("operation") == "image_to_video" and adapted.get("reference_image_path"):
             tool_props = getattr(tool, "input_schema", {}).get("properties", {})
             # If the provider uses image_url (not reference_image_path), upload and convert
-            if "image_url" in tool_props and "image_url" not in adapted:
+            if (
+                "image_url" in tool_props
+                and "image_url" not in adapted
+                and "reference_image_path" not in tool_props
+                and "image_path" not in tool_props
+            ):
                 try:
                     from tools.video._shared import upload_image_fal
                     adapted["image_url"] = upload_image_fal(adapted["reference_image_path"])

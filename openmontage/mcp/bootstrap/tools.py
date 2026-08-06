@@ -76,6 +76,7 @@ def list_bootstrap_tools() -> dict[str, Any]:
         "produce_minimal": [
             "produce_init_project",
             "produce_set_production_profile",
+            "produce_budget_cny_snapshot",
             "produce_write_checkpoint",
             "produce_approve_checkpoint",
             "produce_read_state",
@@ -740,13 +741,77 @@ def produce_set_production_profile(
     production_tier: str,
     visual_source: str = "",
     tts_source: str = "",
+    api_budget_tier: str = "",
+    budget_cny: str = "",
+    review_mode: str = "",
+    candidate_mode: str = "",
+    motion_target_band: str = "",
+    style_label_zh: str = "",
+    style_playbook: str = "",
+    usd_cny_rate: str = "",
 ) -> dict[str, Any]:
     return doctor_tools.run_set_production_profile(
         project_id,
         production_tier,
         visual_source,
         tts_source,
+        api_budget_tier,
+        budget_cny,
+        review_mode,
+        candidate_mode,
+        motion_target_band,
+        style_label_zh,
+        style_playbook,
+        usd_cny_rate,
     )
+
+
+def produce_budget_cny_snapshot(
+    project_id: str,
+    spent_usd: float = 0.0,
+    reserved_usd: float = 0.0,
+    next_estimate_usd: float = 0.0,
+) -> dict[str, Any]:
+    """CNY display + gate check over USD CostTracker numbers (no parallel ledger)."""
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from lib.experiment_budget import (
+        DEFAULT_USD_CNY,
+        cny_display_snapshot,
+        resolve_experiment_budget,
+        would_exceed_budget_cny,
+    )
+
+    state = doctor_tools.run_get_project_state(project_id)
+    profile = state.get("production_profile") if isinstance(state.get("production_profile"), dict) else {}
+    budget = resolve_experiment_budget(
+        profile.get("api_budget_tier"),
+        profile.get("budget_cny"),
+        usd_cny_rate=float(profile.get("usd_cny_rate") or DEFAULT_USD_CNY),
+    )
+    snap = cny_display_snapshot(
+        {
+            "total_spent_usd": spent_usd,
+            "total_reserved_usd": reserved_usd,
+            "budget_remaining_usd": max(0.0, budget.budget_total_usd - float(spent_usd) - float(reserved_usd)),
+        },
+        usd_cny_rate=budget.usd_cny_rate,
+        budget_cny=budget.budget_cny,
+    )
+    exceeded, detail = would_exceed_budget_cny(
+        spent_usd=float(spent_usd),
+        reserved_usd=float(reserved_usd),
+        next_estimate_usd=float(next_estimate_usd),
+        budget_cny=budget.budget_cny,
+        usd_cny_rate=budget.usd_cny_rate,
+    )
+    return {
+        "project_id": project_id,
+        "experiment_budget": budget.to_dict(),
+        "cny_snapshot": snap,
+        "gate": detail,
+        "allow_paid_call": not exceeded,
+    }
 
 
 def produce_write_checkpoint(
