@@ -33,11 +33,14 @@ metadata:
 
 # 长商品视频执行引用
 
-当当前项目是商品视频且 `duration_seconds >= 30` 时，执行过程中必须遵守：
+当当前项目是商品视频且 `duration_seconds >= 15` 时，执行过程中必须遵守：
 
 `openmontage/skills/openmontage-bootstrap-03-usercheck/references/commercial-video-30s-review.md`
 
-该规则要求按 3-4 个 beat 分批展示预览，AI 先做初审，用户反馈后先生成修改清单，并在用户回复 `1` 同意后才执行修改。默认只修改被指出的 beat；衔接问题才扩大到相邻片段。所有批次确认后，才能进行最终 Remotion 时间线合成。
+- **普通**：方案→试片→初稿/问题片段；不强制逐 beat 分批卡。  
+- **专业**：按 3–4 个 beat 分批展示预览，AI 先做初审，用户反馈后先生成修改清单，并在用户回复 `1` 同意后才执行修改。默认只修改被指出的 beat；衔接问题才扩大到相邻片段。所有批次确认后，才能进行最终 Remotion 时间线合成。  
+- **比例**：遵守简报 `motion_mix` 作为推荐目标（软约束）；审查改方式后允许偏离。  
+- **失败**：AI 段重试用尽后再问用户，说明可能原因（网络不稳、余额不足等），禁止未询问就静默整段改运镜。
 
 本 Skill 不得在执行中自行改变已锁定的 provider、模型、视频计划或 render runtime。若用户改变生产方向，应返回 `03-usercheck` 重新确认。
 
@@ -72,6 +75,8 @@ metadata:
 | `ai_video=disabled` 或不存在 | **禁止**调用付费 AI 视频生成 |
 | `ai_video=enabled` + `video_channel` / `video_model` | **只使用**该渠道与模型；禁止改用其它视频供应商 |
 | `video_plan`（表 3） | 按已确认分段的画面/文案要点生成与拼接；不得擅自改段数或重写规划而不再问用户。商品片：若 `gap_fill=i2i` 且补图未完成 → **先补图再 I2V**；某段无 `ref_image` 或缺口未关闭 → **不烧该段**，回 usercheck。重点段优先重试与打磨（见 `03-usercheck/references/product-prompt-template.md`） |
+| `motion_mix` | 按推荐目标**大概**安排整片 AI 生成总秒数（±约 15%）；不按段数硬凑。审查中用户改 beat 方式后更新计划，**允许终稿偏离**；偏离只告知，不否决交付 |
+| `budget_cny` | 实验 API 上限（¥1/3/5/8/12）。单笔 beat 计划费用 ≥¥5 → **提示即可**（不论累计）。触顶停烧仍走 B6 |
 
 **TokenHub（`video_channel=tokenhub`）：** 走 `tools._tokenhub.generate_video`（`hy-video-1.5`）。约 720p、默认并发 1、**无自定义时长**——长片用多段 I2V/T2V 再 ffmpeg 拼接。本地参考图必须 `image.base64`（纯 base64）；公网图才用 `image.url`。YT 系列仍 planned，禁止当可烧。试片脚本：`python scripts/_run_tokenhub_shop_wear_10s.py`（已有成片默认 skip）。
 
@@ -105,8 +110,8 @@ metadata:
 进入本 Skill 时：
 
 1. 若无 03 锁定 → 交接 03。  
-2. 若有锁定 → **一句复查**，必须点出：档位 / 渠模（重度）/ **实验 API 预算（¥5|8|12，非售价）** / 段数 / **评审模式（普通|专业）** / 候选模式（自适应|稳定双候选）。例如：  
-   `当前锁定：重度 / Agnes / 实验预算¥8（非售价）/ 普通评审 / 自适应候选 / 6 段 video_plan，确认开始出片？`  
+2. 若有锁定 → **一句复查**，必须点出：档位 / 渠模（重度）/ **实验 API 预算（¥1|3|5|8|12，非售价）** / **画面比例 motion_mix** / 段数 / **评审模式（普通|专业）** / 候选模式（自适应|稳定双候选）。例如：  
+   `当前锁定：重度 / Agnes / 实验预算¥8（非售价）/ 比例1:1（推荐）/ 普通评审 / 自适应候选 / 6 段 video_plan，确认开始出片？`  
 3. **不要**再完整展示轻/中/重选型大表。  
 4. 用户未确认「开始」前：**禁止**任何付费 API。
 
@@ -138,17 +143,18 @@ metadata:
 
 | `candidate_mode` | 行为 |
 |------------------|------|
-| `adaptive`（默认） | 每关键 beat **1** 个候选 → 初审 → 不合格才条件重试 |
+| `adaptive`（默认） | 每关键 beat **1** 个候选 → 初审 → 不合格才条件重试（合计约 2 次） |
 | `stable_dual` | 关键 beat 直接 2 候选（须简报显式开启） |
 
-拒绝/失败候选仍计入首次达标成本；不得入正式时间线。
+拒绝/失败候选仍计入首次达标成本；不得入正式时间线。  
+**重试用尽**仍失败：须询问用户并说明可能原因（网络不稳、余额不足、限流、一致性未过等）；选项见 `commercial-video-30s-review.md` §11。**禁止**未询问就静默改运镜。
 
 ### B3 抽帧与预审
 
 - 内部：用 `visual_qa` / `frame_sampler` 至少抽 **首、25%、50%、75%、尾**；异常点附近加帧。  
 - 用户默认展示：首/中/尾三张代表帧；有异常再展开。  
 - `review_mode=normal`：整片初稿 + AI 标问题段 → 只展开问题片段 → 修改清单确认。  
-- `review_mode=pro`：可走 `commercial-video-30s-review.md` 总分批/逐 beat。  
+- `review_mode=pro`：可走 `commercial-video-30s-review.md` 总分批/逐 beat（≥15s 可选）。  
 流程中可提示：「需要更细逐段审查可切换专业模式」。
 
 ### B4 动态指标（记录，非硬门槛）
@@ -157,18 +163,15 @@ metadata:
 
 - `true_video_seconds`：合格 AI 动态秒数  
 - `meaningful_composed_motion_seconds`：含 Remotion 有效运镜  
+- `motion_mix` / 相对推荐的偏离说明（若有）
 
-实验目标带（写入 profile 的 `motion_target_band`）：
+有 `motion_mix` 时：以 mix 推导的 AI 秒数带为主（软）；`motion_target_band` 可作脚注参考。  
 
-- 30s → 约 8–12s AI  
-- 60s 成本对照 → 约 16–24s AI  
-- 60s 高动态实验 → 约 40–45s AI（勿与默认 ¥8 强绑）  
-
-**禁止**仅因 AI 秒数未达目标就宣称质量失败；硬门槛见 B7。
+**禁止**仅因 AI 秒数未达推荐目标就宣称质量失败；硬门槛见 B7。
 
 ### B5 初稿合成
 
-试片通过且素材齐后：按锁定时间线 Remotion 合成；文案/Logo 仅确定性层；失败动态回退已批准静帧/运镜。交付 `renders/` 初稿（如 `final.mp4` 或带版本名）。
+试片通过且素材齐后：按锁定时间线 Remotion 合成；文案/Logo 仅确定性层；仅在用户确认回退选项后，失败动态才改已批准静帧/运镜。交付 `renders/` 初稿（如 `final.mp4` 或带版本名）。
 
 ### B6 费用闸（强制）
 
@@ -176,7 +179,8 @@ metadata:
 2. 展示/熔断用 `produce_budget_cny_snapshot(project_id, spent_usd, reserved_usd, next_estimate_usd)`（CNY 展示层，**禁止**另起人民币平行账本）。  
 3. 「首次达标成本」= 首个可接受版本前所有成功/失败/被拒付费尝试。  
 4. `allow_paid_call=false` 时：**停烧**，向用户给出选项：回退确定性段 / 升实验档 / 降 AI 占比；禁止静默续烧。  
-5. 文案始终称 **实验 API 预算上限**，禁止称售价。
+5. **单笔计划**（某个 beat）预计费用 **≥ ¥5**：向用户**提示即可**（看 snapshot 的 `single_call_tip`），**不论累计**；不因此单独强制停烧。  
+6. 文案始终称 **实验 API 预算上限**，禁止称售价。五档：¥1 / ¥3 / ¥5 / ¥8 / ¥12。
 
 ### B7 最终裁定
 
@@ -210,12 +214,16 @@ produce_set_production_profile(
   budget_cny="8",
   review_mode="normal",
   candidate_mode="adaptive",
-  motion_target_band="60s_cost_ref"
+  motion_target_band="60s_cost_ref",
+  motion_mix="1:1",
+  motion_mix_source="default_recommend",
+  duration_seconds="30"
 )
 ```
 
 缺 `api_budget_tier`/`budget_cny` 的商品或重度简报：按默认 **standard / 8** 补写后再开烧，并口头告知用户「实验 API 预算默认 ¥8（非售价）」。  
-缺 `review_mode` → 默认 `normal`；缺 `candidate_mode` → 默认 `adaptive`。
+缺 `review_mode` → 默认 `normal`；缺 `candidate_mode` → 默认 `adaptive`。  
+缺 `motion_mix` 且本任务应有比例卡 → 默认 `1:1` / `default_recommend`，并在复查中念出。
 
 也可用 `produce_write_checkpoint` 的 `artifacts_json` 带同名字段。  
 用 `produce_read_state` → 顶层 `production_profile` 读取。  

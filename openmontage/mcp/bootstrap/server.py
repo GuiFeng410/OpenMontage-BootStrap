@@ -159,11 +159,14 @@ def produce_set_production_profile(
     review_mode: str = "",
     candidate_mode: str = "",
     motion_target_band: str = "",
+    motion_mix: str = "",
+    motion_mix_source: str = "",
     style_label_zh: str = "",
     style_playbook: str = "",
     usd_cny_rate: str = "",
+    duration_seconds: str = "",
 ) -> dict[str, Any]:
-    """Persist tier + optional experiment API budget / review fields on project.json."""
+    """Persist tier + optional experiment API budget / review / motion_mix fields."""
     return _wrap(
         T.produce_set_production_profile,
         project_id,
@@ -175,9 +178,12 @@ def produce_set_production_profile(
         review_mode,
         candidate_mode,
         motion_target_band,
+        motion_mix,
+        motion_mix_source,
         style_label_zh,
         style_playbook,
         usd_cny_rate,
+        duration_seconds,
     )
 
 

@@ -27,6 +27,7 @@ _EXPERIMENT_PROFILE_KEYS = (
     "usd_cny_rate",
     "label_zh",
     "pricing_note",
+    "needs_choice_confirm",
     "review_mode",
     "candidate_mode",
     "motion_target_band",
@@ -34,6 +35,20 @@ _EXPERIMENT_PROFILE_KEYS = (
     "true_video_seconds_target_max",
     "is_hard_gate",
     "note_zh",
+    "motion_mix",
+    "motion_mix_source",
+    "ai_fraction",
+    "ai_share_pct",
+    "remotion_share_pct",
+    "motion_mix_label_zh",
+    "warn_cost",
+    "warn_identity",
+    "warn_slideshow",
+    "is_default_mix",
+    "mix_is_hard_gate",
+    "motion_mix_note_zh",
+    "motion_mix_plan",
+    "duration_seconds",
     "style_label_zh",
     "style_playbook",
 )
@@ -519,6 +534,9 @@ def _sync_production_profile_to_marker(project_id: str, fields: dict[str, Any]) 
             review_mode=str(experiment.get("review_mode") or "") or None,
             candidate_mode=str(experiment.get("candidate_mode") or "") or None,
             motion_target_band=str(experiment.get("motion_target_band") or "") or None,
+            motion_mix=str(experiment.get("motion_mix") or "") or None,
+            motion_mix_source=str(experiment.get("motion_mix_source") or "") or None,
+            duration_seconds=experiment.get("duration_seconds"),
             style_label_zh=str(experiment.get("style_label_zh") or "") or None,
             style_playbook=str(experiment.get("style_playbook") or "") or None,
         )
@@ -546,15 +564,18 @@ def run_set_production_profile(
     review_mode: str = "",
     candidate_mode: str = "",
     motion_target_band: str = "",
+    motion_mix: str = "",
+    motion_mix_source: str = "",
     style_label_zh: str = "",
     style_playbook: str = "",
     usd_cny_rate: str = "",
+    duration_seconds: str = "",
 ) -> dict[str, Any]:
     """Persist light/medium/heavy profile onto project.json (requires P1 writes).
 
-    Optional experiment fields (api budget / review mode / candidate mode) are
-    merged into the same production_profile object. They are experimental API
-    budget caps, not selling prices.
+    Optional experiment fields (api budget / review mode / candidate mode /
+    motion_mix) are merged into the same production_profile object. They are
+    experimental API budget caps, not selling prices.
     """
     require_p1_writes()
     pdir = project_dir(project_id)
@@ -570,16 +591,21 @@ def run_set_production_profile(
             str(review_mode).strip(),
             str(candidate_mode).strip(),
             str(motion_target_band).strip(),
+            str(motion_mix).strip(),
+            str(motion_mix_source).strip(),
             str(style_label_zh).strip(),
             str(style_playbook).strip(),
             str(usd_cny_rate).strip(),
+            str(duration_seconds).strip(),
         ]
     )
     marker = _read_marker(project_id)
     if not marker:
         raise DoctorError(f"Project marker missing for: {project_id}", code="not_found")
     existing = marker.get("production_profile") if isinstance(marker.get("production_profile"), dict) else {}
-    has_existing_experiment = any(k in existing for k in ("api_budget_tier", "budget_cny", "review_mode"))
+    has_existing_experiment = any(
+        k in existing for k in ("api_budget_tier", "budget_cny", "review_mode", "motion_mix")
+    )
     if wants_experiment or has_existing_experiment:
         _ensure_repo_on_path()
         from lib.experiment_budget import DEFAULT_USD_CNY, merge_experiment_fields_into_profile
@@ -587,6 +613,11 @@ def run_set_production_profile(
         rate = float(usd_cny_rate) if str(usd_cny_rate).strip() else float(
             existing.get("usd_cny_rate") or DEFAULT_USD_CNY
         )
+        dur_raw = str(duration_seconds).strip() or existing.get("duration_seconds")
+        try:
+            duration_i = int(float(dur_raw)) if dur_raw not in (None, "") else None
+        except (TypeError, ValueError):
+            duration_i = None
         profile = merge_experiment_fields_into_profile(
             profile,
             api_budget_tier=(api_budget_tier or existing.get("api_budget_tier") or "standard"),
@@ -594,10 +625,15 @@ def run_set_production_profile(
             review_mode=review_mode or existing.get("review_mode") or "normal",
             candidate_mode=candidate_mode or existing.get("candidate_mode") or "adaptive",
             motion_target_band=motion_target_band or existing.get("motion_target_band"),
+            motion_mix=motion_mix or existing.get("motion_mix") or "1:1",
+            motion_mix_source=motion_mix_source or existing.get("motion_mix_source") or "",
+            duration_seconds=duration_i,
             style_label_zh=style_label_zh or existing.get("style_label_zh"),
             style_playbook=style_playbook or existing.get("style_playbook"),
             usd_cny_rate=rate,
         )
+        if duration_i is not None:
+            profile["duration_seconds"] = duration_i
     marker["production_profile"] = profile
     path = _write_marker(project_id, marker)
     return {

@@ -618,6 +618,120 @@ def phase_batch2(ct: CostTracker) -> Path:
     return out
 
 
+def phase_batch3(ct: CostTracker) -> Path:
+    """Batch 03: 00:31-00:60 — scene still + return-anchor Agnes + on-body + hold."""
+    overview_path = ARTIFACTS / "review_overview.json"
+    overview = json.loads(overview_path.read_text(encoding="utf-8")) if overview_path.exists() else {}
+    for b in overview.get("batches", []):
+        if b.get("id") == "batch_02":
+            b["status"] = "approved"
+            b["approved_at"] = utc_now()
+        if b.get("id") == "batch_03":
+            b["status"] = "in_review"
+
+    for row in overview.get("overview", []):
+        if row.get("beat") in {"beat_04", "beat_05", "beat_06"}:
+            row["status"] = "可以"
+
+    # beat_07 — lifestyle/scene, gentle zoom (batch2 used pan)
+    still07 = make_still_clip(IMAGES / "07.png", STILLS / "b07_07_7s_zoom.mp4", 7.0, mode="zoom")
+
+    # beat_08 — return to identity anchor with micro push
+    a08 = generate_agnes(
+        ct,
+        beat_id="beat_08",
+        image=IMAGES / "05.png",
+        out=VIDEO / "beat08_agnes.mp4",
+        duration=5.0,
+        prompt=PROMPT_MICRO,
+    )
+    a08_norm = normalize_clip(Path(a08["path"]), VIDEO / "beat08_agnes_norm.mp4")
+
+    # beat_09 — on_body atmosphere only (pinkish); slow pan, not identity geometry
+    still09 = make_still_clip(IMAGES / "01.png", STILLS / "b09_01_9s_pan.mp4", 9.0, mode="pan")
+
+    # beat_10 — hero hold / close
+    still10 = make_still_clip(IMAGES / "05.png", STILLS / "b10_05_8s_hold.mp4", 8.0, mode="hold")
+
+    out = RENDERS / "batch03_31_60.mp4"
+    concat([still07, a08_norm, still09, still10], out)
+
+    report = {
+        "batch_id": "batch_03",
+        "time_span": "00:31-00:60",
+        "path": str(out),
+        "duration_probe": probe_duration(out),
+        "beats": [
+            {
+                "beat": "beat_07",
+                "time": "00:31-00:38",
+                "method": "图片运镜（确定性微推）",
+                "angle_use": "场景/花艺对照",
+                "ref": "07.png",
+                "path": str(still07),
+                "status": "待过目",
+            },
+            {
+                "beat": "beat_08",
+                "time": "00:38-00:43",
+                "method": "视频生成（Agnes）",
+                "angle_use": "回身份锚点特写",
+                "prompt_style": "micro_push",
+                "ref": "05.png",
+                "path": str(a08_norm),
+                "raw_path": a08.get("path"),
+                "status": "待过目",
+                "actual_usd": a08.get("actual_usd"),
+            },
+            {
+                "beat": "beat_09",
+                "time": "00:43-00:52",
+                "method": "图片运镜（确定性微横移）",
+                "angle_use": "佩戴氛围（偏粉，不作身份几何）",
+                "ref": "01.png",
+                "path": str(still09),
+                "status": "待过目",
+            },
+            {
+                "beat": "beat_10",
+                "time": "00:52-00:60",
+                "method": "图片持镜",
+                "angle_use": "正面收束",
+                "ref": "05.png",
+                "path": str(still10),
+                "status": "待过目",
+            },
+        ],
+        "cost_snapshot": cny_display_snapshot(
+            ct.cost_snapshot(),
+            usd_cny_rate=DEFAULT_USD_CNY,
+            budget_cny=8,
+        ),
+        "created_at": utc_now(),
+        "note_zh": "第3批待用户确认；确认后才整片终合成",
+    }
+    (ARTIFACTS / "batch03_review.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+
+    for row in overview.get("overview", []):
+        if row.get("beat") == "beat_07":
+            row["asset"] = "b07_07_7s_zoom.mp4"
+            row["status"] = "待过目"
+        if row.get("beat") == "beat_08":
+            row["asset"] = "beat08_agnes_norm.mp4"
+            row["status"] = "待过目"
+        if row.get("beat") == "beat_09":
+            row["asset"] = "b09_01_9s_pan.mp4"
+            row["status"] = "待过目"
+        if row.get("beat") == "beat_10":
+            row["asset"] = "b10_05_8s_hold.mp4"
+            row["status"] = "待过目"
+    overview_path.write_text(json.dumps(overview, ensure_ascii=False, indent=2), encoding="utf-8")
+    print("BATCH3_READY", out)
+    return out
+
+
 def phase_full(ct: CostTracker, *, continue_without_human: bool) -> Path:
     sample_meta = json.loads((ARTIFACTS / "sample_reel.json").read_text(encoding="utf-8"))
     if not sample_meta.get("approved") and not continue_without_human:
@@ -700,6 +814,7 @@ def main() -> None:
     parser.add_argument("--setup-only", action="store_true")
     parser.add_argument("--sample", action="store_true", help="run sample reel only")
     parser.add_argument("--batch2", action="store_true", help="generate batch 02 (00:14-00:31) for review")
+    parser.add_argument("--batch3", action="store_true", help="generate batch 03 (00:31-00:60) for review")
     parser.add_argument("--approve-sample", action="store_true")
     parser.add_argument("--full", action="store_true", help="run full 60s after sample approved")
     parser.add_argument(
@@ -720,6 +835,10 @@ def main() -> None:
 
     if args.batch2:
         phase_batch2(ct)
+        return
+
+    if args.batch3:
+        phase_batch3(ct)
         return
 
     if args.sample or (not args.full and not args.continue_full and not args.approve_sample):

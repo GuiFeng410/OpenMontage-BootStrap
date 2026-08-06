@@ -23,15 +23,15 @@ metadata:
     emoji: "📋"
 ---
 
-# 30 秒以上商品视频路由
+# 15 秒及以上商品视频路由
 
-当视频用途属于商品宣传、电商商品展示或佩戴演示，且 `duration_seconds >= 30` 时，必须读取并执行：
+当视频用途属于商品宣传、电商商品展示或佩戴演示，且 `duration_seconds >= 15` 时，必须读取并执行：
 
 `references/commercial-video-30s-review.md`
 
-该参考文档规定：默认**普通评审**（方案→试片→初稿/问题片段）；**专业模式**才强制总览表与 3–4 beat 分批逐段卡。另含三状态、修改清单确认门和 Remotion 回退规则。
+该参考文档规定：默认**普通评审**（方案→试片→初稿/问题片段）；**专业模式**才强制总览表与 3–4 beat 分批逐段卡（≥15s **交给用户选择**，不强制专业）。另含画面构成比例（运镜:AI，软约束）、三状态、修改清单确认门，以及 AI 段重试用尽后再询问用户的回退规则。
 
-本路由不替代当前 03 -> 04 主链，也不改变已经确认的 provider、模型或 render runtime。它只增加长商品视频的展示、暂停、修改和用户确认方式。
+本路由不替代当前 03 -> 04 主链，也不改变已经确认的 provider、模型或 render runtime。它只增加商品视频的展示、暂停、修改和用户确认方式。
 
 判断条件不明确时先询问用户，不要仅根据时长自动认定为商品视频。
 
@@ -147,9 +147,9 @@ metadata:
 |----|------|------|
 | 主题 | （已有则照写；否则先给 2–3 个候选再填入选定） | 默认可改 |
 | 档位 | 轻度 / 中度 / 重度（见下方说明表） | **必选** |
-| 时长 | 默认 30 秒（竖屏短视频可建议 15–30；商品试片常 10/30） | 默认可改 |
-| 实验 API 预算 | 经济 ¥5 / **标准 ¥8（默认）** / 充裕 ¥12 | 重度或商品片**建议确认**；非售价 |
-| 评审模式 | **普通（默认）** / 专业 | 默认可改；可脚注提示切换 |
+| 时长 | 默认 30 秒（竖屏短视频可建议 15–30；商品试片常 10/30） | 默认可改；**≥15s** 可走专业分批 |
+| 实验 API 预算 | 微额 ¥1 / 轻量 ¥3 / 经济 ¥5 / **标准 ¥8（默认）** / 充裕 ¥12 | 重度或商品片出示；**¥8 及以上须主动询问确认**；&lt;¥8 仅提示；非售价 |
+| 评审模式 | **普通（默认）** / 专业 | 默认可改；≥15s 可切专业分批 |
 
 **档位说明（出示给用户）**
 
@@ -164,15 +164,15 @@ metadata:
 1. 第一次使用建议先生成 **10s–30s** 以内；熟悉后再做 45s–60s；**不建议超过 60s**（越长越慢，也更易报错）。  
 2. 本轮主流程**先定视频**；旁白与 BGM **可以后置**。旁白**默认推荐** Edge-TTS 男声（`zh-CN-YunyangNeural`），不在本表强制选定。  
 3. 付费视频渠道/模型**仅在选重度之后**才出示。  
-4. **实验 API 预算**（¥5/¥8/¥12）= 单次任务 API 生成预算上限，**不是售价/套餐价**；默认标准 ¥8。首次达标成本含被拒候选。  
-5. **普通评审**：方案 → 试片 → 初稿/问题片段。需要更细的逐 beat 审查可切 **专业模式**（本表可选，或稍后说「切专业」）。  
-6. 确认本表后，将**另开消息**出示表 2。
+4. **实验 API 预算**（¥1/¥3/¥5/¥8/¥12）= 单次任务 API 生成预算上限，**不是售价/套餐价**；默认标准 **¥8**。选 **¥8 或 ¥12** 时必须**主动询问**用户确认；选 ¥1/¥3/¥5 时口头提示即可。首次达标成本含被拒候选。  
+5. **普通评审**：方案 → 试片 → 初稿/问题片段。需要更细的逐 beat 审查可切 **专业模式**（≥15s 本表可选，或稍后说「切专业」）。普通模式也要把后续推荐配置（含画面比例）说清楚。  
+6. 确认本表后，将**另开消息**出示表 2；重度锁渠模后、表 3 前另出**画面构成比例**卡（若适用）。
 
 **首句话术（必用）：**
 
 > 先看表 1：确认主题与档位（轻度 / 中度 / 重度）。  
 > 首次建议时长 10–30s。旁白默认推荐 Edge-TTS，可后置；BGM 稍后。选重度后才会出现付费视频渠道选项。  
-> 商品/重度建议一并确认实验 API 预算（默认 ¥8，非售价）与评审模式（默认普通）。
+> 商品/重度请确认实验 API 预算（默认 ¥8，非售价；选 ¥8/¥12 我会再跟你确认一次）与评审模式（默认普通；≥15s 可改专业分批）。
 
 主题没有时：在贴表前或表内注明 2–3 个候选，等用户选后再定「提案」。
 
@@ -251,6 +251,25 @@ eRouter    │ （视频）        │ ❌ 未实现 │ 仅探讨，勿当可�
 写入：`ai_video=enabled`；`video_channel`；`video_model`。  
 非重度：`ai_video=disabled`；渠/模为空。
 
+#### 3.4 画面构成比例（运镜:AI · ≥15s 且可烧 AI 时）
+
+**触发：** `duration_seconds >= 15`，且（重度已锁视频 Key / `ai_video=enabled`，或商品片明确要用付费视频生成）。  
+**时机：** 表 2.3（或等价渠模）确认之后、**表 3 之前**单独一条消息。普通与专业都要出示；普通默认预勾推荐项，且必须把配置念清楚。
+
+| 选项 | 运镜:AI生成 | AI生成视频约占 | 说明 |
+|------|-------------|---------------|------|
+| A | **1:1** | ~50% | **推荐（普通默认）** |
+| B | 1:2 | ~67% | 更动感；**成本可能上涨**；物品/人物不一致风险升高 |
+| C | 0:1 | ~100% | 几乎全模型；强提示成本与一致性风险 |
+| D | 2:1 | ~33% | **（更省可选；可能有幻灯片感）** |
+
+**规则：**
+
+1. 比例是**推荐目标**，按整片 **AI 模型生成时长合计** 大概符合即可（约 ±10%–15%）；beat 怎么切可自由安排，**不按段数硬凑**。  
+2. 审查中用户可把某段从运镜改成 AI（或反过来）；**终稿不强制贴死**原比例；偏离时口头告知观感/费用/一致性即可。  
+3. 无可用视频 Key：不出 B/C，或标灰并说明「未配置视频 Key，无法提高 AI 占比」。  
+4. 写入：`motion_mix`（`1:1`/`1:2`/`0:1`/`2:1`）、`motion_mix_source`（`default_recommend`|`user_selected`）。普通未改选 → `1:1` + `default_recommend`。
+
 ### 4. 消息 3 — 表 3（分段视频规划 · 三档都出）
 
 #### 4.1 触发
@@ -286,8 +305,11 @@ eRouter    │ （视频）        │ ❌ 未实现 │ 仅探讨，勿当可�
 2. 可只改某一段后要求重贴。  
 3. **旁白与 BGM 稍后安排**（本表不定声线）。  
 4. 商品片：已按 `product-prompt-template.md` 完成分类/缺图/切段/参考图（若适用）。  
-5. **可交付硬门槛**：商品身份一致、无结构断裂、流畅可播且动态不单调。AI 动态秒数是**实验目标**（60s 参考 16–24s，高动态实验可记 40–45s），**不是**单独否决成片的硬门槛。  
-6. 出片顺序：先 **10–15s 试片** 确认，再全长；普通模式只展开问题片段（可说「切专业」看逐 beat）。
+5. **可交付硬门槛**：商品身份一致、无结构断裂、流畅可播且动态不单调。AI 动态秒数是**实验/推荐目标**（由 `motion_mix` 推导整片 AI 总秒数，±约 15% 即可），**不是**单独否决成片的硬门槛。  
+6. 出片顺序：先 **10–15s 试片** 确认，再全长；普通模式只展开问题片段（可说「切专业」看逐 beat）。  
+7. 已锁 `motion_mix` 时：表 3 按推荐 AI 总秒数**大概**排布；审查中可改某段方式，允许终稿偏离比例。
+
+若已锁比例：排表前用 `recommended_ai_seconds(duration, motion_mix)` 或等价心算，避免有 Key 却几乎全是运镜。
 
 ### 5. 全部确认后写入并交接
 
@@ -306,19 +328,23 @@ produce_set_production_profile(
   production_tier="light|medium|heavy",
   visual_source="",   # light→template；medium→stock|user；heavy→paid_gen（可按锁定细化）
   tts_source="",      # 本轮可空或暂缓；旁白后置
-  api_budget_tier="standard",   # economy|standard|ample；默认 standard
-  budget_cny="8",               # 5|8|12；实验 API 预算上限，非售价
+  api_budget_tier="standard",   # micro|lite|economy|standard|ample；默认 standard
+  budget_cny="8",               # 1|3|5|8|12；实验 API 预算上限，非售价；默认 8
   review_mode="normal",         # normal|pro；默认普通
   candidate_mode="adaptive",    # adaptive=单候选+条件重试；stable_dual=关键 beat 双候选
-  motion_target_band="60s_cost_ref",  # 30s_ref|60s_cost_ref|60s_high_motion
+  motion_target_band="60s_cost_ref",  # 可选实验带；有 motion_mix 时以 mix 推导为主
+  motion_mix="1:1",             # 1:1|1:2|0:1|2:1；推荐目标（软约束）
+  motion_mix_source="default_recommend",  # default_recommend|user_selected
+  duration_seconds="30",        # 写入以便推导 AI 秒数带
   style_label_zh="",            # 可选中文名：高端极简/生活方式/电商清晰展示
   style_playbook=""             # 可选内部 styles id；勿强制第四表
 )
 ```
 
-商品/重度未明示预算时：**默认** `api_budget_tier=standard`、`budget_cny=8`。  
+商品/重度未明示预算时：**默认** `api_budget_tier=standard`、`budget_cny=8`，且须**主动询问确认**（¥8+）。  
 未明示评审模式时：**默认** `review_mode=normal`。  
-未明示候选策略时：**默认** `candidate_mode=adaptive`（禁止默认双候选）。
+未明示候选策略时：**默认** `candidate_mode=adaptive`（禁止默认双候选）。  
+未明示画面比例且已触发比例卡：默认 `motion_mix=1:1`、`motion_mix_source=default_recommend`，并向用户念清配置。
 
 5. **简报扩展字段**（写入项目 artifacts / 简报 JSON，交接时点明）：
 
@@ -327,11 +353,14 @@ produce_set_production_profile(
 | `theme` | 表 1 主题 |
 | `duration_seconds` | 表 1 时长 |
 | `production_tier` | `light` / `medium` / `heavy` |
-| `api_budget_tier` | `economy` / `standard` / `ample`（实验 API 预算档） |
-| `budget_cny` | `5` / `8` / `12`（实验上限，非售价） |
+| `api_budget_tier` | `micro` / `lite` / `economy` / `standard` / `ample` |
+| `budget_cny` | `1` / `3` / `5` / `8` / `12`（实验上限，非售价） |
+| `needs_choice_confirm` | ¥8+ 为 true（选档须主动询问） |
 | `review_mode` | `normal` / `pro` |
 | `candidate_mode` | `adaptive` / `stable_dual` |
-| `motion_target_band` | `30s_ref` / `60s_cost_ref` / `60s_high_motion`（实验目标，非硬门槛） |
+| `motion_mix` | `1:1` / `1:2` / `0:1` / `2:1`（推荐目标，软约束） |
+| `motion_mix_source` | `default_recommend` / `user_selected` |
+| `motion_target_band` | `30s_ref` / `60s_cost_ref` / `60s_high_motion`（可选；有 mix 时以 mix 为主） |
 | `light_presentation` | 轻度表现方式（含 `remotion` / `hyperframes`）；非轻度可空 |
 | `first_run_demo` | 可选；首次 Demo 确认卡路径为 `true` |
 | `medium_source` | `stock` / `user_assets`；非中度可空 |
@@ -403,12 +432,14 @@ produce_set_production_profile(
 - 用户确认 Demo 卡后：已写入轻度锁定字段并交接 04，**未**静默开烧  
 - 用户跳过 Demo 或非首次：已进入表 1（或说明卡在哪一步）  
 - 缺步时已按「缺步路由」交接 01/02，未越级开烧  
-- 完整简报路径：用户确认过 **表 1**（主题 + 档位 + 时长；商品/重度含实验 API 预算默认 ¥8、评审模式默认普通）  
+- 完整简报路径：用户确认过 **表 1**（主题 + 档位 + 时长；商品/重度含实验 API 预算默认 ¥8 且 ¥8+ 已主动询问、评审模式默认普通）  
 - 按档确认过 **表 2**；轻度互斥单选（含 Remotion/HyperFrames，按可用性推荐）；中度遵守 Stock Key 闸门；重度遵守视频 Key 闸门与推荐规则  
-- **表 3** 三档都已确认（Demo 卡路径除外）；无全文旁白强求；无文案时已给 AI 提案并获「确认规划」；已说明硬门槛与动态秒数实验目标  
+- **≥15s 且可烧 AI** 时已确认 **画面构成比例**（或已说明无 Key）；已说明比例为推荐软约束  
+- **表 3** 三档都已确认（Demo 卡路径除外）；无全文旁白强求；无文案时已给 AI 提案并获「确认规划」；已说明硬门槛与推荐 AI 秒数目标  
 - 重度商品已强制走 `product-prompt-template.md`  
-- 已写 `production_profile`（含 `api_budget_tier`/`budget_cny`/`review_mode`/`candidate_mode`）与 `video_plan` 等扩展字段  
+- 已写 `production_profile`（含 `api_budget_tier`/`budget_cny`/`review_mode`/`candidate_mode`/`motion_mix`）与 `video_plan` 等扩展字段  
 - 未在轻度/中度展示付费视频渠模；无 Key 时未假装可烧重度  
 - 未静默换渠、未静默 I2I、未跳过确认开烧  
 - 未把实验 API 预算说成售价；未默认开启双候选  
+- 未把 `motion_mix` 当成终稿硬门槛；未在有 Key 时默认把表 3 排成几乎全运镜
 
