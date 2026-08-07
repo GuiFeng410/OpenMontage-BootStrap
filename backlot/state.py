@@ -37,7 +37,9 @@ ROLE_LABELS_ZH = {
     "product_identity_anchor": "身份基准",
     "product_angle": "角度图",
     "product_hero": "主图（仅运镜）",
+    "product_detail": "细节图",
     "on_body": "佩戴图",
+    "hand": "手持图",
 }
 
 # Stages every pipeline shares (fallback rail when the manifest is unknown).
@@ -81,8 +83,8 @@ def _load_pipeline_meta(pipeline_type: Optional[str]) -> dict[str, Any]:
     """Stage order + gate flags from the manifest; graceful fallback."""
     if pipeline_type and pipeline_type != "unknown":
         try:
-            from lib.pipeline_loader import load_pipeline
-            manifest = load_pipeline(pipeline_type)
+            from lib.pipeline_loader import load_pipeline_readonly
+            manifest = load_pipeline_readonly(pipeline_type)
             stages = [
                 {
                     "name": s["name"],
@@ -275,6 +277,17 @@ def _collect_artifacts(project_dir: Path, checkpoints: dict[str, dict]) -> dict[
         data = _read_json(art_dir / filename)
         if data is not None:
             artifacts[name] = data
+    batch_reviews: dict[str, dict] = {}
+    for path in sorted(art_dir.glob("batch*_review.json")):
+        data = _read_json(path)
+        if data is None:
+            continue
+        match = re.search(r"batch[_-]?(\d+)", path.stem, flags=re.IGNORECASE)
+        fallback_id = f"batch_{int(match.group(1)):02d}" if match else path.stem
+        batch_id = str(data.get("batch_id") or data.get("id") or fallback_id)
+        batch_reviews[batch_id] = data
+    if batch_reviews:
+        artifacts["batch_reviews"] = batch_reviews
     # decision_log historically also lives at project root
     if "decision_log" not in artifacts:
         data = _read_json(project_dir / "decision_log.json")
@@ -612,6 +625,15 @@ def _commercial_card_mode(stages: list[dict]) -> str:
     """plan | assets | produce — drives segment card field set."""
     by_name = {s.get("name"): s for s in stages}
     awaiting = next((s for s in stages if s.get("status") == "awaiting_human"), None)
+    if awaiting is None:
+        awaiting = next(
+            (
+                s for s in stages
+                if s.get("status") == "in_progress"
+                and (s.get("metadata") or {}).get("needs_user_decision") is True
+            ),
+            None,
+        )
     if awaiting:
         name = awaiting.get("name")
         if name == "brief_locked":
@@ -792,6 +814,15 @@ def _build_commercial_board(
                 })
 
     awaiting = next((s for s in stages if s.get("status") == "awaiting_human"), None)
+    if awaiting is None:
+        awaiting = next(
+            (
+                s for s in stages
+                if s.get("status") == "in_progress"
+                and (s.get("metadata") or {}).get("needs_user_decision") is True
+            ),
+            None,
+        )
     decision = None
     if awaiting:
         meta = awaiting.get("metadata") or {}
@@ -799,23 +830,31 @@ def _build_commercial_board(
         decision = {
             "stage": name,
             "stage_label_zh": awaiting.get("label_zh") or COMMERCIAL_STAGE_LABELS_ZH.get(name, name),
+            "title_zh": meta.get("decision_title_zh"),
             "prompt_zh": meta.get("decision_prompt_zh"),
+            "context_zh": meta.get("decision_context_zh"),
+            "recommendation_zh": meta.get("recommendation_zh"),
+            "options": meta.get("decision_options") if isinstance(meta.get("decision_options"), list) else [],
             "approval_note": meta.get("approval_note"),
             "examples_zh": meta.get("examples_zh"),
         }
 
-    player_labels = {
-        "batch01_0_13.mp4": "第1批预览",
-        "batch02_13_20.mp4": "第2批预览",
-        "full_draft_20s_pro.mp4": "初稿 / 终稿",
-        "final_pro.mp4": "终稿",
-        "sample_reel": "试片",
-    }
     players: list[dict[str, str]] = []
     if show_players:
         for render in media.get("renders") or []:
             fname = Path(render.get("path") or "").name
-            label = next((v for k, v in player_labels.items() if k in fname), fname)
+            lower = fname.lower()
+            batch_match = re.search(r"batch[_-]?(\d+)", lower)
+            if "sample" in lower:
+                label = "试片"
+            elif "full_draft" in lower or "draft" in lower:
+                label = "完整初稿"
+            elif batch_match:
+                label = f"第{int(batch_match.group(1))}批预览"
+            elif "final" in lower:
+                label = "终稿"
+            else:
+                label = fname
             players.append({"label": label, "path": render["path"]})
 
     spent_usd = None
@@ -864,9 +903,13 @@ def _build_commercial_board(
             "batch_marks": batch_marks,
         },
         "batches": overview_doc.get("batches") or [],
-        "batch_reviews": {
-            "batch_01": artifacts.get("batch01_review"),
-            "batch_02": artifacts.get("batch02_review"),
+        "batch_reviews": artifacts.get("batch_reviews") or {
+            key: value
+            for key, value in {
+                "batch_01": artifacts.get("batch01_review"),
+                "batch_02": artifacts.get("batch02_review"),
+            }.items()
+            if value is not None
         },
         "decision": decision,
         "players": players,

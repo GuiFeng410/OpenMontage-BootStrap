@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openmontage/artifacts/full_draft_pro",
+  "title": "Commercial Full Draft",
+  "type": "object",
+  "required": ["path"],
+  "properties": {
+    "version": { "type": "string" },
+    "path": { "type": "string", "minLength": 1 },
+    "final_path": { "type": "string" },
+    "duration_probe": { "type": "number", "minimum": 0 },
+    "status": { "type": "string" },
+    "approved": { "type": "boolean" }
+  },
+  "additionalProperties": true
+}

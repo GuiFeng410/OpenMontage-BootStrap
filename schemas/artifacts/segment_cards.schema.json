@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openmontage/artifacts/segment_cards",
+  "title": "Commercial Segment Cards",
+  "type": "object",
+  "required": ["segments"],
+  "properties": {
+    "version": { "type": "string" },
+    "duration_seconds": { "type": "number", "minimum": 0 },
+    "overall_prompt_zh": { "type": "string" },
+    "segments": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": true
+}

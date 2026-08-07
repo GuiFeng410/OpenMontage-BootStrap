@@ -68,6 +68,16 @@ function stageSubZh(st) {
   return "待开始";
 }
 
+function stageStatusZh(status) {
+  return {
+    pending: "待开始",
+    in_progress: "制作中",
+    awaiting_human: "等待确认",
+    completed: "已完成",
+    failed: "失败",
+  }[status] || status;
+}
+
 // ---------------------------------------------------------------------------
 // header slate
 // ---------------------------------------------------------------------------
@@ -265,7 +275,7 @@ function renderDrawer(s) {
     }
     return el("div", { class: "drawer commercial-drawer" },
       el("div", { class: "drawer-head" },
-        el("h3", {}, `${stageLabel(st)} — ${st.status === "completed" ? "已完成" : st.status}`),
+        el("h3", {}, `${stageLabel(st)} — ${stageStatusZh(st.status)}`),
         st.timestamp ? el("span", { class: "meta", style: "font-family:var(--mono);font-size:calc(10.5px * var(--fs-scale));color:var(--text-3)" }, st.timestamp) : null,
         el("span", { class: "close", onclick: () => toggleDrawer(st.name) }, "关闭 ✕"),
       ),
@@ -435,6 +445,7 @@ function renderDecisions(s) {
 function renderActivity(s) {
   const events = s.events || [];
   if (!events.length) return null;
+  const zh = isCommercial(s);
   const body = el("div", { class: "panel-body" });
   // A start is "running" only until a later finish/error for the same
   // tool+scene closes it — closed starts are dropped (the finish row tells
@@ -468,7 +479,7 @@ function renderActivity(s) {
     } else if (ev.event === "error") {
       statusEl = el("span", { class: "status err" }, "✕");
     } else {
-      statusEl = el("span", { class: "status run" }, "● running");
+      statusEl = el("span", { class: "status run" }, zh ? "● 运行中" : "● running");
     }
     body.append(el("div", { class: "act-row" },
       el("span", { class: "t" }, fmtClock(ev.ts)),
@@ -478,7 +489,7 @@ function renderActivity(s) {
     ));
   }
   return el("div", { class: "panel" },
-    el("div", { class: "panel-head" }, el("h2", {}, "Activity"), el("span", { class: "meta" }, "events.jsonl")),
+    el("div", { class: "panel-head" }, el("h2", {}, zh ? "制作动态" : "Activity"), el("span", { class: "meta" }, "events.jsonl")),
     body);
 }
 
@@ -703,19 +714,31 @@ function renderNoState(s) {
 }
 
 function renderAwaitingNotice(s) {
-  const awaiting = s.stages.find((x) => x.status === "awaiting_human");
+  const awaiting = s.stages.find((x) => x.status === "awaiting_human") ||
+    (isCommercial(s) ? s.stages.find((x) => x.status === "in_progress" && x.metadata?.needs_user_decision === true) : null);
   if (!awaiting) return null;
   if (isCommercial(s)) {
     const dec = s.commercial?.decision;
     const prompt = dec?.prompt_zh || "请在聊天中回复以继续。";
     const examples = dec?.examples_zh;
+    const options = Array.isArray(dec?.options) ? dec.options : [];
+    const optionList = options.length ? el("div", { class: "commercial-decision-options" },
+      options.map((option) => el("div", { class: `commercial-decision-option${option.recommended ? " recommended" : ""}` },
+        el("div", { class: "commercial-decision-option-head" },
+          el("b", {}, option.label_zh || option.label || option.id || "选项"),
+          option.recommended ? el("span", { class: "commercial-recommend-badge" }, "推荐") : null),
+        option.description_zh ? el("div", { class: "commercial-decision-option-copy" }, option.description_zh) : null,
+        option.impact_zh ? el("div", { class: "commercial-decision-option-impact" }, `影响：${option.impact_zh}`) : null))) : null;
     return el("div", { class: "notice commercial-notice" },
       el("span", { style: "font-size:calc(16px * var(--fs-scale))" }, "◈"),
-      el("span", {},
-        el("b", {}, `【需要你决定】${dec?.stage_label_zh || stageLabel(awaiting)} · `),
-        el("span", { style: "white-space:pre-line" }, prompt),
-        examples ? el("div", { style: "margin-top:6px;opacity:.9" }, examples) : null,
-        el("div", { style: "margin-top:6px" }, "请在 ", el("b", {}, "聊天"), " 中回复，不在看板操作。")));
+      el("div", { class: "commercial-decision-body" },
+        el("b", {}, `【需要你决定】${dec?.title_zh || dec?.stage_label_zh || stageLabel(awaiting)}`),
+        dec?.context_zh ? el("div", { class: "commercial-decision-context" }, dec.context_zh) : null,
+        el("div", { class: "commercial-decision-prompt", style: "white-space:pre-line" }, prompt),
+        optionList,
+        dec?.recommendation_zh ? el("div", { class: "commercial-decision-recommendation" }, `建议：${dec.recommendation_zh}`) : null,
+        examples ? el("div", { class: "commercial-decision-example" }, `回复示例：${examples}`) : null,
+        el("div", { class: "commercial-chat-only" }, "请回到 ", el("b", {}, "聊天"), " 回复；本页只展示信息，不提交审批。")));
   }
   return el("div", { class: "notice" },
     el("span", { style: "font-size:calc(16px * var(--fs-scale))" }, "◈"),

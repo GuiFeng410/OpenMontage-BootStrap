@@ -39,7 +39,7 @@ metadata:
 
 ## Scope
 
-**做：** 需求不清时先对齐**主题与档位**，再按档细化（表 2），再确认**分段视频规划**（表 3）。全部确认后写入 `production_profile` / 简报 artifacts，交接 `openmontage-bootstrap-04-produce`。
+**做：** 需求不清时先对齐**主题与档位**，再按档细化（表 2），再确认**分段视频规划**（表 3）。商品片在首个正式决策前初始化只读 Backlot 项目并主动给出固定网址；完整分析与选项放网页，聊天一次只问当前一个问题。全部确认后写入 `production_profile` / 简报 artifacts，交接 `openmontage-bootstrap-04-produce`。
 
 **不做：** 跳过确认直接 compose；三张表堆在同一条消息；静默填 Key / 调 Stock / 付费 API；伪造用户原话；有视频 Key 就自动开烧；静默换视频渠道；轻度/中度出示付费视频渠模表；表 3 强塞全文旁白；商品片（含重度商品）跳过 `references/product-prompt-template.md`；缺图时静默图生图或静默硬烧佩戴支。
 
@@ -132,9 +132,50 @@ metadata:
 
 禁止把表 1 + 表 2 + 表 3 堆在同一条回复里。Demo 确认卡确认后**不必**再走完整三表（已写入等价锁定字段）。
 
+## 商品片：只读网页 + 聊天决策协议（强制）
+
+适用：商品宣传、种草、详情展示、产品佩戴演示等进入 `bootstrap-commercial` 的任务。非商品片继续使用下文完整 Grill 卡。
+
+1. 环境已 `verify_ready`，且已获得最基本的商品主题后，在**表 1 前**生成稳定英文 `project_id`，调用：
+
+```text
+produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
+```
+
+2. 立即运行 `python -m backlot open <project_id>`。把命令输出的完整项目网址主动发给用户；03→04 全程复用同一网址。打开失败只说明“看板暂不可用”，随后退回完整 Grill 卡，**不得阻塞简报或出片**。
+3. 网页可用时，每个中间决策先写 `brief_locked/in_progress`（素材缺口写 `assets_gate/in_progress`），并用 `metadata_json` 提供：
+
+```json
+{
+  "needs_user_decision": true,
+  "decision_title_zh": "当前选择名称",
+  "decision_context_zh": "为什么现在需要决定",
+  "decision_prompt_zh": "用户当前只需回答的问题",
+  "decision_options": [
+    {
+      "id": "option_id",
+      "label_zh": "选项名称",
+      "description_zh": "适用场景与取舍",
+      "impact_zh": "对质量、时间或费用的影响",
+      "recommended": true
+    }
+  ],
+  "recommendation_zh": "推荐项及原因",
+  "examples_zh": "用户可直接发送的回复"
+}
+```
+
+4. 此时聊天正文只保留：**项目网址 + 当前一个问题 + 推荐项 + 一条回复示例**。表 1/2/3 的完整分析仍须生成，但放入网页证据，不在聊天重复大表。若网页不可用，才使用下文完整 Grill 卡。
+5. 用户回复后，用 `produce_append_decision` 追加决定；`user_response_text` 必须是用户原话，修改既有选择时沿用相同 `category + subject`。随后刷新 checkpoint，清除旧的 `needs_user_decision`，再展示下一项。
+6. 表 3 完整产物就绪后，写 `brief_locked/awaiting_human`，其中必须带 `brief` 与 `video_plan`（内联对象或项目内 JSON 路径）。用户回复“确认规划”后用 `produce_approve_checkpoint` 完成阶段；审批必须保留原 artifacts、metadata 与费用。
+
+商品片决定使用固定分类，禁止临时发明 category：主题/时长/渠道用 `brief_selection`，评审方式用 `review_mode_selection`，轻/中/重档用 `production_tier_selection`，候选策略用 `candidate_mode_selection`，运镜/AI 比例用 `motion_mix_selection`，素材取舍用 `asset_decision`，试片/初稿等阶段裁定用 `stage_review_decision`，最终交付确认用 `delivery_signoff`，全程审批策略用 `approval_policy`。
+
+**只读边界：** 网页不放审批按钮、不直接写 JSON、不唤醒 Agent。用户始终在聊天中作出决定，Agent 是唯一写入者。
+
 ## Grill 确认卡（用户决策消息强制）
 
-凡需要用户**选择或确认**的节点（表 1、表 2.x、比例卡、表 3、试片/初稿裁定），对用户可见正文必须用下列结构，**禁止**只甩内部表格或「请确认表 N」而不列选项：
+凡需要用户**选择或确认**的节点（表 1、表 2.x、比例卡、表 3、试片/初稿裁定），默认对用户可见正文必须用下列结构，**禁止**只甩内部表格或「请确认表 N」而不列选项。唯一例外：商品片只读网页已正常打开时，完整结构写入网页，聊天按上节压缩为“网址 + 当前问题 + 推荐 + 回复示例”。
 
 ```text
 请确认选择以下点
@@ -377,7 +418,7 @@ metadata:
 
 1. 安装未闭环 → installer。  
 2. 未 `verify_ready` → setup。  
-3. `produce_init_project`（若尚无项目；`pipeline_type=animated-explainer`）。  
+3. `produce_init_project`（若尚无项目；商品片用 `pipeline_type=bootstrap-commercial`，其他 BootStrap 任务沿用其已选管线）。商品片通常已在表 1 前初始化，此处只复查，不新建第二个项目。
 4. 写入档位：
 
 ```text
@@ -427,9 +468,11 @@ produce_set_production_profile(
 | `video_model` | 模型 id；非重度空 |
 | `video_plan` | 表 3 分段规划；商品片须含：切段/重点段、`asset_classes`、`path`、`gap_fill`、每段 `ref_image`（见 references） |
 
-6. `approval_text` 用用户原话（禁止编造）。  
-7. 交接 **`openmontage-bootstrap-04-produce`**。字幕/BGM → `05-captions-music`（**后置**，不挡本步交接）。  
-8. 失败 → `07-error-handling`。
+6. 商品片最终 checkpoint 的 `artifacts_json` 至少包含 `brief`、`video_plan`；另带 `segment_cards`（网页逐段文案/镜头/素材规划）和 `asset_ledger`（素材角色、路径、候选、是否选中）时，Backlot 才能完整显示表 3 与素材证据。
+7. `approval_text` 用用户原话（禁止编造）。
+8. 商品片调用 `python -m backlot open <project_id>` 复用原网址；向 04 交接 `project_id` 与网址，不要求用户另开页面。
+9. 交接 **`openmontage-bootstrap-04-produce`**。字幕/BGM → `05-captions-music`（**后置**，不挡本步交接）。
+10. 失败 → `07-error-handling`。
 
 **闸门：** 表 2 / 表 3 未确认时，**禁止**交接 produce、禁止开始付费视频生成。
 
@@ -500,4 +543,3 @@ produce_set_production_profile(
 - 未静默换渠、未静默 I2I、未跳过确认开烧  
 - 未把实验 API 预算说成售价；未默认开启双候选  
 - 未把 `motion_mix` 当成终稿硬门槛；未在有 Key 时默认把表 3 排成几乎全运镜
-

@@ -214,8 +214,10 @@ def produce_write_checkpoint(
     human_approval_required: bool = False,
     human_approved: bool = False,
     approval_note: str = "",
+    metadata_json: str = "",
+    cost_snapshot_json: str = "",
 ) -> dict[str, Any]:
-    """Write stage checkpoint under projects sandbox."""
+    """Write stage checkpoint, including board progress/decision/cost evidence."""
     return _wrap(
         T.produce_write_checkpoint,
         project_id,
@@ -226,6 +228,8 @@ def produce_write_checkpoint(
         human_approval_required,
         human_approved,
         approval_note,
+        metadata_json,
+        cost_snapshot_json,
     )
 
 
@@ -236,8 +240,10 @@ def produce_approve_checkpoint(
     approval_text: str,
     artifacts_json: str = "{}",
     pipeline_type: str = "",
+    metadata_json: str = "",
+    cost_snapshot_json: str = "",
 ) -> dict[str, Any]:
-    """Approve a gated stage using the user's exact approval text."""
+    """Approve a gated stage without discarding its existing evidence."""
     return _wrap(
         T.produce_approve_checkpoint,
         project_id,
@@ -245,7 +251,15 @@ def produce_approve_checkpoint(
         approval_text,
         artifacts_json,
         pipeline_type,
+        metadata_json,
+        cost_snapshot_json,
     )
+
+
+@mcp.tool()
+def produce_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
+    """Append an approved chat decision to decision_log.json."""
+    return _wrap(T.produce_append_decision, project_id, decision_json)
 
 
 @mcp.tool()

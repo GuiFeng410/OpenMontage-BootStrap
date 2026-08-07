@@ -152,6 +152,54 @@ class TestBoardState:
         idea = next(x for x in s["stages"] if x["name"] == "idea")
         assert idea.get("undeclared") is True
 
+    def test_commercial_intermediate_decision_and_dynamic_batch(self, projects_root):
+        p = _make_project(projects_root, "commercial")
+        _write(p / "project.json", {
+            "project_id": "commercial",
+            "title": "商品测试",
+            "pipeline_type": "bootstrap-commercial",
+            "production_profile": {"review_mode": "pro", "duration_seconds": 60},
+        })
+        _write(p / "artifacts" / "brief.json", {
+            "theme": "商品测试",
+            "duration_seconds": 60,
+            "images": {
+                "detail.png": {"path": "assets/images/detail.png", "role": "product_detail"},
+            },
+        })
+        _write(p / "artifacts" / "review_overview.json", {
+            "review_mode": "pro",
+            "overview": [{"beat": "beat_01", "time": "00:00-00:20"}],
+            "batches": [{"id": "batch_03", "span": "00:40-01:00"}],
+        })
+        _write(p / "artifacts" / "batch03_review.json", {
+            "batch_id": "batch_03", "status": "in_review",
+        })
+        (p / "renders" / "batch03_40_60.mp4").write_bytes(b"video")
+        _write(p / "checkpoint_sample_review.json", {
+            "version": "1.0",
+            "project_id": "commercial",
+            "pipeline_type": "bootstrap-commercial",
+            "stage": "sample_review",
+            "status": "in_progress",
+            "timestamp": "2026-08-07T10:00:00Z",
+            "artifacts": {},
+            "metadata": {
+                "needs_user_decision": True,
+                "decision_title_zh": "试片是否通过",
+                "decision_prompt_zh": "请选择是否继续",
+                "decision_options": [{"id": "continue", "label_zh": "继续"}],
+            },
+        })
+
+        state = load_board_state(p)
+        commercial = state["commercial"]
+        assert commercial["decision"]["title_zh"] == "试片是否通过"
+        assert commercial["decision"]["options"][0]["id"] == "continue"
+        assert commercial["assets"][0]["role_zh"] == "细节图"
+        assert "batch_03" in commercial["batch_reviews"]
+        assert commercial["players"][0]["label"] == "第3批预览"
+
 
 class TestLibrary:
     def test_list_projects_sorts_live_first(self, projects_root):

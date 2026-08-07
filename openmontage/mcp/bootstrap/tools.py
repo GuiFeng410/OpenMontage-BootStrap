@@ -79,6 +79,7 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_budget_cny_snapshot",
             "produce_write_checkpoint",
             "produce_approve_checkpoint",
+            "produce_append_decision",
             "produce_read_state",
             "produce_get_next_stage",
             "produce_tts_preflight",
@@ -830,6 +831,8 @@ def produce_write_checkpoint(
     human_approval_required: bool = False,
     human_approved: bool = False,
     approval_note: str = "",
+    metadata_json: str = "",
+    cost_snapshot_json: str = "",
 ) -> dict[str, Any]:
     return doctor_tools.run_write_checkpoint(
         project_id,
@@ -840,6 +843,8 @@ def produce_write_checkpoint(
         human_approval_required,
         human_approved,
         approval_note,
+        metadata_json,
+        cost_snapshot_json,
     )
 
 
@@ -849,6 +854,8 @@ def produce_approve_checkpoint(
     approval_text: str,
     artifacts_json: str = "{}",
     pipeline_type: str = "",
+    metadata_json: str = "",
+    cost_snapshot_json: str = "",
 ) -> dict[str, Any]:
     return doctor_tools.run_approve_checkpoint(
         project_id,
@@ -856,7 +863,14 @@ def produce_approve_checkpoint(
         approval_text,
         artifacts_json,
         pipeline_type,
+        metadata_json,
+        cost_snapshot_json,
     )
+
+
+def produce_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
+    """Append one user-visible decision to the project audit trail."""
+    return doctor_tools.run_append_decision(project_id, decision_json)
 
 
 def produce_read_state(project_id: str) -> dict[str, Any]:

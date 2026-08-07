@@ -105,6 +105,7 @@ def _validate_artifacts_for_stage(
     stage: str,
     status: str,
     artifacts: dict[str, Any],
+    project_dir: Optional[Path] = None,
 ) -> None:
     # Valid stages come from the pipeline manifest (get_pipeline_stages), which
     # can declare stages beyond the 9 canonical ones (e.g. character-animation's
@@ -125,9 +126,31 @@ def _validate_artifacts_for_stage(
     for artifact_name, artifact_data in artifacts.items():
         if artifact_name not in ARTIFACT_NAMES:
             continue
+        if isinstance(artifact_data, str):
+            if project_dir is None:
+                raise CheckpointValidationError(
+                    f"Artifact {artifact_name!r} uses a path reference but no project directory was provided"
+                )
+            ref = Path(artifact_data)
+            if not ref.is_absolute():
+                ref = project_dir / ref
+            try:
+                ref = ref.resolve()
+                ref.relative_to(project_dir.resolve())
+            except (OSError, ValueError) as exc:
+                raise CheckpointValidationError(
+                    f"Artifact {artifact_name!r} path must stay inside the project directory"
+                ) from exc
+            try:
+                with open(ref, encoding="utf-8") as f:
+                    artifact_data = json.load(f)
+            except (OSError, json.JSONDecodeError, UnicodeError) as exc:
+                raise CheckpointValidationError(
+                    f"Artifact {artifact_name!r} path could not be read as UTF-8 JSON: {ref}"
+                ) from exc
         if not isinstance(artifact_data, dict):
             raise CheckpointValidationError(
-                f"Artifact {artifact_name!r} must be a JSON object matching its schema"
+                f"Artifact {artifact_name!r} must be a JSON object or project-local JSON path"
             )
         try:
             validate_artifact(artifact_name, artifact_data)
@@ -137,7 +160,12 @@ def _validate_artifacts_for_stage(
             ) from exc
 
 
-def validate_checkpoint(checkpoint: dict[str, Any]) -> None:
+def validate_checkpoint(
+    checkpoint: dict[str, Any],
+    *,
+    project_dir: Optional[Path] = None,
+    enforce_pipeline_outputs: bool = False,
+) -> None:
     """Validate checkpoint structure and canonical artifact payloads.
 
     Uses pipeline_type (if present) to resolve the valid stage list.
@@ -163,7 +191,21 @@ def validate_checkpoint(checkpoint: dict[str, Any]) -> None:
     if not isinstance(artifacts, dict):
         raise CheckpointValidationError("Checkpoint artifacts must be a dictionary")
 
-    _validate_artifacts_for_stage(stage, status, artifacts)
+    if enforce_pipeline_outputs and pipeline_type and status in {"completed", "awaiting_human"}:
+        from lib.pipeline_loader import load_pipeline_readonly
+
+        manifest = load_pipeline_readonly(pipeline_type)
+        stage_def = next(
+            (item for item in manifest.get("stages", []) if item.get("name") == stage),
+            {},
+        )
+        missing = [name for name in stage_def.get("produces", []) if name not in artifacts]
+        if missing:
+            raise CheckpointValidationError(
+                f"Stage {stage!r} must include manifest outputs: {missing}"
+            )
+
+    _validate_artifacts_for_stage(stage, status, artifacts, project_dir)
 
     try:
         jsonschema.validate(instance=checkpoint, schema=_load_checkpoint_schema())
@@ -450,7 +492,11 @@ def write_checkpoint(
                 else:
                     plan_or_top["decision_log_ref"] = log_ref
 
-    validate_checkpoint(checkpoint)
+    validate_checkpoint(
+        checkpoint,
+        project_dir=pipeline_dir / project_id,
+        enforce_pipeline_outputs=True,
+    )
 
     path = _checkpoint_path(pipeline_dir, project_id, stage)
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -477,9 +523,9 @@ def read_checkpoint(
     path = _checkpoint_path(pipeline_dir, project_id, stage)
     if not path.exists():
         return None
-    with open(path) as f:
+    with open(path, encoding="utf-8") as f:
         checkpoint = json.load(f)
-    validate_checkpoint(checkpoint)
+    validate_checkpoint(checkpoint, project_dir=pipeline_dir / project_id)
     return checkpoint
 
 
@@ -499,9 +545,9 @@ def get_latest_checkpoint(
     if not checkpoints:
         return None
 
-    with open(checkpoints[0]) as f:
+    with open(checkpoints[0], encoding="utf-8") as f:
         checkpoint = json.load(f)
-    validate_checkpoint(checkpoint)
+    validate_checkpoint(checkpoint, project_dir=pipeline_dir / project_id)
     return checkpoint
 
 

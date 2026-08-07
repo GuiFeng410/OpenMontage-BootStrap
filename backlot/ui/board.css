@@ -893,10 +893,13 @@ body:not(.first) .lib-card, body:not(.first) .drawer { animation: none; }
   .rail {
     overflow-x: auto;
     overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
     padding: 18px 0 16px;
-    scrollbar-width: thin;
+    scrollbar-width: none;
   }
+  .rail::-webkit-scrollbar { display: none; }
   .stage { flex: 0 0 82px; }
+  .rail .stage { scroll-snap-align: start; }
   .stage .name { font-size: calc(10px * var(--fs-scale)); max-width: 76px; overflow-wrap: anywhere; text-align: center; }
   .stage .sub { max-width: 76px; font-size: calc(9.5px * var(--fs-scale)); }
 
@@ -956,6 +959,24 @@ body:not(.first) .lib-card, body:not(.first) .drawer { animation: none; }
 /* bootstrap-commercial 中文证据区 */
 .commercial-done-notice { border-color: var(--green); background: var(--green-dim); margin-bottom: 14px; }
 .commercial-decision-hint { margin: 12px 0; padding: 10px; border: 1px solid var(--amber); border-radius: 6px; background: var(--amber-dim); }
+.commercial-notice { align-items: flex-start; }
+.commercial-decision-body { min-width: 0; width: 100%; }
+.commercial-decision-context,
+.commercial-decision-prompt,
+.commercial-decision-recommendation,
+.commercial-decision-example,
+.commercial-chat-only { margin-top: 7px; line-height: 1.55; }
+.commercial-decision-context { color: var(--text-2); }
+.commercial-decision-options { display: grid; gap: 7px; margin-top: 10px; }
+.commercial-decision-option { padding: 9px 10px; border: 1px solid var(--border-soft); border-radius: 6px; background: var(--surface-2); }
+.commercial-decision-option.recommended { border-color: var(--amber); background: var(--amber-dim); }
+.commercial-decision-option-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.commercial-recommend-badge { flex: 0 0 auto; padding: 1px 6px; border: 1px solid var(--amber); border-radius: 999px; color: var(--amber); font-size: calc(9px * var(--fs-scale)); }
+.commercial-decision-option-copy { margin-top: 3px; color: var(--text-2); }
+.commercial-decision-option-impact { margin-top: 3px; color: var(--text-3); font-size: calc(10.5px * var(--fs-scale)); }
+.commercial-decision-recommendation { color: var(--amber); }
+.commercial-decision-example { color: var(--text-2); }
+.commercial-chat-only { padding-top: 7px; border-top: 1px solid var(--border-soft); color: var(--text-2); }
 .commercial-drawer pre { display: none; }
 .project-switch-hint { margin-top: 4px; }
 .commercial-board .commercial-aside { min-width: 280px; max-width: 340px; }

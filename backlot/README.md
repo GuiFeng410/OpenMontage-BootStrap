@@ -24,6 +24,12 @@ notifications over SSE; the browser refetches board state. State sources:
 | filmstrip cards | `scene_plan × script × asset_manifest` join |
 | generating shimmer, activity | `events.jsonl` (written by `BaseTool` instrumentation) |
 | cost meter | checkpoint `cost_snapshot` |
+
+For `bootstrap-commercial`, the board is also the read-only decision evidence
+surface. The Agent writes one current choice into checkpoint `metadata`
+(`needs_user_decision`, `decision_prompt_zh`, `decision_options`, recommendation,
+examples, and partial progress); the user still approves in chat. Backlot never
+writes project state or submits approval.
 | renders | `renders/*.mp4` (+ root-level mp4 heuristic) |
 
 Projects without checkpoints degrade gracefully to a "what the watcher

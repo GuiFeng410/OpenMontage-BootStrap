@@ -68,6 +68,7 @@ Installer 默认：**5 MCP 一并注册** + **6 Skill（02–07）一并启用**
 4. **不静默换档、换渠道、换模型、图生图硬烧。** 改档回 **03** 重走三表。
 5. **04 只执行已锁定简报**；商品片图片数量/类型/缺图由 **03** 负责。
 6. 素材按项目隔离：`$OPENMONTAGE_PROJECTS_DIR/<project_id>/assets/{images,video,music,audio,copy,subs,stock}/`。
+7. **商品片决策采用“只读网页 + 聊天确认”。** 03 在首个正式选择前初始化 `bootstrap-commercial` 并主动给出 Backlot 项目网址；03/04 把完整分析、选项、证据和费用写入网页，聊天一次只问一个问题。用户只在聊天回复，网页不得直接审批。看板失败时退回完整聊天确认卡，不得阻塞出片。
 
 ### When to use upstream pipelines (Rule Zero below)
 

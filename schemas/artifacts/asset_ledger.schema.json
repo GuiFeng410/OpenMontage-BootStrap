@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openmontage/artifacts/asset_ledger",
+  "title": "Commercial Asset Ledger",
+  "type": "object",
+  "required": ["entries"],
+  "properties": {
+    "version": { "type": "string" },
+    "entries": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": true
+}

@@ -871,6 +871,8 @@ def run_write_checkpoint(
     human_approval_required: bool = False,
     human_approved: bool = False,
     approval_note: str = "",
+    metadata_json: str = "",
+    cost_snapshot_json: str = "",
 ) -> dict[str, Any]:
     require_p1_writes()
     _ensure_repo_on_path()
@@ -885,7 +887,18 @@ def run_write_checkpoint(
     if not isinstance(artifacts, dict):
         raise DoctorError("artifacts_json must be an object", code="bad_request")
     synced_profile = _sync_production_profile_to_marker(project_id, artifacts)
-    metadata = {}
+    try:
+        metadata = json.loads(metadata_json) if metadata_json else {}
+    except json.JSONDecodeError as exc:
+        raise DoctorError(f"metadata_json invalid: {exc}", code="bad_request") from exc
+    if not isinstance(metadata, dict):
+        raise DoctorError("metadata_json must be an object", code="bad_request")
+    try:
+        cost_snapshot = json.loads(cost_snapshot_json) if cost_snapshot_json else None
+    except json.JSONDecodeError as exc:
+        raise DoctorError(f"cost_snapshot_json invalid: {exc}", code="bad_request") from exc
+    if cost_snapshot is not None and not isinstance(cost_snapshot, dict):
+        raise DoctorError("cost_snapshot_json must be an object", code="bad_request")
     if approval_note:
         metadata["approval_note"] = approval_note
     path = write_checkpoint(
@@ -897,6 +910,7 @@ def run_write_checkpoint(
         pipeline_type=pipeline_type or None,
         human_approval_required=human_approval_required,
         human_approved=human_approved,
+        cost_snapshot=cost_snapshot,
         metadata=metadata or None,
     )
     result: dict[str, Any] = {"checkpoint_path": str(path), "stage": stage, "status": status}
@@ -911,6 +925,8 @@ def run_approve_checkpoint(
     approval_text: str,
     artifacts_json: str = "{}",
     pipeline_type: str = "",
+    metadata_json: str = "",
+    cost_snapshot_json: str = "",
 ) -> dict[str, Any]:
     """Complete a gated stage only with explicit user approval text from the Agent."""
     if not approval_text or not approval_text.strip():
@@ -918,15 +934,53 @@ def run_approve_checkpoint(
             "approve_checkpoint requires approval_text from the user's chat reply; "
             "MCP cannot invent approval."
         )
+    _ensure_repo_on_path()
+    from lib.checkpoint import read_checkpoint
+
+    root = require_projects_root()
+    project_dir(project_id)
+    current = read_checkpoint(root, project_id, stage)
+    try:
+        supplied_artifacts = json.loads(artifacts_json) if artifacts_json else {}
+    except json.JSONDecodeError as exc:
+        raise DoctorError(f"artifacts_json invalid: {exc}", code="bad_request") from exc
+    if not isinstance(supplied_artifacts, dict):
+        raise DoctorError("artifacts_json must be an object", code="bad_request")
+    artifacts = supplied_artifacts or ((current or {}).get("artifacts") or {})
+
+    try:
+        supplied_metadata = json.loads(metadata_json) if metadata_json else {}
+    except json.JSONDecodeError as exc:
+        raise DoctorError(f"metadata_json invalid: {exc}", code="bad_request") from exc
+    if not isinstance(supplied_metadata, dict):
+        raise DoctorError("metadata_json must be an object", code="bad_request")
+    metadata = {**((current or {}).get("metadata") or {}), **supplied_metadata}
+
+    if cost_snapshot_json:
+        try:
+            cost_snapshot = json.loads(cost_snapshot_json)
+        except json.JSONDecodeError as exc:
+            raise DoctorError(f"cost_snapshot_json invalid: {exc}", code="bad_request") from exc
+        if not isinstance(cost_snapshot, dict):
+            raise DoctorError("cost_snapshot_json must be an object", code="bad_request")
+    else:
+        cost_snapshot = (current or {}).get("cost_snapshot")
+
     return run_write_checkpoint(
         project_id=project_id,
         stage=stage,
         status="completed",
-        artifacts_json=artifacts_json,
-        pipeline_type=pipeline_type,
+        artifacts_json=json.dumps(artifacts, ensure_ascii=False),
+        pipeline_type=pipeline_type or str((current or {}).get("pipeline_type") or ""),
         human_approval_required=True,
         human_approved=True,
         approval_note=approval_text.strip(),
+        metadata_json=json.dumps(metadata, ensure_ascii=False),
+        cost_snapshot_json=(
+            json.dumps(cost_snapshot, ensure_ascii=False)
+            if isinstance(cost_snapshot, dict)
+            else ""
+        ),
     )
 
 
@@ -934,6 +988,7 @@ def run_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
     require_p1_writes()
     _ensure_repo_on_path()
     from lib.checkpoint import _merge_decision_log
+    from schemas.artifacts import validate_artifact
 
     root = require_projects_root()
     project_dir(project_id)
@@ -948,5 +1003,11 @@ def run_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
             "decision_json must be a decision object or {decisions:[...]}",
             code="bad_request",
         )
+    decision.setdefault("version", "1.0")
+    decision.setdefault("project_id", project_id)
+    try:
+        validate_artifact("decision_log", decision)
+    except Exception as exc:
+        raise DoctorError(f"decision_json invalid: {exc}", code="bad_request") from exc
     _merge_decision_log(root, project_id, decision)
     return {"project_id": project_id, "appended": len(decision.get("decisions") or [])}

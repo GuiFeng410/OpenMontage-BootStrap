@@ -108,6 +108,8 @@ def write_checkpoint(
     human_approval_required: bool = False,
     human_approved: bool = False,
     approval_note: str = "",
+    metadata_json: str = "",
+    cost_snapshot_json: str = "",
 ) -> dict[str, Any]:
     """Write a stage checkpoint under sandbox (requires P1 write flag)."""
     return _wrap(
@@ -120,6 +122,8 @@ def write_checkpoint(
         human_approval_required,
         human_approved,
         approval_note,
+        metadata_json,
+        cost_snapshot_json,
     )
 
 
@@ -130,6 +134,8 @@ def approve_checkpoint(
     approval_text: str,
     artifacts_json: str = "{}",
     pipeline_type: str = "",
+    metadata_json: str = "",
+    cost_snapshot_json: str = "",
 ) -> dict[str, Any]:
     """Mark a gated stage completed using the user's approval text (required)."""
     return _wrap(
@@ -139,6 +145,8 @@ def approve_checkpoint(
         approval_text,
         artifacts_json,
         pipeline_type,
+        metadata_json,
+        cost_snapshot_json,
     )
 
 

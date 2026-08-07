@@ -40,7 +40,16 @@
               "voice_selection",
               "capability_extension",
               "playbook_override",
-              "visual_accuracy_check"
+              "visual_accuracy_check",
+              "brief_selection",
+              "review_mode_selection",
+              "production_tier_selection",
+              "candidate_mode_selection",
+              "motion_mix_selection",
+              "asset_decision",
+              "stage_review_decision",
+              "delivery_signoff",
+              "approval_policy"
             ],
             "description": "What class of decision this is"
           },
@@ -87,6 +96,14 @@
             "type": "boolean",
             "default": false,
             "description": "Whether the user explicitly approved this decision"
+          },
+          "user_response_text": {
+            "type": "string",
+            "description": "Exact user reply that approved or changed the decision"
+          },
+          "decided_at": {
+            "type": "string",
+            "format": "date-time"
           },
           "confidence": {
             "type": "number",

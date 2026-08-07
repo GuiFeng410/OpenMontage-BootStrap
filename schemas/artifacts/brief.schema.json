@@ -4,7 +4,14 @@
   "title": "Video Brief",
   "description": "Creative brief produced by the Idea Explorer agent.",
   "type": "object",
-  "required": ["version", "title", "hook", "key_points", "tone", "style", "target_platform", "target_duration_seconds"],
+  "anyOf": [
+    {
+      "required": ["version", "title", "hook", "key_points", "tone", "style", "target_platform", "target_duration_seconds"]
+    },
+    {
+      "required": ["theme", "duration_seconds", "images"]
+    }
+  ],
   "properties": {
     "version": { "type": "string", "const": "1.0" },
     "title": { "type": "string", "minLength": 1 },
@@ -42,7 +49,28 @@
       "description": "2-3 angle options for user to choose from"
     },
     "selected_angle": { "type": "string" },
-    "metadata": { "type": "object" }
+    "metadata": { "type": "object" },
+    "theme": { "type": "string", "minLength": 1 },
+    "duration_seconds": { "type": "number", "minimum": 1 },
+    "identity_anchor": { "type": "string" },
+    "images": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["path", "role"],
+        "properties": {
+          "path": { "type": "string" },
+          "role": { "type": "string" },
+          "bytes": { "type": "integer", "minimum": 0 }
+        },
+        "additionalProperties": true
+      }
+    },
+    "identity_notes_zh": { "type": "string" },
+    "motion_mix": { "type": "string" },
+    "budget": { "type": "object" },
+    "flow": { "type": "array", "items": { "type": "string" } },
+    "channel": { "type": "object" }
   },
   "additionalProperties": false
 }

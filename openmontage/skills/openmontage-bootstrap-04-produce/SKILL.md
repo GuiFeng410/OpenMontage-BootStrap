@@ -63,6 +63,16 @@ metadata:
 
 **不做：** 代用户**首次**选档（选型在 03）；伪造 `approval_text`；静默调付费 API；静默换 provider / 视频渠道；无 03 简报时在本 Skill 内编造 `video_plan`。
 
+### 商品片只读看板交接（强制）
+
+商品片从 03 接收 `bootstrap-commercial` 的 `project_id` 和固定 Backlot 网址。进入 04 后：
+
+1. 先调用 `produce_read_state` 核对管线，再运行 `python -m backlot open <project_id>`；主动把**同一网址**发给用户，不创建第二个看板项目。
+2. 试片、专业批次、初稿和交付需要用户裁定时，先用 `produce_write_checkpoint` 写入当前阶段证据：`artifacts_json` 带阶段产物，`metadata_json` 带当前唯一决策、选项、推荐、回复示例和 `partial_progress`，`cost_snapshot_json` 带累计费用。
+3. 网页可用时，完整审查卡、候选、抽帧、费用明细放网页；聊天只发“网址 + 当前一个问题 + 推荐 + 回复示例”。网页不可用时退回完整 Grill 卡，流程继续。
+4. 用户在聊天回复后，先 `produce_append_decision` 保存用户原话，再 `produce_approve_checkpoint`；审批调用默认合并当前 checkpoint，禁止以空 artifacts 覆盖证据。
+5. 网页始终只读。不得要求用户在网页点击审批，不得从页面静默进入下一批或付费调用。
+
 ## 遵守 openmontage-bootstrap-03-usercheck 锁定（强制）
 
 若简报阶段已确认并写入（`production_profile` 或项目 artifacts / 简报 JSON）：
@@ -197,7 +207,7 @@ metadata:
 附：动态秒数摘要 + **§0.2 费用卡**（USD 账本 + CNY 展示分项合计）。  
 未通过 → **不得**宣称达标。
 
-试片/初稿请用户裁定时，对用户正文使用 03 Skill 的 **Grill 确认卡**结构（选择点 + 补充说明 + 示例回复）。
+试片/初稿请用户裁定时，使用 03 Skill 的 **Grill 确认卡**信息结构。商品片只读网页可用时，完整结构放网页，聊天只保留网址、当前问题、推荐和示例回复；网页不可用时才在聊天展开完整卡。
 
 ## Hard protocol（主流程）
 
@@ -205,7 +215,7 @@ metadata:
 
 0. 无已确认简报 → **先交接 03**（表 1→2→3）。  
 1. 锁定复查（见上）；`approval_text` 用用户原话。  
-2. `produce_init_project`（若简报阶段未建；`pipeline_type=animated-explainer`）→ 预建 `assets/*`。  
+2. `produce_init_project`（若简报阶段未建；商品片必须 `pipeline_type=bootstrap-commercial`，非商品片沿用已选管线）→ 预建 `assets/*`。若 03 已建，只复用原项目与网址。
 3. 核对 / 写入 `production_profile`（简报已写则可跳过或核对）：
 
 ```text
@@ -235,7 +245,8 @@ produce_set_production_profile(
 
 ### 2. 脚本等人审关卡（共用）
 
-`produce_write_checkpoint` / `produce_approve_checkpoint`：必须带用户原话 `approval_text`，禁止编造。  
+`produce_write_checkpoint`：商品片必须按需传 `metadata_json` / `cost_snapshot_json`，让网页获得进度、当前决策和累计费用。
+`produce_approve_checkpoint`：必须带用户原话 `approval_text`，禁止编造；默认保留当前 checkpoint 的 artifacts、metadata 与费用。决定同时用 `produce_append_decision` 追加到审计记录。
 分段以简报 **`video_plan`** 为准，不要另起一套冲突规划。
 
 ### 3. 语音分支（可选 · 后置）

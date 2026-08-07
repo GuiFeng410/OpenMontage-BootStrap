@@ -4,7 +4,7 @@ description: >
   BootStrap 商品宣传片：中文简报、身份审查、试片确认、分段制作、初稿审查、合成终稿、交付确认。
   Agent 走 openmontage-bootstrap-03-usercheck → 04-produce；审批在聊天，Backlot 只读观察。
 category: custom
-stability: production
+stability: beta
 
 default_checkpoint_policy: guided
 
@@ -28,10 +28,12 @@ orchestration:
   budget_default_usd: 1.11
   max_revisions_per_stage: 3
   max_send_backs: 3
-  max_wall_time_minutes: 30
+  max_wall_time_minutes: 180
 
 stages:
   - name: brief_locked
+    label_zh: 方案确认
+    description_zh: 确认主题、档位、时长、评审方式、渠道和分段规划。
     skill: openmontage-bootstrap-03-usercheck
     produces:
       - brief
@@ -40,11 +42,15 @@ stages:
     human_approval_default: true
 
   - name: assets_gate
+    label_zh: 素材检查
+    description_zh: 检查商品身份、角度、细节、佩戴或使用素材及缺口。
     skill: openmontage-bootstrap-03-usercheck
     checkpoint_required: true
     human_approval_default: false
 
   - name: sample_review
+    label_zh: 试片确认
+    description_zh: 先审查 10–15 秒试片，再决定是否进入全长制作。
     skill: openmontage-bootstrap-04-produce
     produces:
       - sample_reel
@@ -52,6 +58,8 @@ stages:
     human_approval_default: true
 
   - name: segment_build
+    label_zh: 分段制作
+    description_zh: 按已确认计划制作各 beat，专业模式按动态批次展示。
     skill: openmontage-bootstrap-04-produce
     produces:
       - review_overview
@@ -59,6 +67,8 @@ stages:
     human_approval_default: false
 
   - name: draft_review
+    label_zh: 初稿审查
+    description_zh: 审查完整初稿与问题片段，确认修改清单。
     skill: openmontage-bootstrap-04-produce
     produces:
       - full_draft_pro
@@ -66,11 +76,15 @@ stages:
     human_approval_default: true
 
   - name: final_compose
+    label_zh: 合成终稿
+    description_zh: 合并已通过片段、文字、字幕和音频并执行技术检查。
     skill: openmontage-bootstrap-04-produce
     checkpoint_required: true
     human_approval_default: false
 
   - name: delivery_signoff
+    label_zh: 交付确认
+    description_zh: 展示终稿、质量结论和累计费用，等待最终确认。
     skill: openmontage-bootstrap-04-produce
     checkpoint_required: true
     human_approval_default: true

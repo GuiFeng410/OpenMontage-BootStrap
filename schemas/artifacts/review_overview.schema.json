@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openmontage/artifacts/review_overview",
+  "title": "Commercial Review Overview",
+  "type": "object",
+  "required": ["overview", "batches"],
+  "properties": {
+    "version": { "type": "string" },
+    "review_mode": { "type": "string", "enum": ["normal", "pro"] },
+    "overview": { "type": "array", "items": { "type": "object" } },
+    "batches": { "type": "array", "items": { "type": "object" } }
+  },
+  "additionalProperties": true
+}
