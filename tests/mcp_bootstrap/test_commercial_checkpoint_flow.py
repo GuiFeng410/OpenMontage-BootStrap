@@ -13,6 +13,7 @@ from openmontage.mcp.bootstrap.tools import (
     produce_append_decision,
     produce_approve_checkpoint,
     produce_init_project,
+    produce_scan_user_images,
     produce_write_checkpoint,
 )
 
@@ -36,8 +37,44 @@ def _video_plan() -> dict:
     return {"segments": [{"id": "beat_01", "t": "0-10", "method": "camera_move"}]}
 
 
+def _asset_precheck() -> dict:
+    return {
+        "version": "1.0",
+        "entries": [
+            {
+                "file": "product_hero.png",
+                "path": "assets/images/product_hero.png",
+                "suggested_class": "product_hero",
+                "issues": [],
+            }
+        ],
+        "summary": {
+            "total_images": 1,
+            "low_resolution_count": 0,
+            "duplicate_group_count": 0,
+            "needs_user_attention": False,
+        },
+    }
+
+
 def test_facade_lists_append_decision() -> None:
     assert "produce_append_decision" in list_bootstrap_tools()["produce_minimal"]
+
+
+def test_facade_scans_uploaded_images_without_writing_artifacts(sandbox: Path) -> None:
+    from PIL import Image
+
+    produce_init_project("commercial-scan", "商品预检", "bootstrap-commercial")
+    images_dir = sandbox / "commercial-scan" / "assets" / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (800, 600), "white").save(images_dir / "product_hero.png")
+
+    result = produce_scan_user_images("commercial-scan")
+
+    assert "produce_scan_user_images" in list_bootstrap_tools()["produce_minimal"]
+    assert result["summary"]["total_images"] == 1
+    assert result["entries"][0]["suggested_class"] == "product_hero"
+    assert not (sandbox / "commercial-scan" / "artifacts" / "asset_precheck.json").exists()
 
 
 def test_commercial_skills_require_readonly_board_chat_flow() -> None:
@@ -53,6 +90,9 @@ def test_commercial_skills_require_readonly_board_chat_flow() -> None:
         assert "python -m backlot open <project_id>" in text
         assert "produce_append_decision" in text
         assert "网页" in text and "聊天" in text
+    assert "produce_scan_user_images" in usercheck
+    assert "asset_precheck" in usercheck
+    assert "表 2 后、表 3 前" in usercheck
 
 
 def test_intermediate_decision_and_approval_preserve_evidence(sandbox: Path) -> None:
@@ -85,7 +125,11 @@ def test_intermediate_decision_and_approval_preserve_evidence(sandbox: Path) -> 
     assert current["metadata"]["decision_options"][0]["id"] == "normal"
     assert current["cost_snapshot"]["total_spent_usd"] == 0.2
 
-    artifacts = {"brief": _brief(), "video_plan": _video_plan()}
+    artifacts = {
+        "brief": _brief(),
+        "asset_precheck": _asset_precheck(),
+        "video_plan": _video_plan(),
+    }
     produce_write_checkpoint(
         "commercial-flow",
         "brief_locked",
@@ -120,6 +164,9 @@ def test_project_local_artifact_refs_validate(sandbox: Path) -> None:
     (pdir / "artifacts" / "video_plan.json").write_text(
         json.dumps(_video_plan(), ensure_ascii=False), encoding="utf-8"
     )
+    (pdir / "artifacts" / "asset_precheck.json").write_text(
+        json.dumps(_asset_precheck(), ensure_ascii=False), encoding="utf-8"
+    )
     result = produce_write_checkpoint(
         "commercial-refs",
         "brief_locked",
@@ -127,6 +174,7 @@ def test_project_local_artifact_refs_validate(sandbox: Path) -> None:
         artifacts_json=json.dumps(
             {
                 "brief": "artifacts/brief.json",
+                "asset_precheck": "artifacts/asset_precheck.json",
                 "video_plan": "artifacts/video_plan.json",
             }
         ),

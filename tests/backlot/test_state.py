@@ -167,6 +167,23 @@ class TestBoardState:
                 "detail.png": {"path": "assets/images/detail.png", "role": "product_detail"},
             },
         })
+        _write(p / "artifacts" / "asset_precheck.json", {
+            "version": "1.0",
+            "entries": [
+                {
+                    "file": "detail.png",
+                    "path": "assets/images/detail.png",
+                    "suggested_class": "product_detail",
+                    "issues": [],
+                }
+            ],
+            "summary": {
+                "total_images": 1,
+                "low_resolution_count": 0,
+                "duplicate_group_count": 0,
+                "needs_user_attention": False,
+            },
+        })
         _write(p / "artifacts" / "review_overview.json", {
             "review_mode": "pro",
             "overview": [{"beat": "beat_01", "time": "00:00-00:20"}],
@@ -197,6 +214,8 @@ class TestBoardState:
         assert commercial["decision"]["title_zh"] == "试片是否通过"
         assert commercial["decision"]["options"][0]["id"] == "continue"
         assert commercial["assets"][0]["role_zh"] == "细节图"
+        assert commercial["asset_precheck"]["summary"]["total_images"] == 1
+        assert commercial["asset_precheck"]["entries"][0]["suggested_class"] == "product_detail"
         assert "batch_03" in commercial["batch_reviews"]
         assert commercial["players"][0]["label"] == "第3批预览"
 

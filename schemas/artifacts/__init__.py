@@ -37,6 +37,7 @@ ARTIFACT_NAMES = [
     "full_draft_pro",
     "segment_cards",
     "asset_ledger",
+    "asset_precheck",
 ]
 
 

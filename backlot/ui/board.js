@@ -807,6 +807,44 @@ function renderCommercialAssets(s) {
     body);
 }
 
+function renderCommercialAssetPrecheck(s) {
+  if (commercialContentView(s) !== "plan") return null;
+  const precheck = s.commercial?.asset_precheck || {};
+  const summary = precheck.summary || {};
+  const entries = Array.isArray(precheck.entries) ? precheck.entries : [];
+  if (!summary.total_images && !summary.needs_user_attention) return null;
+
+  const rows = [
+    ["已扫描图片", summary.total_images != null ? `${summary.total_images} 张` : null],
+    ["低分辨率", summary.low_resolution_count ? `${summary.low_resolution_count} 张` : "无"],
+    ["重复文件", summary.duplicate_group_count ? `${summary.duplicate_group_count} 组` : "无"],
+  ].filter(([, value]) => value != null);
+  const body = el("div", { class: "panel-body commercial-summary" });
+  for (const [label, value] of rows) {
+    body.append(el("div", { class: "kv-row" },
+      el("span", { class: "kv-k" }, label),
+      el("span", { class: "kv-v" }, value)));
+  }
+  if (summary.needs_user_attention) {
+    body.append(el("details", { class: "tech-details" },
+      el("summary", {}, "查看需确认的素材"),
+      el("div", { class: "tech-body" },
+        entries.map((entry) => {
+          const hints = [
+            entry.suggested_class ? `建议：${entry.suggested_class}` : "建议：待人工归类",
+            ...(entry.issues || []),
+            entry.duplicate_of ? `重复于 ${entry.duplicate_of}` : "",
+          ].filter(Boolean);
+          return el("div", {}, `${entry.file} · ${hints.join("；")}`);
+        }))));
+  }
+  return el("div", { class: "panel commercial-precheck-panel" },
+    el("div", { class: "panel-head" },
+      el("h2", {}, "素材预检"),
+      el("span", { class: "meta" }, "方案确认前置")),
+    body);
+}
+
 function renderCommercialCostPanel(s) {
   const cc = s.commercial?.cost_cny;
   if (!cc || cc.spent_cny == null) return null;
@@ -1167,8 +1205,10 @@ function renderCommercialBoard(s) {
       el("span", {}, "◈"),
       el("span", {}, "当前证据视图：", el("b", {}, CONTENT_VIEW_LABEL[view] || view), "。点击顶栏阶段可切换，避免各阶段产物混在一起。")));
   }
+  const precheck = renderCommercialAssetPrecheck(s);
   const beats = renderCommercialBeats(s);
   const players = renderCommercialPlayers(s);
+  if (precheck) main.append(precheck);
   if (beats) main.append(beats);
   if (players) main.append(players);
   if (!beats && !players && !summary) {

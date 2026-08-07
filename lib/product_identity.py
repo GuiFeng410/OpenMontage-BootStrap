@@ -110,7 +110,11 @@ class ProductManifest:
                 raw_path = entry.get("path")
                 if not isinstance(raw_path, str) or not raw_path.strip():
                     errors.append(f"{key}[{index}].path must be a non-empty string")
-                elif check_files and not self.resolve_asset_path(raw_path).is_file():
+                elif (
+                    check_files
+                    and (key == "reference_images" or entry.get("status") in APPROVED_STATUSES)
+                    and not self.resolve_asset_path(raw_path).is_file()
+                ):
                     errors.append(f"{key}[{index}] asset does not exist: {raw_path}")
 
         if not self.get_approved_i2i_images(existing_only=False):

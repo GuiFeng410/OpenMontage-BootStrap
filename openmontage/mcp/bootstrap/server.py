@@ -275,6 +275,12 @@ def produce_get_next_stage(project_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def produce_scan_user_images(project_id: str) -> dict[str, Any]:
+    """Read uploaded image facts and filename-only role suggestions without writing."""
+    return _wrap(T.produce_scan_user_images, project_id)
+
+
+@mcp.tool()
 def produce_tts_preflight() -> dict[str, Any]:
     """Check Piper readiness."""
     return _wrap(T.produce_tts_preflight)

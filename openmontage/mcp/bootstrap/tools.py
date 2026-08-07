@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from openmontage.mcp.common.errors import ConfigError, DoctorError
+from openmontage.mcp.common.sandbox import project_dir
 from openmontage.mcp.doctor import tools as doctor_tools
 from openmontage.mcp.media import tools as media_tools
 
@@ -82,6 +83,7 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_append_decision",
             "produce_read_state",
             "produce_get_next_stage",
+            "produce_scan_user_images",
             "produce_tts_preflight",
             "produce_tts_sample",
             "produce_tts_generate",
@@ -879,6 +881,15 @@ def produce_read_state(project_id: str) -> dict[str, Any]:
 
 def produce_get_next_stage(project_id: str) -> dict[str, Any]:
     return doctor_tools.run_get_next_stage(project_id)
+
+
+def produce_scan_user_images(project_id: str) -> dict[str, Any]:
+    """Read uploaded image facts and filename-only role suggestions without writing."""
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from lib.asset_precheck import scan_user_images
+
+    return scan_user_images(project_dir(project_id))
 
 
 def produce_tts_preflight() -> dict[str, Any]:

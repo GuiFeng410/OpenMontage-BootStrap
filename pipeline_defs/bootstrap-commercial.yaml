@@ -37,6 +37,7 @@ stages:
     skill: openmontage-bootstrap-03-usercheck
     produces:
       - brief
+      - asset_precheck
       - video_plan
     checkpoint_required: true
     human_approval_default: true
@@ -45,6 +46,8 @@ stages:
     label_zh: 素材检查
     description_zh: 检查商品身份、角度、细节、佩戴或使用素材及缺口。
     skill: openmontage-bootstrap-03-usercheck
+    produces:
+      - asset_ledger
     checkpoint_required: true
     human_approval_default: false
 

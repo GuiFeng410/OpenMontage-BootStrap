@@ -266,6 +266,7 @@ ARTIFACT_FILES = {
     "cost_log": "cost_log.json",
     "segment_cards": "segment_cards.json",
     "asset_ledger": "asset_ledger.json",
+    "asset_precheck": "asset_precheck.json",
 }
 
 
@@ -673,6 +674,7 @@ def _build_commercial_board(
     overview_doc = artifacts.get("review_overview") or {}
     segment_doc = artifacts.get("segment_cards") or {}
     ledger_doc = artifacts.get("asset_ledger") or {}
+    precheck_doc = artifacts.get("asset_precheck") or {}
     review_mode = profile.get("review_mode") or overview_doc.get("review_mode") or "normal"
     usd_cny = float(profile.get("usd_cny_rate") or budget.get("usd_cny_rate") or 7.2)
     card_mode = _commercial_card_mode(stages)
@@ -896,6 +898,10 @@ def _build_commercial_board(
             "candidate_mode_zh": candidate_labels.get(profile.get("candidate_mode")),
         },
         "assets": images,
+        "asset_precheck": {
+            "summary": precheck_doc.get("summary") or {},
+            "entries": precheck_doc.get("entries") or [],
+        },
         "beats": beats,
         "timeline": {
             "duration_seconds": duration,

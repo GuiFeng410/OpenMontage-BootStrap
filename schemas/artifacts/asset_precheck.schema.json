@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openmontage/artifacts/asset_precheck",
+  "title": "Commercial Asset Precheck",
+  "type": "object",
+  "required": ["version", "entries", "summary"],
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "source_dir": { "type": "string" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["file", "path", "suggested_class", "issues"],
+        "properties": {
+          "file": { "type": "string", "minLength": 1 },
+          "path": { "type": "string", "minLength": 1 },
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string" },
+          "suggested_class": { "type": "string" },
+          "user_class": { "type": "string" },
+          "status": { "type": "string" },
+          "issues": { "type": "array", "items": { "type": "string" } },
+          "duplicate_of": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "total_images",
+        "low_resolution_count",
+        "duplicate_group_count",
+        "needs_user_attention"
+      ],
+      "properties": {
+        "total_images": { "type": "integer", "minimum": 0 },
+        "low_resolution_count": { "type": "integer", "minimum": 0 },
+        "duplicate_group_count": { "type": "integer", "minimum": 0 },
+        "needs_user_attention": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}
