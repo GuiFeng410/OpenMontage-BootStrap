@@ -114,3 +114,14 @@ venv/
 
 # Backlot local cache (thumbnails)
 .backlot/
+
+# Local Agent policies and one-off verification runners (not repository source)
+/.cursor/rules/
+/scripts/_run_assert03_20s_promo.py
+/scripts/_run_assert04_20s_promo.py
+
+# Local authentication / generated media / distributable skill archive
+/agnes_image.png
+/lark_auth_qrcode.png
+/lark_auth_qrcode2.png
+/openmontage/skills/openmontage-bootstrap-01-installer.zip
