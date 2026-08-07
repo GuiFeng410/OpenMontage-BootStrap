@@ -997,6 +997,16 @@ body:not(.first) .lib-card, body:not(.first) .drawer { animation: none; }
 }
 .commercial-beat .beat-plan-fold summary { cursor: pointer; color: var(--text-2); }
 .commercial-film-block { margin-bottom: 8px; }
+.content-view-hint {
+  font-size: calc(11px * var(--fs-scale));
+  color: var(--text-3);
+  line-height: 1.5;
+  margin: 0 0 10px;
+  padding: 8px 10px;
+  border-left: 3px solid var(--amber);
+  background: var(--amber-dim);
+  border-radius: 0 6px 6px 0;
+}
 .commercial-timeline {
   margin: 0 0 16px; padding: 12px 14px 18px;
   border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2);
