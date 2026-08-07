@@ -84,6 +84,7 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_read_state",
             "produce_get_next_stage",
             "produce_scan_user_images",
+            "produce_analyze_public_product_images",
             "produce_tts_preflight",
             "produce_tts_sample",
             "produce_tts_generate",
@@ -890,6 +891,41 @@ def produce_scan_user_images(project_id: str) -> dict[str, Any]:
     from lib.asset_precheck import scan_user_images
 
     return scan_user_images(project_dir(project_id))
+
+
+def produce_analyze_public_product_images(
+    image_urls_json: str,
+    user_authorized: bool = False,
+    model: str = "",
+) -> dict[str, Any]:
+    """Send user-authorized public image URLs to Agnes for visible-fact analysis."""
+    if not user_authorized:
+        raise DoctorError(
+            "Public image URLs require explicit user authorization before external analysis.",
+            code="user_confirmation_required",
+        )
+    try:
+        image_urls = json.loads(image_urls_json)
+    except json.JSONDecodeError as exc:
+        raise DoctorError(f"image_urls_json invalid: {exc}", code="bad_request") from exc
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from tools.analysis.agnes_vision import AgnesVision
+
+    result = AgnesVision().execute(
+        {
+            "image_urls": image_urls,
+            **({"model": model} if model else {}),
+        }
+    )
+    if not result.success:
+        raise DoctorError(result.error or "Agnes image analysis failed", code="provider_error")
+    return {
+        "analysis": result.data,
+        "model": result.model,
+        "external_processing": True,
+        "source": "user_authorized_public_urls",
+    }
 
 
 def produce_tts_preflight() -> dict[str, Any]:

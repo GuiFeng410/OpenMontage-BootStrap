@@ -1,8 +1,8 @@
 ---
 name: openmontage-bootstrap-03-usercheck
 description: >-
-  BootStrap brief before produce: optional first-run light demo card (10s/30s,
-  recommend available Remotion/HyperFrames only), then Table 1 (theme + tier),
+  BootStrap brief before produce: commercial first-time three-point confirmation,
+  optional non-commercial light demo card (10s/30s), then Table 1 (theme + tier),
   Table 2 (tier branch), Table 3 (video_plan). Writes production_profile +
   artifacts, then hands off to produce. Narration/BGM deferred.
 metadata:
@@ -87,7 +87,7 @@ metadata:
 
 当安装闭环已通过且 `verify_ready` 为真（或等价 ready），用户说「生成视频」类话术时：
 
-**A. 尚无锁定简报（首次 / 新会话出片）→ 先走「首次 Demo 引导」（推荐非强制）**，读 `references/first-run-demo.md`，再用类似接话：
+**A. 尚无锁定简报（首次 / 新会话出片）→ 非商品片先走「首次 Demo 引导」（推荐非强制）**，读 `references/first-run-demo.md`，再用类似接话：
 
 > **可以开始出片了。** 环境已就绪。  
 > **推荐**：先试一支 **10s 或 30s（默认推荐 30s）** 的**轻度短解说 / 品牌 demo**，熟悉流程；旁白与 BGM 可后置。  
@@ -99,6 +99,7 @@ metadata:
 > 接下来分三步确认：**① 主题与档位 → ② 画面方式 → ③ 分段规划**。  
 > 旁白默认推荐 Edge-TTS 男声，可后置。我先出 **表 1**。
 
+商品片首次需求已明确包含商品、用途、时长或素材位置时，**跳过首次 Demo 与整张表 1**，改走下文「首次商品三点确认卡」。
 若简报已部分确认（例如只有表 1）：说明**卡在哪一步**，只补未确认表，勿三张重头来（除非用户说改档或重来）。  
 非首次（已有完成简报/成片）：可一句带过「也可再试短 demo」，默认进完整三表。
 
@@ -172,6 +173,29 @@ produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
 商品片决定使用固定分类，禁止临时发明 category：主题/时长/渠道用 `brief_selection`，评审方式用 `review_mode_selection`，轻/中/重档用 `production_tier_selection`，候选策略用 `candidate_mode_selection`，运镜/AI 比例用 `motion_mix_selection`，素材取舍用 `asset_decision`，试片/初稿等阶段裁定用 `stage_review_decision`，最终交付确认用 `delivery_signoff`，全程审批策略用 `approval_policy`。
 
 **只读边界：** 网页不放审批按钮、不直接写 JSON、不唤醒 Agent。用户始终在聊天中作出决定，Agent 是唯一写入者。
+
+### 首次商品三点确认卡（表 1 前强制）
+
+首次用户若已说出“我要做商品宣传视频”、时长和素材位置，禁止直接抛出表 1 或一整套方案。先初始化 Backlot，再只询问下列三点；用户确认后才生成表 1 的完整证据与下一张单项决策卡：
+
+```text
+请确认以下 3 点
+1. 商品与目标：我理解为「{商品名}」的 {时长} 秒{渠道}宣传视频，是否正确？
+2. 制作档位：推荐中度（商品展示 + 有节奏的分段运镜）。轻度适合图文/文字讲解；重度适合需要 AI 视频片段或复杂佩戴演示。
+3. 图片识别授权：如素材是可公开访问的 HTTPS 图片链接，是否同意仅将这些链接发送给 Agnes 识别可见特征与建议分类？不会生成图片或视频。
+
+示例回复：
+1. 正确，商品是……
+2. 选中度
+3. 同意识别
+```
+
+规则：
+
+1. 第 3 点只在用户明确同意后，才调用 `produce_analyze_public_product_images(image_urls_json, user_authorized=true)`；先写入 `asset_decision` 决策日志，记录“仅公开 URL、仅可见特征分析、未生成素材”。
+2. 当前不支持把本地路径、`file://`、Data URI 或内网地址发送给 Agnes。用户只提供本地路径时，先说明“安全导入/临时上传尚未启用”，继续确认第 1、2 点；不得要求用户手写图片内容，也不得假装已识图。
+3. 没有公开 URL、用户拒绝授权或识别失败时，保留 `suggested_class=unknown`，在素材预检闸统一让用户确认分类与缺口。
+4. 三点中，已从用户原话明确的信息可以预填，但仍须让用户用编号确认或修正。
 
 ## Grill 确认卡（用户决策消息强制）
 

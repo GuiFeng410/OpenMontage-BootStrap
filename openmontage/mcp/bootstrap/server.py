@@ -281,6 +281,21 @@ def produce_scan_user_images(project_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def produce_analyze_public_product_images(
+    image_urls_json: str,
+    user_authorized: bool = False,
+    model: str = "",
+) -> dict[str, Any]:
+    """Analyze user-authorized public product image URLs with Agnes."""
+    return _wrap(
+        T.produce_analyze_public_product_images,
+        image_urls_json,
+        user_authorized,
+        model,
+    )
+
+
+@mcp.tool()
 def produce_tts_preflight() -> dict[str, Any]:
     """Check Piper readiness."""
     return _wrap(T.produce_tts_preflight)

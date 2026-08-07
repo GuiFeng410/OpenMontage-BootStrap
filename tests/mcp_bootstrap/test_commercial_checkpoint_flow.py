@@ -12,6 +12,7 @@ from openmontage.mcp.bootstrap.tools import (
     list_bootstrap_tools,
     produce_append_decision,
     produce_approve_checkpoint,
+    produce_analyze_public_product_images,
     produce_init_project,
     produce_scan_user_images,
     produce_write_checkpoint,
@@ -77,6 +78,14 @@ def test_facade_scans_uploaded_images_without_writing_artifacts(sandbox: Path) -
     assert not (sandbox / "commercial-scan" / "artifacts" / "asset_precheck.json").exists()
 
 
+def test_facade_requires_explicit_consent_before_sending_public_image_urls() -> None:
+    with pytest.raises(Exception, match="explicit user authorization"):
+        produce_analyze_public_product_images(
+            image_urls_json='["https://images.example.com/product.jpg"]',
+            user_authorized=False,
+        )
+
+
 def test_commercial_skills_require_readonly_board_chat_flow() -> None:
     root = Path(__file__).resolve().parents[2]
     usercheck = (
@@ -91,8 +100,10 @@ def test_commercial_skills_require_readonly_board_chat_flow() -> None:
         assert "produce_append_decision" in text
         assert "网页" in text and "聊天" in text
     assert "produce_scan_user_images" in usercheck
+    assert "produce_analyze_public_product_images" in usercheck
     assert "asset_precheck" in usercheck
     assert "表 2 后、表 3 前" in usercheck
+    assert "首次商品三点确认卡" in usercheck
 
 
 def test_intermediate_decision_and_approval_preserve_evidence(sandbox: Path) -> None:

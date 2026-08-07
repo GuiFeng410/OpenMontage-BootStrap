@@ -39,6 +39,9 @@ jobs:
       - name: Install dependencies
         run: make install-dev
 
+      - name: Check tracked files for provider keys
+        run: python scripts/check_secret_leaks.py
+
       - name: Run lint smoke checks
         run: make lint
 

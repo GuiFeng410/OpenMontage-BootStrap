@@ -17,7 +17,7 @@
 ### .env 配置确认
 
 ```
-AGNES_API_KEY=cpk-hLRejMZznnh5VtjpIVKkmy7D9m4wAAiQNhjnPIPIVOAfKJzt  ✅
+AGNES_API_KEY=[已移除，使用 .env 配置]  ✅
 AGNES_ACCOUNT_TIER=tokenplan  ✅
 AGNES_BASE=https://apihub.agnes-ai.com  ✅
 ```
