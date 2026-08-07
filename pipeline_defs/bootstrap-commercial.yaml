@@ -1,0 +1,76 @@
+name: bootstrap-commercial
+version: "1.0"
+description: >
+  BootStrap 商品宣传片：中文简报、身份审查、试片确认、分段制作、初稿审查、合成终稿、交付确认。
+  Agent 走 openmontage-bootstrap-03-usercheck → 04-produce；审批在聊天，Backlot 只读观察。
+category: custom
+stability: production
+
+default_checkpoint_policy: guided
+
+metadata:
+  locale: zh-CN
+  display_name_zh: 商品宣传片
+
+extensions:
+  custom_scripts: false
+  custom_playbooks: true
+  custom_skills: true
+  custom_tools: false
+
+required_skills:
+  - openmontage-bootstrap-03-usercheck
+  - openmontage-bootstrap-04-produce
+
+orchestration:
+  mode: executive-producer
+  skill: openmontage-bootstrap-04-produce
+  budget_default_usd: 1.11
+  max_revisions_per_stage: 3
+  max_send_backs: 3
+  max_wall_time_minutes: 30
+
+stages:
+  - name: brief_locked
+    skill: openmontage-bootstrap-03-usercheck
+    produces:
+      - brief
+      - video_plan
+    checkpoint_required: true
+    human_approval_default: true
+
+  - name: assets_gate
+    skill: openmontage-bootstrap-03-usercheck
+    checkpoint_required: true
+    human_approval_default: false
+
+  - name: sample_review
+    skill: openmontage-bootstrap-04-produce
+    produces:
+      - sample_reel
+    checkpoint_required: true
+    human_approval_default: true
+
+  - name: segment_build
+    skill: openmontage-bootstrap-04-produce
+    produces:
+      - review_overview
+    checkpoint_required: true
+    human_approval_default: false
+
+  - name: draft_review
+    skill: openmontage-bootstrap-04-produce
+    produces:
+      - full_draft_pro
+    checkpoint_required: true
+    human_approval_default: true
+
+  - name: final_compose
+    skill: openmontage-bootstrap-04-produce
+    checkpoint_required: true
+    human_approval_default: false
+
+  - name: delivery_signoff
+    skill: openmontage-bootstrap-04-produce
+    checkpoint_required: true
+    human_approval_default: true

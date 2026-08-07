@@ -35,6 +35,12 @@ export function fmtMoney(v) {
   return `$${n.toFixed(2)}`;
 }
 
+export function fmtMoneyCny(v) {
+  const n = Number(v);
+  if (v == null || !Number.isFinite(n)) return "—";
+  return `¥${n.toFixed(2)}`;
+}
+
 export function fmtAgo(epochSeconds) {
   if (!epochSeconds) return "";
   const diff = Date.now() / 1000 - epochSeconds;
