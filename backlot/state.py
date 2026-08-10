@@ -715,6 +715,7 @@ def _build_commercial_board(
     stages: list[dict],
     media: dict[str, list],
     cost: Optional[dict],
+    legacy_checkpoints: list[dict],
 ) -> dict[str, Any]:
     """Chinese evidence panel for bootstrap-commercial (P1 + P1.1)."""
     profile = marker.get("production_profile") or {}
@@ -722,6 +723,7 @@ def _build_commercial_board(
     budget = brief.get("budget") or {}
     overview_doc = artifacts.get("review_overview") or {}
     segment_doc = artifacts.get("segment_cards") or {}
+    video_plan = artifacts.get("video_plan") or {}
     ledger_doc = artifacts.get("asset_ledger") or {}
     precheck_doc = artifacts.get("asset_precheck") or {}
     review_mode = profile.get("review_mode") or overview_doc.get("review_mode") or "normal"
@@ -746,11 +748,21 @@ def _build_commercial_board(
             "hero_only_motion": role == "product_hero",
         })
 
-    seg_by_beat = {
-        row.get("beat"): row
-        for row in (segment_doc.get("segments") or [])
-        if isinstance(row, dict) and row.get("beat")
-    }
+    segment_rows = segment_doc.get("segments") or video_plan.get("segments") or []
+    seg_by_beat: dict[str, dict] = {}
+    for row in segment_rows:
+        if not isinstance(row, dict):
+            continue
+        beat_id = str(row.get("beat") or row.get("id") or "").strip()
+        if not beat_id:
+            continue
+        normalized = dict(row)
+        normalized["beat"] = beat_id
+        if not normalized.get("time"):
+            normalized["time"] = normalized.get("t")
+        if not normalized.get("asset_plan_zh"):
+            normalized["asset_plan_zh"] = normalized.get("purpose")
+        seg_by_beat[beat_id] = normalized
     ledger_by_beat: dict[str, list[dict]] = {}
     for entry in ledger_doc.get("entries") or []:
         if not isinstance(entry, dict):
@@ -796,7 +808,11 @@ def _build_commercial_board(
             "method": row.get("method"),
             "angle_use": row.get("angle_use"),
             "status": row.get("status") or plan.get("status"),
-            "ref": row.get("ref"),
+            "ref": row.get("ref") or plan.get("ref") or plan.get("ref_image"),
+            "reference_path": _resolve_commercial_asset(
+                project_dir,
+                str(row.get("ref") or plan.get("ref") or plan.get("ref_image") or ""),
+            ) if row.get("ref") or plan.get("ref") or plan.get("ref_image") else None,
             "asset_path": _resolve_commercial_asset(project_dir, asset) if asset else None,
             "asset_alt_path": _resolve_commercial_asset(project_dir, asset_alt) if asset_alt else None,
             "asset_plan_zh": plan.get("asset_plan_zh"),
@@ -890,9 +906,76 @@ def _build_commercial_board(
             "examples_zh": meta.get("examples_zh"),
         }
 
+    def evidence_media(raw: Any) -> dict[str, Any] | None:
+        path = str(raw or "").strip()
+        if not path:
+            return None
+        resolved = _resolve_asset_path(project_dir, path)
+        return {
+            "path": _rel(project_dir, resolved) if resolved else path,
+            "exists": resolved is not None,
+        }
+
+    decision_rows = _commercial_decisions_summary(artifacts.get("decision_log") or {})
+    delivery_row = next(
+        (row for row in reversed(decision_rows) if row.get("category") == "delivery_signoff"),
+        None,
+    )
+    sample_doc = artifacts.get("sample_reel") or {}
+    draft_doc = artifacts.get("full_draft_pro") or {}
+    final_review = artifacts.get("final_review") or {}
+    sample_media = evidence_media(sample_doc.get("path"))
+    draft_media = evidence_media(draft_doc.get("path"))
+    final_media = evidence_media(final_review.get("output_path"))
+    stage_evidence = {
+        "sample": {
+            **(sample_media or {}),
+            "duration_seconds": sample_doc.get("duration_seconds"),
+            "status": sample_doc.get("status"),
+            "user_confirmation_text": (
+                sample_doc.get("user_confirmation_text")
+                or sample_doc.get("approval_text")
+                or sample_doc.get("user_response_text")
+            ),
+        },
+        "draft": {
+            **(draft_media or {}),
+            "status": draft_doc.get("status"),
+            "issue_segments": draft_doc.get("issue_segments") or [],
+            "modification_list": draft_doc.get("modification_list") or [],
+        },
+        "compose": {
+            **(final_media or {}),
+            "status": final_review.get("status"),
+            "technical_probe": (final_review.get("checks") or {}).get("technical_probe") or {},
+            "issues_found": final_review.get("issues_found") or [],
+        },
+        "delivery": {
+            **(final_media or {}),
+            "quality_status": final_review.get("status"),
+            "issues_found": final_review.get("issues_found") or [],
+            "decision": delivery_row.get("selected") if delivery_row else None,
+            "decision_label_zh": delivery_row.get("selected_label_zh") if delivery_row else None,
+            "decision_response_zh": delivery_row.get("user_response_text") if delivery_row else None,
+        },
+    }
+
     players: list[dict[str, str]] = []
     if show_players:
+        seen_player_paths: set[str] = set()
+
+        def append_player(label: str, item: dict[str, Any] | None) -> None:
+            if not item or not item.get("path") or item["path"] in seen_player_paths:
+                return
+            seen_player_paths.add(item["path"])
+            players.append({"label": label, "path": item["path"]})
+
+        append_player("试片", sample_media)
+        append_player("完整初稿", draft_media)
+        append_player("终稿", final_media)
         for render in media.get("renders") or []:
+            if render["path"] in seen_player_paths:
+                continue
             fname = Path(render.get("path") or "").name
             lower = fname.lower()
             batch_match = re.search(r"batch[_-]?(\d+)", lower)
@@ -906,7 +989,7 @@ def _build_commercial_board(
                 label = "终稿"
             else:
                 label = fname
-            players.append({"label": label, "path": render["path"]})
+            append_player(label, render)
 
     spent_usd = None
     if cost and cost.get("total_spent_usd") is not None:
@@ -968,7 +1051,9 @@ def _build_commercial_board(
             if value is not None
         },
         "decision": decision,
-        "decisions": _commercial_decisions_summary(artifacts.get("decision_log") or {}),
+        "decisions": decision_rows,
+        "legacy_checkpoints": legacy_checkpoints,
+        "stage_evidence": stage_evidence,
         "plan_archive": {
             "overall_prompt_zh": segment_doc.get("overall_prompt_zh") or "",
             "has_brief": bool(brief),
@@ -1069,6 +1154,18 @@ def load_board_state(project_dir: Path) -> dict[str, Any]:
     media = _scan_media(project_dir)
 
     stages = _build_stage_rail(pipeline_meta, checkpoints, history)
+    legacy_checkpoints: list[dict] = []
+    if pipeline_type == "bootstrap-commercial":
+        legacy_checkpoints = [
+            {
+                "stage": stage["name"],
+                "status": stage.get("status"),
+                "timestamp": stage.get("timestamp"),
+            }
+            for stage in stages
+            if stage.get("undeclared")
+        ]
+        stages = [stage for stage in stages if not stage.get("undeclared")]
 
     # Cost: latest checkpoint snapshot wins; fall back to manifest total.
     cost = None
@@ -1118,7 +1215,7 @@ def load_board_state(project_dir: Path) -> dict[str, Any]:
     }
     if pipeline_type == "bootstrap-commercial":
         state["commercial"] = _build_commercial_board(
-            project_dir, marker, artifacts, stages, media, cost,
+            project_dir, marker, artifacts, stages, media, cost, legacy_checkpoints,
         )
     state["poster"] = _find_poster(project_dir, state)
     return state

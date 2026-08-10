@@ -85,6 +85,22 @@ metadata:
 
 试片/分段/初稿/交付同理；禁止只聊天宣布进入下阶段而面板仍空或缺上阶段已确认内容。
 
+### 七阶段证据写入契约（强制）
+
+`bootstrap-commercial` 的 Backlot 只读取项目内 checkpoint 与 `artifacts/*.json`。每阶段封板前，必须写入下表对应的**完整对象**；不得仅写最终 `final.mp4` 代替中间证据。
+
+| 阶段 | 必写 artifact | Backlot 用户可见证据 |
+|---|---|---|
+| 试片确认 | `sample_reel` | `path`、时长、状态与用户确认原话；路径应指向试片，不得指向终稿 |
+| 分段制作 | `segment_cards` / `review_overview` | 每个 beat 的时间段、文案/镜头/提示词、`asset_path` 或 `ref`、实际片段路径；专业模式另写批次评审 |
+| 初稿审查 | `full_draft_pro` | 初稿 `path`、`issue_segments`（beat + 时间 + 中文问题）、`modification_list`（有序中文修改项） |
+| 合成终稿 | `final_review` | `output_path`、审查结论、`technical_probe`（时长、分辨率、帧率、音频、问题） |
+| 交付确认 | `final_review` + `cost_log` + `decision_log` | 终稿路径、质量结论、累计费用、`category=delivery_signoff` 的用户原话与签收结果 |
+
+- 不存在某项证据时，写明确的空数组或状态说明；禁止把整个 artifact 省略后声称阶段完成。
+- `sample_reel.path`、各 beat 的片段路径、`full_draft_pro.path`、`final_review.output_path` 必须是项目内可访问相对路径。Backlot 会按当前阶段只显示对应媒体。
+- 旧项目若有 `sample_gate`、`full_production` 等非七阶段 checkpoint，保留用于审计；不要继续写入，也不要把它们当作新的进度节点。
+
 ### 付费 AI 镜提示词：Skill 引用与面板递进（强制）
 
 适用：商品片或重度、且该段将调用付费 I2V/T2V。纯 Remotion/本地运镜段跳过。

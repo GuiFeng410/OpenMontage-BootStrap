@@ -3,14 +3,34 @@
   "$id": "openmontage/artifacts/full_draft_pro",
   "title": "Commercial Full Draft",
   "type": "object",
-  "required": ["path"],
+  "required": ["path", "issue_segments", "modification_list"],
   "properties": {
     "version": { "type": "string" },
     "path": { "type": "string", "minLength": 1 },
     "final_path": { "type": "string" },
     "duration_probe": { "type": "number", "minimum": 0 },
     "status": { "type": "string" },
-    "approved": { "type": "boolean" }
+    "approved": { "type": "boolean" },
+    "issue_segments": {
+      "type": "array",
+      "description": "User-visible draft-review findings, tied to a beat and time range.",
+      "items": {
+        "type": "object",
+        "properties": {
+          "beat": { "type": "string" },
+          "time": { "type": "string" },
+          "issue_zh": { "type": "string" },
+          "issue": { "type": "string" },
+          "severity": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "modification_list": {
+      "type": "array",
+      "description": "Ordered, user-visible corrections required before final composition.",
+      "items": { "type": "string", "minLength": 1 }
+    }
   },
   "additionalProperties": true
 }

@@ -5,6 +5,7 @@ import time
 from pathlib import Path
 
 import pytest
+from jsonschema import ValidationError, validate
 
 from backlot import state as state_mod
 from backlot.state import list_projects, load_board_state, summarize_project
@@ -218,6 +219,155 @@ class TestBoardState:
         assert commercial["asset_precheck"]["entries"][0]["suggested_class"] == "product_detail"
         assert "batch_03" in commercial["batch_reviews"]
         assert commercial["players"][0]["label"] == "第3批预览"
+
+    def test_commercial_state_keeps_legacy_checkpoints_out_of_seven_stage_rail(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-evidence")
+        _write(p / "project.json", {
+            "project_id": "commercial-evidence",
+            "title": "七阶段证据",
+            "pipeline_type": "bootstrap-commercial",
+            "production_profile": {"duration_seconds": 10},
+        })
+        for name in (
+            "brief_locked",
+            "assets_gate",
+            "sample_review",
+            "segment_build",
+            "draft_review",
+            "final_compose",
+            "delivery_signoff",
+        ):
+            _write(p / f"checkpoint_{name}.json", {
+                "version": "1.0",
+                "project_id": "commercial-evidence",
+                "pipeline_type": "bootstrap-commercial",
+                "stage": name,
+                "status": "completed",
+                "timestamp": "2026-08-10T10:00:00Z",
+                "artifacts": {},
+            })
+        for legacy in ("sample_gate", "full_production"):
+            _write(p / f"checkpoint_{legacy}.json", {
+                "version": "1.0",
+                "project_id": "commercial-evidence",
+                "pipeline_type": "bootstrap-commercial",
+                "stage": legacy,
+                "status": "completed",
+                "timestamp": "2026-08-10T10:00:00Z",
+                "artifacts": {},
+            })
+
+        for rel in (
+            "assets/video/sample.mp4",
+            "assets/video/beat_01.mp4",
+            "assets/images/reference.png",
+            "renders/draft.mp4",
+            "renders/final.mp4",
+        ):
+            media = p / rel
+            media.parent.mkdir(parents=True, exist_ok=True)
+            media.write_bytes(b"video")
+
+        _write(p / "artifacts" / "video_plan.json", {
+            "version": "1.0",
+            "segments": [{
+                "id": "beat_01",
+                "t": "00:00-00:10",
+                "purpose": "商品亮相",
+                "method": "慢推镜",
+                "ref_image": "assets/images/reference.png",
+            }],
+        })
+        _write(p / "artifacts" / "sample_reel.json", {
+            "version": "1.0",
+            "path": "assets/video/sample.mp4",
+            "duration_seconds": 5,
+            "status": "approved",
+            "user_confirmation_text": "试片通过，继续全片。",
+        })
+        _write(p / "artifacts" / "full_draft_pro.json", {
+            "version": "1.0",
+            "path": "renders/draft.mp4",
+            "status": "review",
+            "issue_segments": [{
+                "beat": "beat_01",
+                "time": "00:02-00:04",
+                "issue_zh": "高光过曝",
+            }],
+            "modification_list": ["降低高光，保留镜头节奏"],
+        })
+        _write(p / "artifacts" / "final_review.json", {
+            "version": "1.0",
+            "output_path": "renders/final.mp4",
+            "status": "pass",
+            "checks": {
+                "technical_probe": {
+                    "duration_seconds": 10,
+                    "resolution": "1080x1920",
+                    "fps": 30,
+                    "has_audio": True,
+                    "issues": [],
+                },
+                "visual_spotcheck": {},
+                "audio_spotcheck": {},
+                "promise_preservation": {},
+                "subtitle_check": {},
+            },
+        })
+        _write(p / "artifacts" / "decision_log.json", {
+            "version": "1.0",
+            "decisions": [{
+                "category": "delivery_signoff",
+                "subject": "最终交付",
+                "selected": "confirmed",
+                "user_response_text": "确认交付",
+            }],
+        })
+
+        state = load_board_state(p)
+        commercial = state["commercial"]
+
+        assert [stage["name"] for stage in state["stages"]] == [
+            "brief_locked",
+            "assets_gate",
+            "sample_review",
+            "segment_build",
+            "draft_review",
+            "final_compose",
+            "delivery_signoff",
+        ]
+        assert [item["stage"] for item in commercial["legacy_checkpoints"]] == [
+            "full_production",
+            "sample_gate",
+        ]
+        assert commercial["beats"][0]["time"] == "00:00-00:10"
+        assert commercial["beats"][0]["reference_path"] == "assets/images/reference.png"
+        assert commercial["stage_evidence"]["sample"]["path"] == "assets/video/sample.mp4"
+        assert commercial["stage_evidence"]["sample"]["user_confirmation_text"] == "试片通过，继续全片。"
+        assert commercial["stage_evidence"]["draft"]["path"] == "renders/draft.mp4"
+        assert commercial["stage_evidence"]["draft"]["issue_segments"][0]["beat"] == "beat_01"
+        assert commercial["stage_evidence"]["compose"]["path"] == "renders/final.mp4"
+        assert commercial["stage_evidence"]["delivery"]["decision"] == "confirmed"
+
+
+class TestCommercialArtifactSchemas:
+    def test_full_draft_requires_user_visible_review_evidence(self):
+        schema_path = (
+            Path(__file__).resolve().parents[2]
+            / "schemas" / "artifacts" / "full_draft_pro.schema.json"
+        )
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+
+        with pytest.raises(ValidationError):
+            validate({"path": "renders/draft.mp4"}, schema)
+
+        validate({
+            "path": "renders/draft.mp4",
+            "issue_segments": [],
+            "modification_list": [],
+        }, schema)
 
 
 class TestLibrary:

@@ -82,6 +82,8 @@ stages:
     label_zh: 合成终稿
     description_zh: 合并已通过片段、文字、字幕和音频并执行技术检查。
     skill: openmontage-bootstrap-04-produce
+    produces:
+      - final_review
     checkpoint_required: true
     human_approval_default: false
 
@@ -89,5 +91,9 @@ stages:
     label_zh: 交付确认
     description_zh: 展示终稿、质量结论和累计费用，等待最终确认。
     skill: openmontage-bootstrap-04-produce
+    produces:
+      - final_review
+      - cost_log
+      - decision_log
     checkpoint_required: true
     human_approval_default: true

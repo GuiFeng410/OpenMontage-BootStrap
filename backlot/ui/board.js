@@ -951,17 +951,19 @@ const STAGE_CONTENT_VIEW = {
   assets_gate: "assets",
   sample_review: "sample",
   segment_build: "segment",
-  draft_review: "segment",
-  final_compose: "full",
-  delivery_signoff: "full",
+  draft_review: "draft",
+  final_compose: "compose",
+  delivery_signoff: "delivery",
 };
 
 const CONTENT_VIEW_LABEL = {
   plan: "方案确认 · 仅文案规划",
   assets: "素材检查 · 用户素材与扩展安排",
   sample: "试片确认 · 仅入片视频",
-  segment: "分段/初稿 · 入片视频",
-  full: "终稿/交付 · 图文视频合集",
+  segment: "分段制作 · 入片视频",
+  draft: "初稿审查 · 问题与修改清单",
+  compose: "合成终稿 · 技术检查",
+  delivery: "交付确认 · 终稿与签收",
 };
 
 function commercialFocusStage(s) {
@@ -1021,8 +1023,8 @@ function renderCommercialMediaStack(s, beat, view) {
     return stack;
   }
 
-  // sample / segment：只准入片视频，不出图片大图、不出候选2大预览
-  if (view === "sample" || view === "segment") {
+  // sample / segment / draft：只准入片视频，不出图片大图、不出候选2大预览
+  if (view === "sample" || view === "segment" || view === "draft") {
     const vid = selectedVideo || (beat.asset_path
       ? { path: beat.asset_path, label_zh: "入片视频", selected: true }
       : null);
@@ -1043,10 +1045,20 @@ function renderCommercialMediaStack(s, beat, view) {
       if (node.paused) node.play(); else node.pause();
     };
     stack.append(box);
+    if ((view === "segment" || view === "draft") && beat.reference_path) {
+      stack.append(el("details", { class: "beat-reference" },
+        el("summary", {}, "查看参考素材"),
+        el("img", {
+          src: thumbURL(s.project_id, beat.reference_path, 240),
+          loading: "lazy",
+          alt: beat.ref || "参考素材",
+        }),
+        el("span", { class: "media-cap" }, beat.ref || "参考素材")));
+    }
     return stack;
   }
 
-  // full（终稿/交付）：图上 + 入片视频下；候选只走标注条，不堆第二路大视频
+  // draft / compose / delivery：保留已选素材与入片视频作为审计关联。
   for (const img of images.filter((i) => i.selected || images.length === 1)) {
     stack.append(el("div", { class: `beat-media image${img.selected ? " selected" : ""}` },
       el("img", {
@@ -1146,7 +1158,7 @@ function renderCommercialBeatCard(s, beat, index = 0) {
       el("div", { class: "cbc-method" }, formatCommercialMethod(beat)),
       beat.angle_use ? el("div", { class: "cbc-sub" }, beat.angle_use) : null,
       beat.ref ? el("div", { class: "cbc-sub" }, `参考 · ${beat.ref}`) : null);
-    if (view === "full" && (beat.copy_plan_zh || beat.shot_plan_zh)) {
+    if (["compose", "delivery"].includes(view) && (beat.copy_plan_zh || beat.shot_plan_zh)) {
       body.append(el("details", { class: "beat-plan-fold" },
         el("summary", {}, "规划摘要"),
         beat.copy_plan_zh ? el("div", {}, beat.copy_plan_zh) : null,
@@ -1217,6 +1229,7 @@ function renderCommercialBeats(s) {
   const beats = s.commercial?.beats || [];
   if (!beats.length) return null;
   const view = commercialContentView(s);
+  if (view === "compose" || view === "delivery") return null;
   const focus = commercialFocusStage(s);
   const focusLabel = (s.stages.find((x) => x.name === focus) || {}).label_zh || focus;
   const grid = el("div", { class: "beat-card-grid" });
@@ -1228,7 +1241,7 @@ function renderCommercialBeats(s) {
     batches.length && s.commercial?.review_mode === "pro" ? ` · ${batches.length} 批` : "");
   const timeline = renderCommercialTimeline(s);
   const hint = el("div", { class: "content-view-hint" },
-    "证据按阶段递进：方案确认看文案 → 素材检查看用户图与扩展安排 → 试片起看入片视频 → 终稿/交付才图文视频合集。",
+    "证据按阶段递进：方案确认看文案 → 素材检查看用户图与扩展安排 → 试片/分段看入片视频 → 初稿看问题与修改 → 终稿看技术检查 → 交付看签收。",
     el("b", {}, " 点击顶栏阶段"), " 可切换该阶段视图。");
   return el("div", { class: "commercial-film-block" },
     el("div", { class: "section-title" }, "Beat 胶片条 / 时间线", batchMeta),
@@ -1241,7 +1254,18 @@ function renderCommercialPlayers(s) {
   const view = commercialContentView(s);
   // 试片确认起才显示下方成片播放器；方案/素材阶段不出现
   if (view === "plan" || view === "assets") return null;
-  const players = s.commercial?.players || [];
+  const evidence = s.commercial?.stage_evidence || {};
+  const stagePlayer = {
+    sample: evidence.sample?.path ? { label: "试片", path: evidence.sample.path } : null,
+    draft: evidence.draft?.path ? { label: "完整初稿", path: evidence.draft.path } : null,
+    compose: evidence.compose?.path ? { label: "终稿候选", path: evidence.compose.path } : null,
+    delivery: evidence.delivery?.path ? { label: "终稿", path: evidence.delivery.path } : null,
+  }[view];
+  if ((view === "sample" || view === "segment") && !stagePlayer) return null;
+  const players = stagePlayer
+    ? [stagePlayer]
+    : (s.commercial?.players || []).filter((player) =>
+      !["试片", "完整初稿", "终稿", "终稿候选"].includes(player.label));
   if (!players.length) return null;
   const tabs = el("div", { class: "render-meta" });
   players.forEach((p, i) => {
@@ -1261,6 +1285,89 @@ function renderCommercialPlayers(s) {
       el("span", { class: "meta" }, current.path.split("/").pop())),
     el("div", { class: "render-hero" }, video),
     tabs);
+}
+
+function renderCommercialStageEvidence(s) {
+  const view = commercialContentView(s);
+  const evidence = s.commercial?.stage_evidence || {};
+  if (view === "sample") {
+    const sample = evidence.sample || {};
+    const body = el("div", { class: "panel-body commercial-summary" },
+      el("div", { class: "kv-row" }, el("span", { class: "kv-k" }, "试片状态"),
+        el("span", { class: "kv-v" }, sample.status || "待生成")),
+      el("div", { class: "kv-row" }, el("span", { class: "kv-k" }, "时长"),
+        el("span", { class: "kv-v" }, sample.duration_seconds != null ? `${sample.duration_seconds}s` : "待探测")),
+      sample.user_confirmation_text
+        ? el("div", { class: "commercial-evidence-list" }, el("b", {}, "用户确认"), el("div", {}, sample.user_confirmation_text))
+        : el("div", { class: "hint" }, "尚未记录用户对试片的确认。"));
+    return el("div", { class: "panel commercial-stage-evidence" },
+      el("div", { class: "panel-head" }, el("h2", {}, "试片确认"), el("span", { class: "meta" }, "sample_reel")),
+      body);
+  }
+  if (view === "draft") {
+    const draft = evidence.draft || {};
+    const issues = draft.issue_segments || [];
+    const modifications = draft.modification_list || [];
+    const body = el("div", { class: "panel-body" },
+      issues.length
+        ? el("div", { class: "commercial-evidence-list" },
+          el("b", {}, "问题片段"),
+          issues.map((item) => el("div", {}, `${item.beat || "片段"} · ${item.time || "时间待补"} · ${item.issue_zh || item.issue || "待说明"}`)))
+        : el("div", { class: "hint" }, "尚未写入问题片段；初稿通过前应记录审查结论。"),
+      modifications.length
+        ? el("div", { class: "commercial-evidence-list" },
+          el("b", {}, "修改清单"),
+          modifications.map((item, index) => el("div", {}, `${index + 1}. ${item}`)))
+        : el("div", { class: "hint" }, "尚未写入修改清单。"));
+    return el("div", { class: "panel commercial-stage-evidence" },
+      el("div", { class: "panel-head" }, el("h2", {}, "初稿审查"), el("span", { class: "meta" }, "full_draft_pro")),
+      body);
+  }
+  if (view === "compose") {
+    const compose = evidence.compose || {};
+    const probe = compose.technical_probe || {};
+    const rows = [
+      ["审查结论", compose.status],
+      ["时长", probe.duration_seconds != null ? `${probe.duration_seconds}s` : null],
+      ["分辨率", probe.resolution],
+      ["帧率", probe.fps != null ? `${probe.fps} fps` : null],
+      ["音频", probe.has_audio == null ? null : (probe.has_audio ? "存在" : "缺失")],
+    ].filter(([, value]) => value != null);
+    const body = el("div", { class: "panel-body commercial-summary" });
+    rows.forEach(([label, value]) => body.append(el("div", { class: "kv-row" },
+      el("span", { class: "kv-k" }, label), el("span", { class: "kv-v" }, String(value)))));
+    const issues = [...(probe.issues || []), ...(compose.issues_found || [])];
+    body.append(issues.length
+      ? el("div", { class: "commercial-evidence-list" }, el("b", {}, "技术问题"), issues.map((issue) => el("div", {}, issue)))
+      : el("div", { class: "hint" }, "技术检查未发现问题。"));
+    return el("div", { class: "panel commercial-stage-evidence" },
+      el("div", { class: "panel-head" }, el("h2", {}, "合成终稿 · 技术检查"), el("span", { class: "meta" }, "final_review")),
+      body);
+  }
+  if (view === "delivery") {
+    const delivery = evidence.delivery || {};
+    const body = el("div", { class: "panel-body commercial-summary" },
+      el("div", { class: "kv-row" }, el("span", { class: "kv-k" }, "质量结论"),
+        el("span", { class: "kv-v" }, delivery.quality_status || "待技术检查")),
+      el("div", { class: "kv-row" }, el("span", { class: "kv-k" }, "签收状态"),
+        el("span", { class: "kv-v" }, delivery.decision_label_zh || delivery.decision || "等待聊天确认")),
+      delivery.decision_response_zh
+        ? el("div", { class: "commercial-evidence-list" }, el("b", {}, "用户回复"), el("div", {}, delivery.decision_response_zh))
+        : null);
+    return el("div", { class: "panel commercial-stage-evidence" },
+      el("div", { class: "panel-head" }, el("h2", {}, "交付确认"), el("span", { class: "meta" }, "decision_log")),
+      body);
+  }
+  return null;
+}
+
+function renderCommercialLegacyNotice(s) {
+  const records = s.commercial?.legacy_checkpoints || [];
+  if (!records.length) return null;
+  return el("div", { class: "notice commercial-legacy-notice" },
+    el("span", {}, "⚠"),
+    el("span", {}, "发现历史 checkpoint：", el("b", {}, records.map((item) => item.stage).join("、")),
+      "。它们不属于商品片七阶段，已从主进度栏隔离，且没有改写项目磁盘。"));
 }
 
 function renderSseBanner(s) {
@@ -1294,6 +1401,8 @@ function renderCommercialBoard(s) {
   const main = el("div", { class: "main-col" });
   const sseBanner = renderSseBanner(s);
   if (sseBanner) main.append(sseBanner);
+  const legacyNotice = renderCommercialLegacyNotice(s);
+  if (legacyNotice) main.append(legacyNotice);
   const allDone = s.stages.filter((x) => !x.undeclared).every((x) => x.status === "completed");
   const focus = commercialFocusStage(s);
   const focusLabel = (s.stages.find((x) => x.name === focus) || {}).label_zh || focus;
@@ -1314,9 +1423,11 @@ function renderCommercialBoard(s) {
   const assetPool = view === "assets" ? renderCommercialAssets(s) : null;
   const beats = renderCommercialBeats(s);
   const players = renderCommercialPlayers(s);
+  const stageEvidence = renderCommercialStageEvidence(s);
   if (precheck) main.append(precheck);
   if (assetPool) main.append(assetPool);
   if (beats) main.append(beats);
+  if (stageEvidence) main.append(stageEvidence);
   if (players) main.append(players);
   if (!beats && !players && !summary && !precheck && !assetPool) {
     main.append(el("div", { class: "hint" },
