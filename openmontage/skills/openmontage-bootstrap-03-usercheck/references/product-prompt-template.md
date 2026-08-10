@@ -40,7 +40,9 @@
 ⑦ 硬约束冲突须「确认覆盖」并记入决策 / artifacts
 ```
 
-与 BootStrap 对齐时：表 1 / 表 2 确认之后，填表 3（`video_plan`）前 **必须先读本文**（商品片含重度商品由 `03-usercheck` 强制）。
+与 BootStrap 对齐时：表 1 / 表 2 确认之后，填表 3（`video_plan`）前 **必须先读本文**（商品片含重度商品由 `03-usercheck` 强制）。  
+素材预检操作细则见同目录 **`asset-preprocess-gate.md`**（`produce_scan_user_images` + 用户确认 → `asset_ledger`）。  
+写付费 AI 单镜时：**先读** `openmontage/skills/openmontage-seedance-prompt/SKILL.md`，再读 **`commercial-prompt-lexicon.md`**。表 1 仍在 03 用 Grill 补全，不依赖外置 clarifyprompt。
 
 ---
 
@@ -57,7 +59,8 @@
 | `person_only` | 只有人、无清晰货 | **不作产品主参考** |
 | `scene` / `other` | 场景或其它 | 环境或弃用 |
 
-简表须含：各类张数、是否含人物、**相对目标时长/切段是否够参考图**。
+简表须含：各类张数、是否含人物、**相对目标时长/切段是否够参考图**。  
+**P0：** 分类建议仅来自文件名启发式 + Agent 整理，**不调用视觉 API**；定稿以用户确认为准（见 `asset-preprocess-gate.md`）。
 
 ---
 
@@ -327,3 +330,4 @@ S1 Hook+建立；**S2 Hero 重点**；S3 Detail+Close。迭代预算优先 S2。
 | 2026-07-27 | v0.1 初版：提示词三层 + 时长策略 + 重点段 + 冲突规则（Grill 定稿） |
 | 2026-07-27 | 迁入 `03-usercheck/references`，作为跨机器权威副本 |
 | 2026-07-27 | v0.2：素材分类、缺图询问（默认 I2I）、纯产品优先、佩戴硬约束 |
+| 2026-08-10 | 交叉引用 asset-preprocess-gate / commercial-prompt-lexicon / openmontage-seedance-prompt |

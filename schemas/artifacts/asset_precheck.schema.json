@@ -40,6 +40,10 @@
         "total_images": { "type": "integer", "minimum": 0 },
         "low_resolution_count": { "type": "integer", "minimum": 0 },
         "duplicate_group_count": { "type": "integer", "minimum": 0 },
+        "counts_by_suggested_class": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
         "needs_user_attention": { "type": "boolean" }
       },
       "additionalProperties": false

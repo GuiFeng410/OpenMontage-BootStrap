@@ -1,8 +1,13 @@
-"""Read-only facts scanner for uploaded commercial product images."""
+"""Read-only facts scanner for uploaded commercial product images.
+
+P0 hybrid preprocess: program reports hard facts + filename class hints only.
+No vision API. User confirmation writes ``asset_ledger`` via the agent gate.
+"""
 
 from __future__ import annotations
 
 import hashlib
+from collections import Counter
 from pathlib import Path
 from typing import Any
 
@@ -13,6 +18,15 @@ _ROLE_HINTS: tuple[tuple[tuple[str, ...], str], ...] = (
     (("detail", "macro", "close", "细节", "微距"), "product_detail"),
     (("angle", "side", "back", "角度", "侧面", "背面"), "product_angle"),
     (("hand", "wear", "body", "佩戴", "手持", "上身"), "on_body"),
+    (("pack", "box", "包装"), "packaging"),
+    (("scene", "lifestyle", "场景", "氛围"), "lifestyle"),
+)
+
+# Duration band → (minimum images, recommended images, preferred classes)
+_DURATION_BANDS: tuple[tuple[int, int, int, tuple[str, ...]], ...] = (
+    (10, 1, 3, ("product_hero", "product_angle", "product_detail")),
+    (30, 2, 6, ("product_hero", "product_angle", "product_detail", "on_body")),
+    (60, 3, 10, ("product_hero", "product_angle", "product_detail", "on_body", "lifestyle")),
 )
 
 
@@ -76,6 +90,9 @@ def scan_user_images(project_dir: str | Path, *, min_dimension: int = 640) -> di
     low_resolution_count = sum(bool(entry["issues"]) for entry in entries)
     duplicate_group_count = sum(1 for entry in entries if entry.get("duplicate_of"))
     has_unclassified_image = any(not entry["suggested_class"] for entry in entries)
+    counts = Counter(
+        entry["suggested_class"] or "unclassified" for entry in entries
+    )
     return {
         "version": "1.0",
         "source_dir": "assets/images",
@@ -84,10 +101,135 @@ def scan_user_images(project_dir: str | Path, *, min_dimension: int = 640) -> di
             "total_images": len(entries),
             "low_resolution_count": low_resolution_count,
             "duplicate_group_count": duplicate_group_count,
+            "counts_by_suggested_class": dict(counts),
             "needs_user_attention": (
                 not entries
                 or has_unclassified_image
                 or bool(low_resolution_count or duplicate_group_count)
             ),
         },
+    }
+
+
+def duration_profile(duration_seconds: int | float) -> dict[str, Any]:
+    """Return minimum / recommended image counts for a commercial duration."""
+    seconds = max(0, int(duration_seconds or 0))
+    if seconds <= 10:
+        minimum, recommended, classes = 1, 3, _DURATION_BANDS[0][3]
+        profile = "10s"
+    elif seconds <= 30:
+        minimum, recommended, classes = 2, 6, _DURATION_BANDS[1][3]
+        profile = "30s"
+    else:
+        minimum, recommended, classes = 3, 10, _DURATION_BANDS[2][3]
+        profile = "60s"
+    return {
+        "duration_profile": profile,
+        "duration_seconds": seconds,
+        "minimum_image_count": minimum,
+        "recommended_image_count": recommended,
+        "preferred_asset_classes": list(classes),
+    }
+
+
+def build_asset_requirements(
+    *,
+    duration_seconds: int | float,
+    confirmed_classes: list[str],
+    gap_fill: str = "none",
+    user_confirmed_shortage: bool = False,
+) -> dict[str, Any]:
+    """Build ``asset_requirements`` after user confirms classes (no vision)."""
+    profile = duration_profile(duration_seconds)
+    counts = Counter(c for c in confirmed_classes if c)
+    available = sum(counts.values())
+    preferred = list(profile["preferred_asset_classes"])
+    missing = [c for c in preferred if counts.get(c, 0) < 1]
+    has_hero = counts.get("product_hero", 0) > 0
+
+    if not has_hero:
+        status_zh = "等待用户选择"
+        warning = "缺少商品主图或核心参考，须补图、图生图或改为概念片后再出表 3。"
+    elif available < int(profile["minimum_image_count"]):
+        status_zh = "降级继续"
+        warning = "图片数量低于最低可运行建议，商品一致性与镜头丰富度可能下降。"
+    elif missing or available < int(profile["recommended_image_count"]):
+        status_zh = "降级继续"
+        warning = "图片数量或类型低于建议，商品一致性与镜头丰富度可能下降。"
+    else:
+        status_zh = "就绪"
+        warning = ""
+
+    return {
+        **profile,
+        "available_image_count": available,
+        "available_asset_classes": sorted(counts.keys()),
+        "missing_asset_classes": missing,
+        "counts_by_class": dict(counts),
+        "status": status_zh,
+        "fallback": gap_fill,
+        "quality_warning": warning,
+        "user_confirmed_shortage": bool(user_confirmed_shortage),
+    }
+
+
+def build_asset_ledger(
+    *,
+    project_id: str,
+    precheck: dict[str, Any],
+    user_classes: dict[str, str],
+    duration_seconds: int | float = 0,
+    gap_fill: str = "none",
+    identity_anchor_path: str = "",
+    confirmed_at: str = "",
+) -> dict[str, Any]:
+    """Merge scan facts with user-confirmed classes into ``asset_ledger``."""
+    entries_out: list[dict[str, Any]] = []
+    confirmed: list[str] = []
+    for entry in precheck.get("entries") or []:
+        if not isinstance(entry, dict):
+            continue
+        path = str(entry.get("path") or "")
+        user_class = str(
+            user_classes.get(path)
+            or user_classes.get(str(entry.get("file") or ""))
+            or entry.get("user_class")
+            or entry.get("suggested_class")
+            or ""
+        ).strip()
+        if not user_class:
+            continue
+        is_anchor = bool(
+            identity_anchor_path
+            and (path == identity_anchor_path or entry.get("file") == identity_anchor_path)
+        )
+        row = {
+            **entry,
+            "user_class": user_class,
+            "status": "identity_anchor" if is_anchor else "confirmed",
+            "is_identity_anchor": is_anchor,
+        }
+        entries_out.append(row)
+        confirmed.append(user_class)
+
+    requirements = build_asset_requirements(
+        duration_seconds=duration_seconds,
+        confirmed_classes=confirmed,
+        gap_fill=gap_fill,
+        user_confirmed_shortage=gap_fill != "none",
+    )
+    return {
+        "version": "1.0",
+        "project_id": project_id,
+        "confirmed_at": confirmed_at,
+        "gap_fill": gap_fill,
+        "entries": entries_out,
+        "summary": {
+            "available_image_count": len(entries_out),
+            "counts_by_class": dict(Counter(confirmed)),
+            "missing_asset_classes": requirements.get("missing_asset_classes") or [],
+            "status_zh": requirements.get("status") or "等待用户选择",
+            "quality_warning": requirements.get("quality_warning") or "",
+        },
+        "asset_requirements": requirements,
     }

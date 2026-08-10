@@ -885,7 +885,13 @@ def produce_get_next_stage(project_id: str) -> dict[str, Any]:
 
 
 def produce_scan_user_images(project_id: str) -> dict[str, Any]:
-    """Read uploaded image facts and filename-only role suggestions without writing."""
+    """Read-only commercial image precheck (P0 hybrid).
+
+    Scans ``assets/images/`` for dimensions, size, duplicates, and
+    **filename-only** ``suggested_class`` hints. Does not write artifacts,
+    does not call vision APIs, and does not generate images. The agent must
+    get user confirmation before writing ``asset_ledger``.
+    """
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     from lib.asset_precheck import scan_user_images

@@ -2,11 +2,72 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "openmontage/artifacts/asset_ledger",
   "title": "Commercial Asset Ledger",
+  "description": "User-confirmed commercial image roles after assets_gate / asset_precheck.",
   "type": "object",
-  "required": ["entries"],
+  "required": ["version", "entries", "summary"],
   "properties": {
-    "version": { "type": "string" },
-    "entries": { "type": "array", "items": { "type": "object" } }
+    "version": { "type": "string", "const": "1.0" },
+    "project_id": { "type": "string" },
+    "confirmed_at": { "type": "string" },
+    "gap_fill": {
+      "type": "string",
+      "enum": ["none", "user_upload", "i2i", "concept_only"]
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "user_class", "status"],
+        "properties": {
+          "file": { "type": "string" },
+          "path": { "type": "string", "minLength": 1 },
+          "width": { "type": "integer", "minimum": 1 },
+          "height": { "type": "integer", "minimum": 1 },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string" },
+          "suggested_class": { "type": "string" },
+          "user_class": { "type": "string", "minLength": 1 },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending_user_confirmation",
+              "confirmed",
+              "rejected",
+              "identity_anchor"
+            ]
+          },
+          "is_identity_anchor": { "type": "boolean" },
+          "issues": { "type": "array", "items": { "type": "string" } },
+          "duplicate_of": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "summary": {
+      "type": "object",
+      "required": [
+        "available_image_count",
+        "counts_by_class",
+        "status_zh"
+      ],
+      "properties": {
+        "available_image_count": { "type": "integer", "minimum": 0 },
+        "counts_by_class": {
+          "type": "object",
+          "additionalProperties": { "type": "integer", "minimum": 0 }
+        },
+        "missing_asset_classes": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "status_zh": {
+          "type": "string",
+          "enum": ["就绪", "降级继续", "等待用户选择"]
+        },
+        "quality_warning": { "type": "string" }
+      },
+      "additionalProperties": true
+    }
   },
   "additionalProperties": true
 }

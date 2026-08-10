@@ -335,7 +335,7 @@ produce_set_production_profile(
 
 ## 商品片执行前素材复查
 
-进入商品片执行前，读取 `asset_requirements` 和 `video_plan`，并逐段核对：
+进入商品片执行前，读取 `asset_requirements`、`asset_ledger`（若有）和 `video_plan`，并逐段核对：
 
 1. 是否存在商品主图（`product_hero`）；
 2. 当前图片数是否达到该时长的最低数量；
@@ -343,6 +343,20 @@ produce_set_production_profile(
 4. 每个重点段是否有参考图片（`ref_image`）；
 5. 缺图处理（`gap_fill`）为图生图时，补图是否已经完成并经过检查；
 6. 素材状态是否为“就绪”，或用户已经确认风险的“降级继续”。
+
+若缺少已确认的 `asset_precheck` / 用户分类确认（商品片），**退回** `03-usercheck` 走 `references/asset-preprocess-gate.md`，禁止在本 Skill 内猜类或静默补图。
+
+写付费 AI 动态段提示词时，**必须先读**：
+
+`openmontage/skills/openmontage-seedance-prompt/SKILL.md`
+
+再读：
+
+- `openmontage/skills/openmontage-bootstrap-03-usercheck/references/commercial-prompt-lexicon.md`（景别/运镜/布光短表）
+- `openmontage/skills/openmontage-bootstrap-03-usercheck/references/product-prompt-template.md`（槽位顺序）
+- 同 Skill 下 `references/seedance-prompt-skill.md`（完整写法与案例）
+
+Remotion / HyperFrames 纯本地运镜段可不读 seedance Skill。渠模以 03 锁定为准，禁止因提示词 Skill 擅自改渠。
 
 执行顺序必须是：
 
