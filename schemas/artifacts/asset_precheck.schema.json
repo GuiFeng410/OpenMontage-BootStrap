@@ -20,10 +20,18 @@
           "bytes": { "type": "integer", "minimum": 0 },
           "sha256": { "type": "string" },
           "suggested_class": { "type": "string" },
+          "filename_suggested_class": { "type": "string" },
           "user_class": { "type": "string" },
           "status": { "type": "string" },
           "issues": { "type": "array", "items": { "type": "string" } },
-          "duplicate_of": { "type": "string" }
+          "duplicate_of": { "type": "string" },
+          "vision_description_zh": { "type": "string" },
+          "vision_usable_for_zh": { "type": "string" },
+          "vision_confidence": { "type": ["number", "null"] },
+          "vision_risks_zh": { "type": "array", "items": { "type": "string" } },
+          "vision_suggested_class": { "type": "string" },
+          "vision_alt_class": { "type": "string" },
+          "vision_model": { "type": "string" }
         },
         "additionalProperties": false
       }
@@ -44,7 +52,9 @@
           "type": "object",
           "additionalProperties": { "type": "integer", "minimum": 0 }
         },
-        "needs_user_attention": { "type": "boolean" }
+        "needs_user_attention": { "type": "boolean" },
+        "vision_enriched": { "type": "boolean" },
+        "vision_model": { "type": "string" }
       },
       "additionalProperties": false
     }

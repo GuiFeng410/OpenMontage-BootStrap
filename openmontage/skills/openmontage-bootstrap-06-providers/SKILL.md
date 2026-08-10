@@ -25,6 +25,12 @@ metadata:
         required: false
       - name: DASHSCOPE_API_KEY
         required: false
+      - name: VISION_API_KEY
+        required: false
+      - name: VISION_BASE_URL
+        required: false
+      - name: VISION_MODEL
+        required: false
       - name: KLING_API_KEY
         required: false
       - name: GEMINI_API_KEY

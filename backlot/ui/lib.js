@@ -69,9 +69,16 @@ export function thumbURL(projectId, relPath, w = 640) {
 }
 
 // Subscribe to a server-sent change feed; call onChange (debounced) per burst.
-export function subscribe(url, onChange) {
+// onStatus(status) optional: "connecting" | "live" | "disconnected"
+export function subscribe(url, onChange, onStatus) {
   let timer = null;
+  let opened = false;
   const source = new EventSource(url);
+  if (typeof onStatus === "function") onStatus("connecting");
+  source.onopen = () => {
+    opened = true;
+    if (typeof onStatus === "function") onStatus("live");
+  };
   source.onmessage = (msg) => {
     try {
       const data = JSON.parse(msg.data);
@@ -82,7 +89,12 @@ export function subscribe(url, onChange) {
     clearTimeout(timer);
     timer = setTimeout(onChange, 250);
   };
-  source.onerror = () => { /* EventSource auto-reconnects */ };
+  source.onerror = () => {
+    if (typeof onStatus === "function") {
+      onStatus(opened ? "disconnected" : "connecting");
+    }
+    /* EventSource auto-reconnects */
+  };
   return source;
 }
 

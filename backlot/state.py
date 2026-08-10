@@ -42,6 +42,54 @@ ROLE_LABELS_ZH = {
     "hand": "手持图",
 }
 
+_DECISION_CATEGORY_ZH = {
+    "brief_selection": "方案选择",
+    "review_mode_selection": "评审模式",
+    "production_tier_selection": "制作档位",
+    "candidate_mode_selection": "候选策略",
+    "motion_mix_selection": "画面构成",
+    "asset_decision": "素材决定",
+    "stage_review_decision": "阶段裁定",
+    "delivery_signoff": "交付确认",
+    "approval_policy": "审批策略",
+}
+
+
+def _commercial_decisions_summary(decision_log: dict[str, Any]) -> list[dict[str, Any]]:
+    """Latest decision per category+subject for commercial board rail."""
+    rows = decision_log.get("decisions") if isinstance(decision_log, dict) else None
+    if not isinstance(rows, list):
+        return []
+    current: dict[str, dict[str, Any]] = {}
+    order: list[str] = []
+    for raw in rows:
+        if not isinstance(raw, dict):
+            continue
+        cat = str(raw.get("category") or "decision")
+        subject = str(raw.get("subject") or "")
+        key = f"{cat}::{subject}"
+        selected = raw.get("selected")
+        label = selected
+        for opt in raw.get("options_considered") or []:
+            if not isinstance(opt, dict):
+                continue
+            if (opt.get("option_id") or opt.get("label")) == selected:
+                label = opt.get("label") or opt.get("label_zh") or selected
+                break
+        if key not in current:
+            order.append(key)
+        current[key] = {
+            "category": cat,
+            "category_zh": _DECISION_CATEGORY_ZH.get(cat, cat),
+            "subject": subject,
+            "selected": selected,
+            "selected_label_zh": label,
+            "reason": raw.get("reason") or "",
+            "user_response_text": raw.get("user_response_text") or "",
+        }
+    return [current[k] for k in order]
+
+
 # Stages every pipeline shares (fallback rail when the manifest is unknown).
 FALLBACK_STAGES = [
     "research", "proposal", "idea", "script", "scene_plan",
@@ -267,6 +315,7 @@ ARTIFACT_FILES = {
     "segment_cards": "segment_cards.json",
     "asset_ledger": "asset_ledger.json",
     "asset_precheck": "asset_precheck.json",
+    "asset_vision": "asset_vision.json",
 }
 
 
@@ -902,6 +951,7 @@ def _build_commercial_board(
             "summary": precheck_doc.get("summary") or {},
             "entries": precheck_doc.get("entries") or [],
         },
+        "asset_vision": artifacts.get("asset_vision") or {},
         "beats": beats,
         "timeline": {
             "duration_seconds": duration,
@@ -918,6 +968,19 @@ def _build_commercial_board(
             if value is not None
         },
         "decision": decision,
+        "decisions": _commercial_decisions_summary(artifacts.get("decision_log") or {}),
+        "plan_archive": {
+            "overall_prompt_zh": segment_doc.get("overall_prompt_zh") or "",
+            "has_brief": bool(brief),
+            "has_video_plan": bool(artifacts.get("video_plan")),
+            "has_segment_cards": bool(segment_doc),
+            "segment_count": len(beats),
+            "sealed_zh": (
+                "方案证据已落盘"
+                if brief and (artifacts.get("video_plan") or segment_doc)
+                else "方案证据不完整：请确认 Agent 已写入 brief / video_plan / segment_cards"
+            ),
+        },
         "players": players,
         "cost_cny": {
             "spent_cny": spent_cny,

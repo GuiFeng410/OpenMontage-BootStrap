@@ -876,29 +876,37 @@ def run_write_checkpoint(
 ) -> dict[str, Any]:
     require_p1_writes()
     _ensure_repo_on_path()
-    from lib.checkpoint import write_checkpoint
+    from lib.checkpoint import merge_checkpoint_artifacts, read_checkpoint, write_checkpoint
 
     root = require_projects_root()
     project_dir(project_id)  # validate id
     try:
-        artifacts = json.loads(artifacts_json) if artifacts_json else {}
+        supplied_artifacts = json.loads(artifacts_json) if artifacts_json else {}
     except json.JSONDecodeError as exc:
         raise DoctorError(f"artifacts_json invalid: {exc}", code="bad_request") from exc
-    if not isinstance(artifacts, dict):
+    if not isinstance(supplied_artifacts, dict):
         raise DoctorError("artifacts_json must be an object", code="bad_request")
+    current = read_checkpoint(root, project_id, stage)
+    artifacts = merge_checkpoint_artifacts(
+        (current or {}).get("artifacts") if isinstance(current, dict) else None,
+        supplied_artifacts,
+    )
     synced_profile = _sync_production_profile_to_marker(project_id, artifacts)
     try:
-        metadata = json.loads(metadata_json) if metadata_json else {}
+        supplied_metadata = json.loads(metadata_json) if metadata_json else {}
     except json.JSONDecodeError as exc:
         raise DoctorError(f"metadata_json invalid: {exc}", code="bad_request") from exc
-    if not isinstance(metadata, dict):
+    if not isinstance(supplied_metadata, dict):
         raise DoctorError("metadata_json must be an object", code="bad_request")
+    metadata = {**((current or {}).get("metadata") or {}), **supplied_metadata}
     try:
         cost_snapshot = json.loads(cost_snapshot_json) if cost_snapshot_json else None
     except json.JSONDecodeError as exc:
         raise DoctorError(f"cost_snapshot_json invalid: {exc}", code="bad_request") from exc
     if cost_snapshot is not None and not isinstance(cost_snapshot, dict):
         raise DoctorError("cost_snapshot_json must be an object", code="bad_request")
+    if cost_snapshot is None and isinstance(current, dict):
+        cost_snapshot = current.get("cost_snapshot")
     if approval_note:
         metadata["approval_note"] = approval_note
     path = write_checkpoint(
@@ -913,7 +921,13 @@ def run_write_checkpoint(
         cost_snapshot=cost_snapshot,
         metadata=metadata or None,
     )
-    result: dict[str, Any] = {"checkpoint_path": str(path), "stage": stage, "status": status}
+    result: dict[str, Any] = {
+        "checkpoint_path": str(path),
+        "stage": stage,
+        "status": status,
+        "artifact_keys": sorted(artifacts.keys()),
+        "materialized_hint_zh": "已写入 checkpoint，并尽量落盘 artifacts/*.json；请刷新看板核对。",
+    }
     if synced_profile:
         result["production_profile"] = synced_profile
     return result
@@ -935,7 +949,7 @@ def run_approve_checkpoint(
             "MCP cannot invent approval."
         )
     _ensure_repo_on_path()
-    from lib.checkpoint import read_checkpoint
+    from lib.checkpoint import merge_checkpoint_artifacts, read_checkpoint
 
     root = require_projects_root()
     project_dir(project_id)
@@ -946,7 +960,10 @@ def run_approve_checkpoint(
         raise DoctorError(f"artifacts_json invalid: {exc}", code="bad_request") from exc
     if not isinstance(supplied_artifacts, dict):
         raise DoctorError("artifacts_json must be an object", code="bad_request")
-    artifacts = supplied_artifacts or ((current or {}).get("artifacts") or {})
+    artifacts = merge_checkpoint_artifacts(
+        (current or {}).get("artifacts") if isinstance(current, dict) else None,
+        supplied_artifacts,
+    )
 
     try:
         supplied_metadata = json.loads(metadata_json) if metadata_json else {}

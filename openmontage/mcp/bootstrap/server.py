@@ -281,6 +281,23 @@ def produce_scan_user_images(project_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def produce_describe_user_images(
+    project_id: str,
+    files_json: str = "",
+    prompt: str = "",
+    model: str = "",
+) -> dict[str, Any]:
+    """Optional VL describe/classify for local assets/images (DashScope or OpenAI-compat). Empty Key degrades to filename heuristics."""
+    return _wrap(
+        T.produce_describe_user_images,
+        project_id,
+        files_json,
+        prompt,
+        model,
+    )
+
+
+@mcp.tool()
 def produce_analyze_public_product_images(
     image_urls_json: str,
     user_authorized: bool = False,

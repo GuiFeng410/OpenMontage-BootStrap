@@ -513,7 +513,68 @@ def write_checkpoint(
     import os
     os.replace(tmp_path, path)
 
+    project_root = pipeline_dir / project_id
+    _materialize_artifacts(project_root, artifacts)
+
     return path
+
+
+# Filenames for board-visible commercial / shared evidence (mirrors Backlot).
+_MATERIALIZE_ARTIFACT_FILES = {
+    "brief": "brief.json",
+    "video_plan": "video_plan.json",
+    "asset_precheck": "asset_precheck.json",
+    "asset_ledger": "asset_ledger.json",
+    "asset_vision": "asset_vision.json",
+    "segment_cards": "segment_cards.json",
+    "review_overview": "review_overview.json",
+    "sample_reel": "sample_reel.json",
+    "full_draft_pro": "full_draft_pro.json",
+    "cost_log": "cost_log.json",
+    "decision_log": "decision_log.json",
+    "batch01_review": "batch01_review.json",
+    "batch02_review": "batch02_review.json",
+}
+
+
+def _materialize_artifacts(project_dir: Path, artifacts: dict[str, Any]) -> list[str]:
+    """Write inline dict artifacts to artifacts/<name>.json. Skip path strings."""
+    if not isinstance(artifacts, dict) or not artifacts:
+        return []
+    art_dir = project_dir / "artifacts"
+    art_dir.mkdir(parents=True, exist_ok=True)
+    written: list[str] = []
+    for name, value in artifacts.items():
+        if not isinstance(value, dict):
+            continue
+        filename = _MATERIALIZE_ARTIFACT_FILES.get(name)
+        if not filename:
+            if not name.replace("_", "").isalnum():
+                continue
+            filename = f"{name}.json"
+        target = art_dir / filename
+        try:
+            target.write_text(
+                json.dumps(value, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            written.append(name)
+        except OSError:
+            continue
+    return written
+
+
+def merge_checkpoint_artifacts(
+    current_artifacts: dict[str, Any] | None,
+    supplied_artifacts: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Merge stage artifacts so a partial write cannot drop prior evidence keys."""
+    base = dict(current_artifacts or {})
+    for key, value in (supplied_artifacts or {}).items():
+        if value is None:
+            continue
+        base[key] = value
+    return base
 
 
 def read_checkpoint(

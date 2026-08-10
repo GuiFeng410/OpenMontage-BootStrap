@@ -17,8 +17,9 @@ let currentTheme = localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark
 let state = null;
 let selectedStage = null;   // stage drawer open for this stage name
 let activeRender = 0;
-let replay = null;          // {t0, t1, t, playing} — replay mode when non-null
 let firstPaint = true;
+let sseStatus = "connecting"; // connecting | live | disconnected
+let replay = null;          // {t0, t1, t, playing} — replay mode when non-null
 
 function applyTheme(theme) {
   currentTheme = theme === "light" ? "light" : "dark";
@@ -201,6 +202,7 @@ function stageSub(st) {
 function renderRail(s) {
   const rail = el("nav", { class: "rail" });
   const commercial = isCommercial(s);
+  const focusName = commercial ? commercialFocusStage(s) : null;
   let pendingIndex = 1;
   for (const st of s.stages) {
     const cls = st.status === "completed" ? "done"
@@ -210,8 +212,9 @@ function renderRail(s) {
     const icon = STAGE_ICONS[st.status] || String(pendingIndex);
     if (!STAGE_ICONS[st.status]) pendingIndex += 1;
     const sub = commercial ? stageSubZh(st) : stageSub(st);
+    const isFocus = focusName && st.name === focusName;
     const node = el("div", {
-      class: `stage ${cls}${selectedStage === st.name ? " selected" : ""}${st.undeclared ? " undeclared" : ""}`,
+      class: `stage ${cls}${selectedStage === st.name ? " selected" : ""}${isFocus ? " focus" : ""}${st.undeclared ? " undeclared" : ""}`,
       title: st.undeclared ? `"${st.name}" ran but isn't declared by this pipeline's manifest` : null,
       onclick: () => toggleDrawer(st.name),
     },
@@ -245,7 +248,7 @@ const STAGE_ARTIFACTS = {
 
 const COMMERCIAL_STAGE_ARTIFACTS = {
   brief_locked: ["brief", "video_plan"],
-  assets_gate: ["brief"],
+  assets_gate: ["brief", "asset_precheck", "asset_ledger", "segment_cards"],
   sample_review: ["sample_reel"],
   segment_build: ["review_overview", "batch01_review", "batch02_review"],
   draft_review: ["full_draft_pro"],
@@ -747,6 +750,66 @@ function renderAwaitingNotice(s) {
       "The agent is paused at this gate — reply ", el("b", {}, "in chat"), " to approve or request changes."));
 }
 
+function renderCommercialDecisions(s) {
+  const rows = s.commercial?.decisions || [];
+  if (!rows.length) return null;
+  const body = el("div", { class: "panel-body" });
+  for (const d of rows.slice().reverse().slice(0, 12)) {
+    body.append(el("div", { class: "decision commercial-decision" },
+      el("div", { class: "d-cat" }, d.category_zh || d.category || "决定"),
+      el("div", { class: "d-pick" },
+        `${d.subject || ""} `,
+        el("span", { class: "arrow" }, "→"),
+        ` ${d.selected_label_zh || d.selected || ""}`),
+      d.user_response_text
+        ? el("div", { class: "d-why" }, `你的回复：${d.user_response_text}`)
+        : (d.reason ? el("div", { class: "d-why" }, d.reason) : null)));
+  }
+  return el("div", { class: "panel" },
+    el("div", { class: "panel-head" },
+      el("h2", {}, "已确认决定"),
+      el("span", { class: "meta" }, "decision_log")),
+    body);
+}
+
+function renderCommercialPlanArchive(s) {
+  const archive = s.commercial?.plan_archive || {};
+  const b = s.commercial?.brief_summary || {};
+  const view = commercialContentView(s);
+  // Always keep prior plan evidence visible after leaving 方案确认.
+  if (view === "plan" && !archive.overall_prompt_zh && !archive.has_video_plan) return null;
+  const flags = [
+    archive.has_brief ? "brief✓" : "brief✗",
+    archive.has_video_plan ? "video_plan✓" : "video_plan✗",
+    archive.has_segment_cards ? `分段×${archive.segment_count || 0}` : "segment_cards✗",
+  ].join(" · ");
+  const body = el("div", { class: "panel-body commercial-summary" });
+  body.append(el("div", { class: "kv-row" },
+    el("span", { class: "kv-k" }, "封板状态"),
+    el("span", { class: "kv-v" }, archive.sealed_zh || "—")));
+  body.append(el("div", { class: "kv-row" },
+    el("span", { class: "kv-k" }, "落盘检查"),
+    el("span", { class: "kv-v" }, flags)));
+  if (b.theme) {
+    body.append(el("div", { class: "kv-row" },
+      el("span", { class: "kv-k" }, "主题"),
+      el("span", { class: "kv-v" }, b.theme)));
+  }
+  if (archive.overall_prompt_zh) {
+    body.append(el("details", { class: "tech-details", open: view !== "plan" ? true : undefined },
+      el("summary", {}, "整体步骤方案"),
+      el("div", { class: "tech-body", style: "white-space:pre-line" }, archive.overall_prompt_zh)));
+  } else if (view !== "plan") {
+    body.append(el("div", { class: "hint" },
+      "尚未写入整体方案文案（segment_cards.overall_prompt_zh）。点顶栏「方案确认」可查看已有文案规划；若仍空，说明阶段封板未写全。"));
+  }
+  return el("div", { class: "panel commercial-plan-archive" },
+    el("div", { class: "panel-head" },
+      el("h2", {}, "已确认方案档案"),
+      el("span", { class: "meta" }, "跨阶段保留")),
+    body);
+}
+
 function renderCommercialSummary(s) {
   const c = s.commercial;
   if (!c) return null;
@@ -808,16 +871,18 @@ function renderCommercialAssets(s) {
 }
 
 function renderCommercialAssetPrecheck(s) {
-  if (commercialContentView(s) !== "plan") return null;
+  const view = commercialContentView(s);
+  if (view !== "plan" && view !== "assets") return null;
   const precheck = s.commercial?.asset_precheck || {};
   const summary = precheck.summary || {};
   const entries = Array.isArray(precheck.entries) ? precheck.entries : [];
-  if (!summary.total_images && !summary.needs_user_attention) return null;
+  if (!summary.total_images && !summary.needs_user_attention && !entries.length) return null;
 
   const rows = [
     ["已扫描图片", summary.total_images != null ? `${summary.total_images} 张` : null],
     ["低分辨率", summary.low_resolution_count ? `${summary.low_resolution_count} 张` : "无"],
     ["重复文件", summary.duplicate_group_count ? `${summary.duplicate_group_count} 组` : "无"],
+    ["识图辅助", summary.vision_enriched ? `已启用${summary.vision_model ? ` · ${summary.vision_model}` : ""}` : null],
   ].filter(([, value]) => value != null);
   const body = el("div", { class: "panel-body commercial-summary" });
   for (const [label, value] of rows) {
@@ -825,13 +890,14 @@ function renderCommercialAssetPrecheck(s) {
       el("span", { class: "kv-k" }, label),
       el("span", { class: "kv-v" }, value)));
   }
-  if (summary.needs_user_attention) {
-    body.append(el("details", { class: "tech-details" },
-      el("summary", {}, "查看需确认的素材"),
+  if (summary.needs_user_attention || entries.some((e) => e.vision_description_zh)) {
+    body.append(el("details", { class: "tech-details", open: view === "assets" ? true : undefined },
+      el("summary", {}, view === "assets" ? "素材清单与识图摘要" : "查看需确认的素材"),
       el("div", { class: "tech-body" },
         entries.map((entry) => {
           const hints = [
             entry.suggested_class ? `建议：${entry.suggested_class}` : "建议：待人工归类",
+            entry.vision_description_zh ? `识图：${entry.vision_description_zh}` : "",
             ...(entry.issues || []),
             entry.duplicate_of ? `重复于 ${entry.duplicate_of}` : "",
           ].filter(Boolean);
@@ -840,8 +906,8 @@ function renderCommercialAssetPrecheck(s) {
   }
   return el("div", { class: "panel commercial-precheck-panel" },
     el("div", { class: "panel-head" },
-      el("h2", {}, "素材预检"),
-      el("span", { class: "meta" }, "方案确认前置")),
+      el("h2", {}, view === "assets" ? "素材检查 · 预检" : "素材预检"),
+      el("span", { class: "meta" }, view === "assets" ? "用户素材安排" : "方案确认前置")),
     body);
 }
 
@@ -892,7 +958,7 @@ const STAGE_CONTENT_VIEW = {
 
 const CONTENT_VIEW_LABEL = {
   plan: "方案确认 · 仅文案规划",
-  assets: "素材检查 · 仅图片素材",
+  assets: "素材检查 · 用户素材与扩展安排",
   sample: "试片确认 · 仅入片视频",
   segment: "分段/初稿 · 入片视频",
   full: "终稿/交付 · 图文视频合集",
@@ -934,17 +1000,23 @@ function renderCommercialMediaStack(s, beat, view) {
 
   if (view === "assets") {
     if (!images.length) {
-      stack.append(el("div", { class: "beat-media empty" }, "素材确认后将显示图片"));
-      return stack;
+      stack.append(el("div", { class: "beat-media empty" }, "用户素材确认后将显示图片"));
+    } else {
+      for (const img of images) {
+        const isExpand = /扩展|i2i|AI/i.test(`${img.label_zh || ""}${img.note_zh || ""}`);
+        stack.append(el("div", { class: `beat-media image${img.selected ? " selected" : ""}${isExpand ? " expand" : ""}` },
+          el("img", {
+            src: thumbURL(s.project_id, img.path, 480),
+            loading: "lazy",
+            alt: img.file || "",
+          }),
+          el("span", { class: "media-cap" }, img.label_zh || (isExpand ? "AI扩展" : "用户素材"))));
+      }
     }
-    for (const img of images) {
-      stack.append(el("div", { class: `beat-media image${img.selected ? " selected" : ""}` },
-        el("img", {
-          src: thumbURL(s.project_id, img.path, 480),
-          loading: "lazy",
-          alt: img.file || "",
-        }),
-        el("span", { class: "media-cap" }, img.label_zh || "图片")));
+    const pendingExpand = (beat.need_detail_zh || beat.gap_status === "不足");
+    if (pendingExpand) {
+      stack.append(el("div", { class: "beat-media empty expand-slot" },
+        beat.need_detail_zh || "AI 扩展占位（待补图/确认）"));
     }
     return stack;
   }
@@ -1056,12 +1128,19 @@ function renderCommercialBeatCard(s, beat, index = 0) {
       el("div", { class: "beat-field" }, el("b", {}, "素材初步规划"), el("div", {}, beat.asset_plan_zh || "—")));
   } else if (view === "assets") {
     body.append(
+      el("div", { class: "beat-field" }, el("b", {}, "素材安排"), el("div", {}, beat.asset_plan_zh || "—")),
       el("div", { class: "beat-field" }, el("b", {}, "所需素材"), el("div", {}, beat.need_count != null ? `${beat.need_count} 张` : "—")),
       el("div", { class: "beat-field" }, el("b", {}, "现有"), el("div", {}, beat.have_count != null ? `${beat.have_count} 张` : "—")),
       el("div", { class: "beat-field" }, el("b", {}, "状况"), el("div", {}, beat.gap_status || "—")),
       beat.need_detail_zh
-        ? el("div", { class: "beat-field warn-text" }, el("b", {}, "需补充"), el("div", {}, beat.need_detail_zh))
+        ? el("div", { class: "beat-field warn-text" }, el("b", {}, "AI扩展/缺口"), el("div", {}, beat.need_detail_zh))
         : null);
+    if (beat.copy_plan_zh || beat.shot_plan_zh) {
+      body.append(el("details", { class: "beat-plan-fold" },
+        el("summary", {}, "回顾：该段文案/镜头（方案确认）"),
+        beat.copy_plan_zh ? el("div", {}, beat.copy_plan_zh) : null,
+        beat.shot_plan_zh ? el("div", {}, beat.shot_plan_zh) : null));
+    }
   } else {
     body.append(
       el("div", { class: "cbc-method" }, formatCommercialMethod(beat)),
@@ -1149,7 +1228,7 @@ function renderCommercialBeats(s) {
     batches.length && s.commercial?.review_mode === "pro" ? ` · ${batches.length} 批` : "");
   const timeline = renderCommercialTimeline(s);
   const hint = el("div", { class: "content-view-hint" },
-    "证据按阶段递进：方案确认看文案 → 素材检查看图片 → 试片起看入片视频 → 终稿/交付才图文视频合集。",
+    "证据按阶段递进：方案确认看文案 → 素材检查看用户图与扩展安排 → 试片起看入片视频 → 终稿/交付才图文视频合集。",
     el("b", {}, " 点击顶栏阶段"), " 可切换该阶段视图。");
   return el("div", { class: "commercial-film-block" },
     el("div", { class: "section-title" }, "Beat 胶片条 / 时间线", batchMeta),
@@ -1184,17 +1263,40 @@ function renderCommercialPlayers(s) {
     tabs);
 }
 
+function renderSseBanner(s) {
+  if (!isCommercial(s)) return null;
+  if (sseStatus === "live") return null;
+  const text = sseStatus === "disconnected"
+    ? "看板实时连接已断开，内容可能未刷新。请手动刷新页面，或等待自动重连。"
+    : "正在连接看板实时更新…";
+  return el("div", { class: `notice sse-banner ${sseStatus}` },
+    el("span", {}, "⟳"),
+    el("span", {}, text),
+    el("button", {
+      class: "sse-refresh-btn",
+      onclick: () => refresh().catch(console.error),
+    }, "刷新"));
+}
+
 function renderCommercialBoard(s) {
   const aside = el("aside", { class: "commercial-aside" });
   const summary = renderCommercialSummary(s);
+  const planArchive = renderCommercialPlanArchive(s);
+  const decisions = renderCommercialDecisions(s);
   const costPanel = renderCommercialCostPanel(s);
   const activity = renderActivity(s);
   if (summary) aside.append(summary);
+  if (planArchive) aside.append(planArchive);
+  if (decisions) aside.append(decisions);
   if (costPanel) aside.append(costPanel);
   if (activity) aside.append(activity);
 
   const main = el("div", { class: "main-col" });
+  const sseBanner = renderSseBanner(s);
+  if (sseBanner) main.append(sseBanner);
   const allDone = s.stages.filter((x) => !x.undeclared).every((x) => x.status === "completed");
+  const focus = commercialFocusStage(s);
+  const focusLabel = (s.stages.find((x) => x.name === focus) || {}).label_zh || focus;
   if (allDone) {
     main.append(el("div", { class: "notice commercial-done-notice" },
       el("span", {}, "✓"),
@@ -1203,15 +1305,20 @@ function renderCommercialBoard(s) {
     const view = commercialContentView(s);
     main.append(el("div", { class: "notice commercial-done-notice" },
       el("span", {}, "◈"),
-      el("span", {}, "当前证据视图：", el("b", {}, CONTENT_VIEW_LABEL[view] || view), "。点击顶栏阶段可切换，避免各阶段产物混在一起。")));
+      el("span", {}, "当前阶段：", el("b", {}, focusLabel),
+        " · 证据视图：", el("b", {}, CONTENT_VIEW_LABEL[view] || view),
+        "。点击顶栏阶段可切换，避免各阶段产物混在一起。")));
   }
+  const view = commercialContentView(s);
   const precheck = renderCommercialAssetPrecheck(s);
+  const assetPool = view === "assets" ? renderCommercialAssets(s) : null;
   const beats = renderCommercialBeats(s);
   const players = renderCommercialPlayers(s);
   if (precheck) main.append(precheck);
+  if (assetPool) main.append(assetPool);
   if (beats) main.append(beats);
   if (players) main.append(players);
-  if (!beats && !players && !summary) {
+  if (!beats && !players && !summary && !precheck && !assetPool) {
     main.append(el("div", { class: "hint" },
       "中文证据区数据未加载。请 ", el("b", {}, "重启 Backlot 服务"), " 后刷新页面（", el("code", {}, "python -m backlot serve"), "）。"));
   }
@@ -1476,5 +1583,12 @@ refresh().catch((err) => {
 });
 // ?static=1 disables the live feed (screenshots, static exports).
 if (!new URLSearchParams(location.search).has("static")) {
-  subscribe(`/api/project/${encodeURIComponent(projectId)}/events`, () => refresh().catch(console.error));
+  subscribe(
+    `/api/project/${encodeURIComponent(projectId)}/events`,
+    () => refresh().catch(console.error),
+    (status) => {
+      sseStatus = status;
+      if (state) render();
+    },
+  );
 }

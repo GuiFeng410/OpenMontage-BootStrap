@@ -790,7 +790,32 @@ a.backlink:hover { color: var(--text-2); }
 /* stage nodes are interactive on the real board */
 .stage { cursor: pointer; border-radius: 8px; padding: 4px 2px; transition: background .15s; }
 .stage:hover { background: rgba(255,255,255,.025); }
-.stage.selected .name { text-decoration: underline; text-underline-offset: 4px; }
+.stage.focus .name { outline: none; box-shadow: none; }
+.stage.focus .node {
+  border-color: var(--amber);
+  box-shadow: 0 0 0 2px rgba(240,168,60,.35);
+}
+.stage.focus:not(.active):not(.await) .name { color: var(--amber); font-weight: 600; }
+
+.sse-banner { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.sse-banner.disconnected { border-color: rgba(220,80,80,.45); }
+.sse-refresh-btn {
+  margin-left: auto;
+  background: var(--surface-3);
+  border: 1px solid var(--line);
+  color: var(--text-1);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  font-size: calc(12px * var(--fs-scale));
+}
+.beat-media.expand .media-cap,
+.beat-media.expand-slot { color: var(--amber); }
+.beat-media.expand-slot {
+  display: flex; align-items: center; justify-content: center;
+  min-height: 72px; border-style: dashed; padding: 8px; text-align: center;
+  font-size: calc(12px * var(--fs-scale));
+}
 
 /* stage drawer */
 .drawer {

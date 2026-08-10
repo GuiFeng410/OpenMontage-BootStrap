@@ -67,11 +67,23 @@ metadata:
 
 商品片从 03 接收 `bootstrap-commercial` 的 `project_id` 和固定 Backlot 网址。进入 04 后：
 
-1. 先调用 `produce_read_state` 核对管线，再运行 `python -m backlot open <project_id>`；主动把**同一网址**发给用户，不创建第二个看板项目。
-2. 试片、专业批次、初稿和交付需要用户裁定时，先用 `produce_write_checkpoint` 写入当前阶段证据：`artifacts_json` 带阶段产物，`metadata_json` 带当前唯一决策、选项、推荐、回复示例和 `partial_progress`，`cost_snapshot_json` 带累计费用。
-3. 网页可用时，完整审查卡、候选、抽帧、费用明细放网页；聊天只发“网址 + 当前一个问题 + 推荐 + 回复示例”。网页不可用时退回完整 Grill 卡，流程继续。
-4. 用户在聊天回复后，先 `produce_append_decision` 保存用户原话，再 `produce_approve_checkpoint`；审批调用默认合并当前 checkpoint，禁止以空 artifacts 覆盖证据。
-5. 网页始终只读。不得要求用户在网页点击审批，不得从页面静默进入下一批或付费调用。
+1. 先调用 `produce_read_state` 核对管线，再运行 `python -m backlot open <project_id>`；主动把**同一网址**发给用户，不创建第二个看板项目。聊天须含：`你可以查看该网址了解详细信息：{URL}`。
+2. 每进入试片 / 分段 / 初稿 / 合成 / 交付阶段并写完对应 checkpoint 后，聊天固定一句：`已进入第 N 阶段：{中文名}。请打开看板查看最新证据（若未自动更新请刷新页面）。`
+3. 试片、专业批次、初稿和交付需要用户裁定时，先用 `produce_write_checkpoint` 写入当前阶段证据：`artifacts_json` 带阶段产物，`metadata_json` 带当前唯一决策、选项、推荐、回复示例和 `partial_progress`，`cost_snapshot_json` 带累计费用。
+4. 网页可用时，完整审查卡、候选、抽帧、费用明细放网页；聊天只发“网址或阶段句 + 当前一个问题 + 推荐 + 回复示例”。网页不可用时退回完整 Grill 卡，流程继续。
+5. 用户在聊天回复后，先 `produce_append_decision` 保存用户原话，再 `produce_approve_checkpoint`；审批调用默认合并当前 checkpoint，禁止以空 artifacts 覆盖证据。
+6. 网页始终只读。不得要求用户在网页点击审批，不得从页面静默进入下一批或付费调用。
+
+### 阶段封板（强制 · 与 03 同协议）
+
+进入下一阶段的聊天提示之前：
+
+1. 本阶段产物写入 checkpoint（合并，勿残缺覆盖）并落盘 `artifacts/*.json`
+2. 用户裁定类决定已 `produce_append_decision`
+3. 聊天先发：「{阶段中文名}证据已写入看板，请刷新核对后再继续。」
+4. 再发：「已进入第 N 阶段：…」
+
+试片/分段/初稿/交付同理；禁止只聊天宣布进入下阶段而面板仍空或缺上阶段已确认内容。
 
 ### 付费 AI 镜提示词：Skill 引用与面板递进（强制）
 

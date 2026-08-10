@@ -144,7 +144,12 @@ produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
 ```
 
 2. 立即运行 `python -m backlot open <project_id>`。把命令输出的完整项目网址主动发给用户；03→04 全程复用同一网址。打开失败只说明“看板暂不可用”，随后退回完整 Grill 卡，**不得阻塞简报或出片**。
-3. 网页可用时，每个中间决策先写 `brief_locked/in_progress`（素材缺口写 `assets_gate/in_progress`），并用 `metadata_json` 提供：
+3. **网址强制话术（首次决策前必发，禁止等用户追问）：** 在三点卡 / 表 1 等任何确认问题之前，聊天必须先出现固定句式：  
+   `你可以查看该网址了解详细信息：{Backlot完整URL}`  
+   之后每进入新阶段（写完该阶段 `in_progress` / `awaiting_human` checkpoint 后），再发：  
+   `已进入第 N 阶段：{中文阶段名}。请打开看板查看最新证据（若未自动更新请刷新页面）。`  
+   不得假设用户已记住网址；不得只写 project_id 让用户自己拼链接。
+4. 网页可用时，每个中间决策先写 `brief_locked/in_progress`（素材缺口写 `assets_gate/in_progress`），并用 `metadata_json` 提供：
 
 ```json
 {
@@ -166,9 +171,31 @@ produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
 }
 ```
 
-4. 此时聊天正文只保留：**项目网址 + 当前一个问题 + 推荐项 + 一条回复示例**。表 1/2/3 的完整分析仍须生成，但放入网页证据，不在聊天重复大表。若网页不可用，才使用下文完整 Grill 卡。
-5. 用户回复后，用 `produce_append_decision` 追加决定；`user_response_text` 必须是用户原话，修改既有选择时沿用相同 `category + subject`。随后刷新 checkpoint，清除旧的 `needs_user_decision`，再展示下一项。
-6. 表 3 完整产物就绪后，写 `brief_locked/awaiting_human`，其中必须带 `brief` 与 `video_plan`（内联对象或项目内 JSON 路径）。用户回复“确认规划”后用 `produce_approve_checkpoint` 完成阶段；审批必须保留原 artifacts、metadata 与费用。
+5. 此时聊天正文只保留：**项目网址（或「已进入第 N 阶段」句）+ 当前一个问题 + 推荐项 + 一条回复示例**。表 1/2/3 的完整分析仍须生成，但放入网页证据，不在聊天重复大表。若网页不可用，才使用下文完整 Grill 卡。
+6. 用户回复后，用 `produce_append_decision` 追加决定；`user_response_text` 必须是用户原话，修改既有选择时沿用相同 `category + subject`。随后刷新 checkpoint，清除旧的 `needs_user_decision`，再展示下一项。
+7. 表 3 完整产物就绪后，写 `brief_locked/awaiting_human`，其中必须带 `brief` 与 `video_plan`（内联对象或项目内 JSON 路径）。用户回复“确认规划”后用 `produce_approve_checkpoint` 完成阶段；审批必须保留原 artifacts、metadata 与费用。
+
+### 阶段封板（强制 · 进入下一阶段提示之前）
+
+用户反馈痛点：聊天已确认，刷新看板却看不到上阶段选择/整体方案。根因是证据未完整落盘，或残缺 `artifacts_json` 覆盖了先前字段。
+
+**在聊天写出「已进入第 N+1 阶段」之前，必须完成封板：**
+
+```text
+1) produce_append_decision（本阶段每一项用户原话已写入）
+2) 本阶段应展示的全量证据写入 checkpoint（合并写入，勿传残缺对象覆盖掉 brief/video_plan）
+   - 方案确认封板至少：brief + video_plan + segment_cards（含 overall_prompt_zh 与各段文案/镜头/素材安排）
+   - 另尽量带 asset_precheck；有识图则 asset_vision
+3) produce_approve_checkpoint / produce_write_checkpoint(status=completed 或下一阶段 in_progress)
+   → 工具会合并同阶段旧 artifacts，并落盘 artifacts/*.json
+4) 聊天先发封板句（禁止跳过）：
+   「方案确认阶段证据已写入看板（已确认决定 + 整体方案 + 分段规划）。请刷新面板核对；确认无误后再继续。」
+5) 用户有机会刷新后，再发：
+   「已进入第 N 阶段：{中文名}。…」
+```
+
+禁止：只在聊天复述方案却不写 `segment_cards` / `decision_log`；禁止用空或半截 `artifacts_json` 覆盖已有 brief/video_plan。  
+面板侧：后续阶段仍保留「已确认方案档案 / 已确认决定」；点顶栏「方案确认」可回看文案规划。
 
 商品片决定使用固定分类，禁止临时发明 category：主题/时长/渠道用 `brief_selection`，评审方式用 `review_mode_selection`，轻/中/重档用 `production_tier_selection`，候选策略用 `candidate_mode_selection`，运镜/AI 比例用 `motion_mix_selection`，素材取舍用 `asset_decision`，试片/初稿等阶段裁定用 `stage_review_decision`，最终交付确认用 `delivery_signoff`，全程审批策略用 `approval_policy`。
 
@@ -182,7 +209,7 @@ produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
 | # | 阶段（Backlot） | Skill | 原「表」落点（对用户可改叫法） | 面板展示 | 聊天 |
 |---|-----------------|-------|--------------------------------|----------|------|
 | 1 | `brief_locked` 方案确认 | **03** | 三点卡 → 主题/档位/时长/预算/评审（旧表1）→ 按档细化（旧表2）→ 比例卡 → **分段规划全文（旧表3）** | 方案摘要、选项、推荐、费用、`video_plan` 文案 | 逐项确认；规划就绪后「确认规划」 |
-| 2 | `assets_gate` 素材检查 | **03** | 素材预检闸（表2后表3前已扫的，在此收口分类/缺口） | 图列表、建议类/确认类、缺口三选一 | 确认分类或缺口策略 |
+| 2 | `assets_gate` 素材检查 | **03** | 素材预检闸（表2后表3前已扫的，在此收口分类/缺口） | **用户原图 + AI 扩展占位**按初步计划落入时间片段卡；预检摘要；**不出入片视频** | 确认分类或缺口策略；进阶段须发「已进入第 2 阶段」 |
 | 3 | `sample_review` 试片确认 | **04** | — | 试片成片、费用 | 试片是否过关 / 是否全长 |
 | 4 | `segment_build` 分段制作 | **04** | — | Beat 胶片、**镜提示词全文**、候选/抽帧（专业） | 专业：分批审查；普通：少打断 |
 | 5 | `draft_review` 初稿审查 | **04** | — | 初稿、问题片段、修改清单 | 确认修改清单后再改 |
@@ -554,17 +581,18 @@ produce_set_production_profile(
 
 ### 素材预处理闸（强制 · 仅商品/电商片）
 
-1. 调用只读 MCP `produce_scan_user_images(project_id)`，扫描 `assets/images/` 的文件名、尺寸、大小、重复文件与**文件名建议分类**；工具不写文件、不生成图片；**P0 不用视觉 API 标类**。
-2. Agent 将扫描结果整理为 `asset_precheck`：`entries` 记录硬事实和 `suggested_class`，`summary` 记录数量、低分辨率、重复、`counts_by_suggested_class` 与是否需用户注意。`suggested_class` 仅为建议，不能替代用户确认。
-3. 先将 `asset_precheck` 以内联 artifact 写入 `brief_locked/in_progress` checkpoint（并尽量落盘 `artifacts/asset_precheck.json`）。仅在无素材、分类不明、低分辨率、重复、缺少所需角色，或需要补图/降级时，设置 `metadata.needs_user_decision=true` 并出示当前一个问题。
-4. 用户需决定时，完整证据在 Backlot（若已展示 `asset_precheck`）；聊天只给网址、当前问题、推荐项和一条回复示例。用户原话以 `asset_decision` 写入 `decision_log`。禁止静默补图或静默开始 I2I / I2V。
-5. 用户确认分类与缺口处理后，用 `lib.asset_precheck.build_asset_ledger` / `build_asset_requirements`（或等价）写入确认角色、`asset_requirements`、`asset_ledger`，再写入每段 `ref_image` / `gap_fill` 到 `video_plan`。最终 `brief_locked/awaiting_human` 必须同时携带 `brief`、`asset_precheck`、`video_plan`（有则带 `asset_ledger`）。
-6. 随后的顶层 `assets_gate` 仍保留：它只核验已确认计划所需的**实际文件**（用户补传或已确认补图）和最终 `asset_ledger`，不是重复做预检。
+1. 调用只读 MCP `produce_scan_user_images(project_id)`，扫描 `assets/images/` 的文件名、尺寸、大小、重复文件与**文件名建议分类**；工具不写文件、不生成图片。
+2. **可选识图（有 Key 才调）：** 再调 `produce_describe_user_images(project_id)`。Key=`VISION_API_KEY` 或 `DASHSCOPE_API_KEY`；可覆盖 `VISION_BASE_URL` / `VISION_MODEL`。空 Key → 工具降级返回扫描结果，**不中断闸门**。识图结果只辅助 `suggested_class` / 中文描述，**不能**代替用户确认。
+3. Agent 将结果整理为 `asset_precheck`（可含 `vision_*` 字段）：`suggested_class` 仅为建议。尽量落盘 `artifacts/asset_precheck.json` 与 `artifacts/asset_vision.json`。
+4. 先将 `asset_precheck` 以内联 artifact 写入 `brief_locked/in_progress`（素材收口时写 `assets_gate/in_progress`）。仅在无素材、分类不明、低分辨率、重复、缺少所需角色，或需要补图/降级时，设置 `metadata.needs_user_decision=true` 并出示当前一个问题。
+5. 用户需决定时，完整证据在 Backlot；聊天只给网址 +「已进入第 N 阶段」+ 当前问题 + 推荐 + 回复示例。用户原话以 `asset_decision` 写入 `decision_log`。禁止静默补图或静默开始 I2I / I2V。
+6. 用户确认分类与缺口处理后，用 `lib.asset_precheck.build_asset_ledger` / `build_asset_requirements`（或等价）写入确认角色、`asset_requirements`、`asset_ledger`，再写入每段 `ref_image` / `gap_fill` 到 `video_plan`。最终 `brief_locked/awaiting_human` 必须同时携带 `brief`、`asset_precheck`、`video_plan`（有则带 `asset_ledger`）。
+7. 进入顶层 `assets_gate` 前须落盘 `segment_cards`（时间 + `asset_plan_zh` / 缺口文案）与可展示的 `asset_ledger`（按 beat 挂用户图；AI 扩展用 `kind=image` + `note_zh=AI扩展占位` 或缺口字段）。该阶段面板**只显示图片与安排，不显示入片视频**。
 
 **用户可见边界：**
 
-- 方案确认页只显示素材预检的文字摘要；有风险时才提供可折叠文件明细，不在时间线卡片展示图片或视频。
-- 进入正式「素材检查」后，才按已确认分段显示图片；视频仍从「试片确认」开始出现。
+- 方案确认页：素材预检文字摘要；有风险时才折叠文件明细；时间线卡不出媒体。
+- 「素材检查」：用户原图 + AI 扩展占位按初步计划落入时间片段卡；视频仍从「试片确认」开始。
 
 | 目标时长 | 最低可运行图片数 | 建议图片数 | 建议覆盖类型 |
 |----------|------------------|------------|--------------|

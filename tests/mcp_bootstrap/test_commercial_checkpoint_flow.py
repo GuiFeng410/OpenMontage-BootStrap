@@ -73,9 +73,35 @@ def test_facade_scans_uploaded_images_without_writing_artifacts(sandbox: Path) -
     result = produce_scan_user_images("commercial-scan")
 
     assert "produce_scan_user_images" in list_bootstrap_tools()["produce_minimal"]
+    assert "produce_describe_user_images" in list_bootstrap_tools()["produce_minimal"]
     assert result["summary"]["total_images"] == 1
     assert result["entries"][0]["suggested_class"] == "product_hero"
     assert not (sandbox / "commercial-scan" / "artifacts" / "asset_precheck.json").exists()
+
+
+def test_facade_describe_user_images_degrades_without_vision_key(sandbox: Path, monkeypatch) -> None:
+    from PIL import Image
+    from openmontage.mcp.bootstrap.tools import produce_describe_user_images
+
+    monkeypatch.setattr(
+        "lib.asset_vision.resolve_vision_env",
+        lambda: {
+            "api_key": "",
+            "base_url": "https://example.invalid/v1",
+            "model": "qwen-vl-max",
+            "available": False,
+            "key_source": "",
+        },
+    )
+    produce_init_project("commercial-vision", "商品识图", "bootstrap-commercial")
+    images_dir = sandbox / "commercial-vision" / "assets" / "images"
+    images_dir.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (800, 600), "white").save(images_dir / "ring.png")
+
+    result = produce_describe_user_images("commercial-vision")
+    assert result["vision_degraded"] is True
+    assert result["precheck"]["summary"]["total_images"] == 1
+    assert not (sandbox / "commercial-vision" / "artifacts" / "asset_vision.json").exists()
 
 
 def test_facade_requires_explicit_consent_before_sending_public_image_urls() -> None:
@@ -100,8 +126,16 @@ def test_commercial_skills_require_readonly_board_chat_flow() -> None:
         assert "produce_append_decision" in text
         assert "网页" in text and "聊天" in text
     assert "produce_scan_user_images" in usercheck
+    assert "produce_describe_user_images" in usercheck
+    assert "你可以查看该网址了解详细信息" in usercheck
+    assert "已进入第 N 阶段" in usercheck
     assert "produce_analyze_public_product_images" in usercheck
     assert "asset_precheck" in usercheck
+    assert "你可以查看该网址了解详细信息" in produce
+    assert "已进入第 N 阶段" in produce
+    assert "阶段封板" in usercheck
+    assert "阶段封板" in produce
+    assert "证据已写入看板" in usercheck
     assert "表 2 后、表 3 前" in usercheck
     assert "首次商品三点确认卡" in usercheck
     assert "商品片 ↔ 七阶段" in usercheck
@@ -167,12 +201,24 @@ def test_intermediate_decision_and_approval_preserve_evidence(sandbox: Path) -> 
         "commercial-flow",
         "brief_locked",
         "确认规划",
+        artifacts_json=json.dumps(
+            {
+                "segment_cards": {
+                    "overall_prompt_zh": "开场到收尾",
+                    "segments": [{"beat": "beat_01", "copy_plan_zh": "亮相"}],
+                }
+            },
+            ensure_ascii=False,
+        ),
         pipeline_type="bootstrap-commercial",
     )
 
     approved = read_checkpoint(sandbox, "commercial-flow", "brief_locked")
     assert approved["status"] == "completed"
-    assert approved["artifacts"] == artifacts
+    assert approved["artifacts"]["brief"] == artifacts["brief"]
+    assert approved["artifacts"]["video_plan"] == artifacts["video_plan"]
+    assert approved["artifacts"]["segment_cards"]["overall_prompt_zh"] == "开场到收尾"
+    assert (sandbox / "commercial-flow" / "artifacts" / "brief.json").exists()
     assert approved["metadata"]["decision_title_zh"] == "选择评审模式"
     assert approved["metadata"]["approval_note"] == "确认规划"
     assert approved["cost_snapshot"] == cost

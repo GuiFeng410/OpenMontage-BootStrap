@@ -84,6 +84,7 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_read_state",
             "produce_get_next_stage",
             "produce_scan_user_images",
+            "produce_describe_user_images",
             "produce_analyze_public_product_images",
             "produce_tts_preflight",
             "produce_tts_sample",
@@ -897,6 +898,40 @@ def produce_scan_user_images(project_id: str) -> dict[str, Any]:
     from lib.asset_precheck import scan_user_images
 
     return scan_user_images(project_dir(project_id))
+
+
+def produce_describe_user_images(
+    project_id: str,
+    files_json: str = "",
+    prompt: str = "",
+    model: str = "",
+) -> dict[str, Any]:
+    """Optional VL assist for commercial asset gate (OpenAI-compatible).
+
+    Uses ``VISION_API_KEY`` or ``DASHSCOPE_API_KEY`` (+ optional
+    ``VISION_BASE_URL`` / ``VISION_MODEL``). Empty Key → degrade to filename
+    heuristics without failing the gate. Does not write artifacts; agent must
+    still get user confirmation before ``asset_ledger``.
+    """
+    files: list[str] | None = None
+    if files_json and files_json.strip():
+        try:
+            parsed = json.loads(files_json)
+        except json.JSONDecodeError as exc:
+            raise DoctorError(f"files_json invalid: {exc}", code="bad_request") from exc
+        if not isinstance(parsed, list):
+            raise DoctorError("files_json must be a JSON array of filenames", code="bad_request")
+        files = [str(item) for item in parsed]
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from lib.asset_vision import describe_project_user_images
+
+    return describe_project_user_images(
+        project_dir(project_id),
+        files=files,
+        prompt=prompt or "",
+        model=model or "",
+    )
 
 
 def produce_analyze_public_product_images(
