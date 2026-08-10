@@ -104,6 +104,12 @@ def test_commercial_skills_require_readonly_board_chat_flow() -> None:
     assert "asset_precheck" in usercheck
     assert "表 2 后、表 3 前" in usercheck
     assert "首次商品三点确认卡" in usercheck
+    assert "商品片 ↔ 七阶段" in usercheck
+    assert "commercial-video-15s-review.md" in usercheck
+    assert "commercial-video-30s-review.md" not in usercheck
+    assert "commercial-video-15s-review.md" in produce
+    assert "commercial-video-30s-review.md" not in produce
+    assert "付费 AI 镜提示词" in produce
     assert "asset-preprocess-gate.md" in usercheck
     assert "commercial-prompt-lexicon.md" in usercheck
     assert "openmontage-seedance-prompt" in produce

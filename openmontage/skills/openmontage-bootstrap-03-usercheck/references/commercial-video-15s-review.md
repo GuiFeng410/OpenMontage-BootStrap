@@ -14,17 +14,18 @@
 | **专业** | `pro` | 另加总览表、分批 3–4 beat、逐段审查卡、候选与抽帧细节 |
 
 ≥15s 时**交给用户选择**普通或专业，不强制专业。  
-**表 1 必须显式列出两种模式的差异**（可用 Grill 确认卡），禁止静默默认普通而不告知「专业」可选。  
+**方案确认阶段必须显式列出两种模式的差异**（可用 Grill / 面板选项），禁止静默默认普通而不告知「专业」可选。  
 普通模式下：完整总览、逐 beat 卡、候选状态机、五点抽帧等仍作为**内部证据**生成与保存，但不默认甩给用户。  
 补充说明推荐话术：专业模式方便进一步提高可控性，15s 以上商品片推荐可选；普通模式默认方案，快，只过试片+初稿。
 
 ### 0.3 只读网页 + 聊天决策
 
 - 03 在商品主题已知且环境就绪后初始化 `bootstrap-commercial`，主动运行 `python -m backlot open <project_id>` 并给出固定项目网址；04 继续复用。
-- Backlot 展示完整方案、素材、选项、推荐、试片、分段、费用与当前唯一待决定事项。
-- 聊天一次只发：项目网址、当前问题、推荐项、回复示例。用户只在聊天回复，Agent 用用户原话写 `decision_log` 并推进 checkpoint。
-- 表 1/2 等中间选择使用 `in_progress + metadata.needs_user_decision=true`；阶段正式产物就绪后才写 `awaiting_human`。不得用缺失 canonical artifact 的空 checkpoint 冒充审批关。
+- Backlot 展示完整方案、素材、选项、推荐、试片、分段、**镜提示词全文**、费用与当前唯一待决定事项。
+- 聊天一次只发：项目网址、当前问题、推荐项、回复示例（**不**贴长提示词全文）。用户只在聊天回复，Agent 用用户原话写 `decision_log` 并推进 checkpoint。
+- 方案阶段中间选择使用 `brief_locked/in_progress + metadata.needs_user_decision=true`；阶段正式产物就绪后才写 `awaiting_human`。不得用缺失 canonical artifact 的空 checkpoint 冒充审批关。
 - 网页保持只读；不得直接提交审批、修改项目 JSON 或自动唤醒 Agent。看板不可用时回退完整 Grill 卡，生产继续。
+- 与七阶段对照、原「表 1/2/3」落点：见 `03-usercheck`「商品片 ↔ 七阶段」。
 
 **强制回复协议适用：**
 

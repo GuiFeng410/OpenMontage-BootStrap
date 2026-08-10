@@ -1,10 +1,10 @@
 ---
 name: openmontage-bootstrap-03-usercheck
 description: >-
-  BootStrap brief before produce: commercial first-time three-point confirmation,
-  optional non-commercial light demo card (10s/30s), then Table 1 (theme + tier),
-  Table 2 (tier branch), Table 3 (video_plan). Writes production_profile +
-  artifacts, then hands off to produce. Narration/BGM deferred.
+  BootStrap brief before produce: commercial maps to bootstrap-commercial
+  stages (brief_locked / assets_gate); first-time three-point card; then
+  theme/tier → tier branch → video_plan (legacy Tables 1–3, flexible labels).
+  Writes production_profile + artifacts, hands off to produce. Narration deferred.
 metadata:
   openclaw:
     requires:
@@ -27,7 +27,7 @@ metadata:
 
 当视频用途属于商品宣传、电商商品展示或佩戴演示，且 `duration_seconds >= 15` 时，必须读取并执行：
 
-`references/commercial-video-30s-review.md`
+`references/commercial-video-15s-review.md`
 
 该参考文档规定：默认**普通评审**（方案→试片→初稿/问题片段）；**专业模式**才强制总览表与 3–4 beat 分批逐段卡（≥15s **须显式请用户选择**，不强制专业，但禁止静默不告知）。另含画面构成比例（运镜:AI，软约束）、累计 API 费用卡、三状态、修改清单确认门，以及 AI 段重试用尽后再询问用户的回退规则。用户决策消息统一用本 Skill「Grill 确认卡」。
 
@@ -39,7 +39,7 @@ metadata:
 
 ## Scope
 
-**做：** 需求不清时先对齐**主题与档位**，再按档细化（表 2），再确认**分段视频规划**（表 3）。商品片在首个正式决策前初始化只读 Backlot 项目并主动给出固定网址；完整分析与选项放网页，聊天一次只问当前一个问题。全部确认后写入 `production_profile` / 简报 artifacts，交接 `openmontage-bootstrap-04-produce`。
+**做：** 需求不清时先对齐主题与档位，再按档细化，再确认分段视频规划（商品片落在 Backlot「方案确认 / 素材检查」，见「商品片 ↔ 七阶段」；对用户不必死叫表 1/2/3）。商品片在首个正式决策前初始化只读 Backlot 并给出固定网址；完整分析与选项放网页，聊天一次只问当前一项（三点卡等固定小包可合并）。确认后写入简报 artifacts，交接 `04-produce`。
 
 **不做：** 跳过确认直接 compose；三张表堆在同一条消息；静默填 Key / 调 Stock / 付费 API；伪造用户原话；有视频 Key 就自动开烧；静默换视频渠道；轻度/中度出示付费视频渠模表；表 3 强塞全文旁白；商品片（含重度商品）跳过 `references/product-prompt-template.md`；缺图时静默图生图或静默硬烧佩戴支。
 
@@ -173,6 +173,39 @@ produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
 商品片决定使用固定分类，禁止临时发明 category：主题/时长/渠道用 `brief_selection`，评审方式用 `review_mode_selection`，轻/中/重档用 `production_tier_selection`，候选策略用 `candidate_mode_selection`，运镜/AI 比例用 `motion_mix_selection`，素材取舍用 `asset_decision`，试片/初稿等阶段裁定用 `stage_review_decision`，最终交付确认用 `delivery_signoff`，全程审批策略用 `approval_policy`。
 
 **只读边界：** 网页不放审批按钮、不直接写 JSON、不唤醒 Agent。用户始终在聊天中作出决定，Agent 是唯一写入者。
+
+## 商品片 ↔ 七阶段（强制对照）
+
+管线：`pipeline_defs/bootstrap-commercial.yaml`。面板顶栏七阶段与 Skill 职责如下。  
+**原则：** 聊天仍一次确认一项（固定小包如「首次三点卡」可合并）；面板按当前阶段展示全貌证据；对用户可说「方案确认 / 素材检查…」，不必死守「表 1/2/3」话术。内部仍可用表号指代字段包。
+
+| # | 阶段（Backlot） | Skill | 原「表」落点（对用户可改叫法） | 面板展示 | 聊天 |
+|---|-----------------|-------|--------------------------------|----------|------|
+| 1 | `brief_locked` 方案确认 | **03** | 三点卡 → 主题/档位/时长/预算/评审（旧表1）→ 按档细化（旧表2）→ 比例卡 → **分段规划全文（旧表3）** | 方案摘要、选项、推荐、费用、`video_plan` 文案 | 逐项确认；规划就绪后「确认规划」 |
+| 2 | `assets_gate` 素材检查 | **03** | 素材预检闸（表2后表3前已扫的，在此收口分类/缺口） | 图列表、建议类/确认类、缺口三选一 | 确认分类或缺口策略 |
+| 3 | `sample_review` 试片确认 | **04** | — | 试片成片、费用 | 试片是否过关 / 是否全长 |
+| 4 | `segment_build` 分段制作 | **04** | — | Beat 胶片、**镜提示词全文**、候选/抽帧（专业） | 专业：分批审查；普通：少打断 |
+| 5 | `draft_review` 初稿审查 | **04** | — | 初稿、问题片段、修改清单 | 确认修改清单后再改 |
+| 6 | `final_compose` 合成终稿 | **04** | — | 合成进度/技术检查 | 一般不强制问 |
+| 7 | `delivery_signoff` 交付确认 | **04** | — | 终稿合集、质量与累计费用 | 最终签收 |
+
+**方案确认阶段内的推荐推进顺序（弹性）：**
+
+```text
+三点卡（若适用）
+→ 主题与目标是否正确
+→ 档位
+→ 时长 + 评审模式（≥15s 须出示普通/专业差异）
+→ 实验预算（¥8+ 须主动确认）
+→ 按档：轻度表现 / 中度素材源 / 重度渠模
+→ （启用 AI 视频时）运镜:AI 比例
+→ 素材扫描摘要可先写入面板；分类确认可留在「素材检查」阶段若用户想先锁规划
+→ 分段规划（旧表3）全文进面板 → 聊天「确认规划」→ brief_locked/awaiting_human
+```
+
+允许跳过已从用户原话锁定且用户刚确认过的项，但**禁止**跳过：档位、≥15s 评审模式明示、重度渠模、规划确认、素材主图缺口关闭（或已确认降级）。
+
+非商品片：仍可用完整 Grill「表 1→2→3」话术；不强制七阶段商品板。
 
 ### 首次商品三点确认卡（表 1 前强制）
 

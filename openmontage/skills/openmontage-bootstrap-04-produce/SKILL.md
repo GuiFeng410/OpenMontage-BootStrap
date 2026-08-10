@@ -35,7 +35,7 @@ metadata:
 
 当当前项目是商品视频且 `duration_seconds >= 15` 时，执行过程中必须遵守：
 
-`openmontage/skills/openmontage-bootstrap-03-usercheck/references/commercial-video-30s-review.md`
+`openmontage/skills/openmontage-bootstrap-03-usercheck/references/commercial-video-15s-review.md`
 
 - **普通**：方案→试片→初稿/问题片段；不强制逐 beat 分批卡。  
 - **专业**：按 3–4 个 beat 分批展示预览，AI 先做初审，用户反馈后先生成修改清单，并在用户回复 `1` 同意后才执行修改。默认只修改被指出的 beat；衔接问题才扩大到相邻片段。所有批次确认后，才能进行最终 Remotion 时间线合成。  
@@ -72,6 +72,31 @@ metadata:
 3. 网页可用时，完整审查卡、候选、抽帧、费用明细放网页；聊天只发“网址 + 当前一个问题 + 推荐 + 回复示例”。网页不可用时退回完整 Grill 卡，流程继续。
 4. 用户在聊天回复后，先 `produce_append_decision` 保存用户原话，再 `produce_approve_checkpoint`；审批调用默认合并当前 checkpoint，禁止以空 artifacts 覆盖证据。
 5. 网页始终只读。不得要求用户在网页点击审批，不得从页面静默进入下一批或付费调用。
+
+### 付费 AI 镜提示词：Skill 引用与面板递进（强制）
+
+适用：商品片或重度、且该段将调用付费 I2V/T2V。纯 Remotion/本地运镜段跳过。
+
+**写之前必须先读（按序）：**
+
+1. `openmontage/skills/openmontage-seedance-prompt/SKILL.md`（契约 + 镜头结构）
+2. 同目录 `references/seedance-prompt-skill.md`（完整写法）
+3. `03-usercheck/references/commercial-prompt-lexicon.md`
+4. `03-usercheck/references/product-prompt-template.md`（槽位）
+
+**递进协议：**
+
+```text
+按上列 Skill 起草/改写提示词
+→ 写入项目 artifacts / checkpoint（全文）
+→ Backlot「分段制作」等证据区只读展示全文
+→ 聊天只发：网址 + 当前镜/批问题 + 推荐 + 回复示例（禁止整段粘贴长 prompt）
+→ 用户聊天确认后 produce_append_decision → 再烧或再改
+```
+
+- **专业**：改 prompt 或重试前，修改清单须先上屏再聊天确认（与 `commercial-video-15s-review.md` 一致）。  
+- **普通**：试片/初稿关仍问过关与否；单镜 prompt 默认上屏备查，不强制每镜口头确认，除非用户要求或一致性重试涉及改写。  
+- 渠模以 03 锁定为准；禁止因提示词 Skill 擅自换渠。
 
 ## 遵守 openmontage-bootstrap-03-usercheck 锁定（强制）
 
@@ -158,14 +183,14 @@ metadata:
 | `stable_dual` | 关键 beat 直接 2 候选（须简报显式开启） |
 
 拒绝/失败候选仍计入首次达标成本；不得入正式时间线。  
-**重试用尽**仍失败：须询问用户并说明可能原因（网络不稳、余额不足、限流、一致性未过等）；选项见 `commercial-video-30s-review.md` §11。**禁止**未询问就静默改运镜。
+**重试用尽**仍失败：须询问用户并说明可能原因（网络不稳、余额不足、限流、一致性未过等）；选项见 `commercial-video-15s-review.md` §11。**禁止**未询问就静默改运镜。
 
 ### B3 抽帧与预审
 
 - 内部：用 `visual_qa` / `frame_sampler` 至少抽 **首、25%、50%、75%、尾**；异常点附近加帧。  
 - 用户默认展示：首/中/尾三张代表帧；有异常再展开。  
 - `review_mode=normal`：整片初稿 + AI 标问题段 → 只展开问题片段 → 修改清单确认。  
-- `review_mode=pro`：可走 `commercial-video-30s-review.md` 总分批/逐 beat（≥15s 可选）。  
+- `review_mode=pro`：可走 `commercial-video-15s-review.md` 总分批/逐 beat（≥15s 可选）。  
 流程中可提示：「需要更细逐段审查可切换专业模式」。
 
 ### B4 动态指标（记录，非硬门槛）
@@ -192,7 +217,7 @@ metadata:
 4. `allow_paid_call=false` 时：**停烧**，向用户给出选项：回退确定性段 / 升实验档 / 降 AI 占比；禁止静默续烧。  
 5. **单笔计划**（某个 beat）预计费用 **≥ ¥5**：向用户**提示即可**（看 snapshot 的 `single_call_tip`），**不论累计**；不因此单独强制停烧。  
 6. 文案始终称 **实验 API 预算上限**，禁止称售价。五档：¥1 / ¥3 / ¥5 / ¥8 / ¥12。  
-7. **用户可见累计费用卡（强制）**：试片完成、全长初稿、终稿（及专业模式每批结束后）必须按 `commercial-video-30s-review.md` §0.2 贴出「分项 + 合计 + 预算剩余」；禁止只报单笔或只报合计而不列分项。渠道称呼遵守 03「命名防混」（TokenHub=腾讯混元渠；TokenPlan=Agnes 档）。
+7. **用户可见累计费用卡（强制）**：试片完成、全长初稿、终稿（及专业模式每批结束后）必须按 `commercial-video-15s-review.md` §0.2 贴出「分项 + 合计 + 预算剩余」；禁止只报单笔或只报合计而不列分项。渠道称呼遵守 03「命名防混」（TokenHub=腾讯混元渠；TokenPlan=Agnes 档）。
 
 ### B7 最终裁定
 
@@ -300,7 +325,7 @@ produce_set_production_profile(
 → 抽帧预审(B3) → 费用闸贯穿(B6) → 初稿合成(B5) → 最终裁定(B7)
 ```
 
-普通评审不强制用户确认每一个 beat；专业模式才启用完整分批逐段卡（见 `commercial-video-30s-review.md` §0）。
+普通评审不强制用户确认每一个 beat；专业模式才启用完整分批逐段卡（见 `commercial-video-15s-review.md` §0）。
 
 ### 5–7. 字幕、BGM 与合成
 
@@ -346,15 +371,11 @@ produce_set_production_profile(
 
 若缺少已确认的 `asset_precheck` / 用户分类确认（商品片），**退回** `03-usercheck` 走 `references/asset-preprocess-gate.md`，禁止在本 Skill 内猜类或静默补图。
 
-写付费 AI 动态段提示词时，**必须先读**：
+写付费 AI 动态段提示词时，**必须先读** `openmontage-seedance-prompt`，全文写入面板证据，聊天只摘要确认（见 04「付费 AI 镜提示词」节）。再读：
 
-`openmontage/skills/openmontage-seedance-prompt/SKILL.md`
-
-再读：
-
-- `openmontage/skills/openmontage-bootstrap-03-usercheck/references/commercial-prompt-lexicon.md`（景别/运镜/布光短表）
-- `openmontage/skills/openmontage-bootstrap-03-usercheck/references/product-prompt-template.md`（槽位顺序）
-- 同 Skill 下 `references/seedance-prompt-skill.md`（完整写法与案例）
+- `commercial-prompt-lexicon.md`
+- `product-prompt-template.md`
+- `openmontage-seedance-prompt/references/seedance-prompt-skill.md`
 
 Remotion / HyperFrames 纯本地运镜段可不读 seedance Skill。渠模以 03 锁定为准，禁止因提示词 Skill 擅自改渠。
 
