@@ -52,9 +52,11 @@ def test_get_tokenhub_base_url_default_and_override(monkeypatch):
 def test_model_catalog_hy_configured_yt_planned():
     assert DEFAULT_VIDEO_MODEL == "hy-video-1.5"
     assert "hy-video-1.5" in configured_video_models()
+    assert "pixverse-video-v6.0" in configured_video_models()
     planned = planned_video_models()
     assert "yt-video-2.0" in planned
     assert get_model("hy-video-1.5").status == "configured"
+    assert get_model("pixverse-video-v6.0").status == "configured"
     assert all(m.capability == "video" for m in list_models())
 
 

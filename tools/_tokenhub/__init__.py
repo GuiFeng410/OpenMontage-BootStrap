@@ -22,6 +22,15 @@ from tools._tokenhub.models import (
     list_models,
     planned_video_models,
 )
+from tools._tokenhub.pixverse import (
+    PIXVERSE_DEFAULT_MODEL,
+    generate_pixverse_video,
+    is_pixverse_model,
+    poll_pixverse_task,
+    query_pixverse_task,
+    submit_image_to_video,
+    submit_text_to_video,
+)
 from tools._tokenhub.video import (
     download_video,
     generate_video,
@@ -34,6 +43,7 @@ __all__ = [
     "DEFAULT_BASE_URL",
     "DEFAULT_VIDEO_MODEL",
     "EXTRA_MODELS",
+    "PIXVERSE_DEFAULT_MODEL",
     "TokenHubClient",
     "TokenHubError",
     "TokenHubModel",
@@ -41,13 +51,20 @@ __all__ = [
     "all_models",
     "configured_video_models",
     "download_video",
+    "generate_pixverse_video",
     "generate_video",
     "get_model",
     "get_tokenhub_api_key",
     "get_tokenhub_base_url",
+    "is_pixverse_model",
     "list_models",
     "planned_video_models",
+    "poll_pixverse_task",
     "poll_video_job",
+    "query_pixverse_task",
     "query_video_job",
+    "submit_image_to_video",
+    "submit_text_to_video",
     "submit_video_job",
 ]
+

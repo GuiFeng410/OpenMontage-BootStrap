@@ -128,3 +128,12 @@ class TokenHubClient:
         timeout: float | None = None,
     ) -> dict[str, Any]:
         return self.request("POST", path, json=payload, timeout=timeout)
+
+    def get(
+        self,
+        path: str,
+        *,
+        params: dict[str, Any] | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        return self.request("GET", path, params=params, timeout=timeout)

@@ -62,6 +62,15 @@ def submit_video_job(
             f"TokenHub model {model_id!r} is planned (not wired). Use one of: {ready}."
         )
 
+    from tools._tokenhub.pixverse import is_pixverse_model
+
+    if is_pixverse_model(model_id):
+        raise TokenHubError(
+            f"Model {model_id!r} uses Pixverse (/wand/pixverse/*). "
+            "Call generate_video(...) or tools._tokenhub.pixverse helpers, "
+            "not submit_video_job (Hunyuan /api/video/*)."
+        )
+
     payload: dict[str, Any] = {
         "model": model_id,
         "prompt": prompt,
@@ -158,15 +167,42 @@ def generate_video(
     output_path: str | Path | None = None,
     resolution: str = "720p",
     logo_add: int = 0,
+    duration: int | None = None,
+    quality: str | None = None,
+    aspect_ratio: str | None = None,
     poll_interval_seconds: float = 8.0,
     timeout_seconds: float = 900.0,
     client: TokenHubClient | None = None,
 ) -> dict[str, Any]:
-    """Submit, poll, optionally download. Returns summary dict."""
+    """Submit, poll, optionally download. Returns summary dict.
+
+    Routes ``pixverse-*`` models to ``tools._tokenhub.pixverse``; otherwise
+    uses Hunyuan ``/api/video/*`` (``hy-video-1.5``).
+    """
     if not get_tokenhub_api_key() and (client is None or not client.api_key):
         raise TokenHubError("TOKENHUB_API_KEY is not set", http_status=401)
 
     model_id = model or DEFAULT_VIDEO_MODEL
+
+    from tools._tokenhub.pixverse import generate_pixverse_video, is_pixverse_model
+
+    if is_pixverse_model(model_id):
+        mode = "i2v" if (image_url or image_path) else "t2v"
+        return generate_pixverse_video(
+            prompt,
+            mode=mode,  # type: ignore[arg-type]
+            model=model_id,
+            image_url=image_url,
+            image_path=image_path,
+            output_path=output_path,
+            duration=int(duration) if duration is not None else 5,
+            quality=quality or resolution or "720p",
+            aspect_ratio=aspect_ratio or "16:9",
+            poll_interval_seconds=poll_interval_seconds,
+            timeout_seconds=timeout_seconds,
+            client=client,
+        )
+
     submit = submit_video_job(
         prompt,
         model=model_id,

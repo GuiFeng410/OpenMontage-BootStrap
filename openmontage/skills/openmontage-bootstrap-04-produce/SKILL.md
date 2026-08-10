@@ -125,7 +125,14 @@ metadata:
 | `motion_mix` | 按推荐目标**大概**安排整片 AI 生成总秒数（±约 15%）；不按段数硬凑。审查中用户改 beat 方式后更新计划，**允许终稿偏离**；偏离只告知，不否决交付 |
 | `budget_cny` | 实验 API 上限（¥1/3/5/8/12）。单笔 beat 计划费用 ≥¥5 → **提示即可**（不论累计）。触顶停烧仍走 B6 |
 
-**TokenHub（`video_channel=tokenhub`）：** 走 `tools._tokenhub.generate_video`（`hy-video-1.5`）。约 720p、默认并发 1、**无自定义时长**——长片用多段 I2V/T2V 再 ffmpeg 拼接。本地参考图必须 `image.base64`（纯 base64）；公网图才用 `image.url`。YT 系列仍 planned，禁止当可烧。试片脚本：`python scripts/_run_tokenhub_shop_wear_10s.py`（已有成片默认 skip）。
+**TokenHub（`video_channel=tokenhub`）：** 走 `tools._tokenhub.generate_video`，按 `video_model` 分流：
+
+| `video_model` | 路径 | 注意 |
+|---------------|------|------|
+| `hy-video-1.5`（默认） | 混元 `/api/video/*` | 约 720p、无自定义时长；本地参考图 `image.base64`；公网图 `image.url`；长片多段 + ffmpeg |
+| `pixverse-video-v6.0` | Pixverse `/wand/pixverse/*` | 传 `duration`（简报 `video_duration_sec`，默认 5）、`quality`（`video_quality`，默认 `720p`）、`aspect_ratio`；**I2V 仅公网 `image_url`**（P0 不接本地 path）；T2V 无图；长片仍多段 + ffmpeg |
+
+YT 系列仍 planned，禁止当可烧。试片：混元 `python scripts/_run_tokenhub_shop_wear_10s.py`；Pixverse `python scripts/_run_tokenhub_pixverse_smoke.py --mode t2v`（I2V 加 `--image-url https://...`）。
 
 **同渠限流：** 可先并行，遇 429/402/可重试错误后转**串行补片**；已有合格片段跳过。TokenHub 按串行规划。  
 **跨渠：** 即使另一渠道已填 Key，也**禁止静默切换**；须向用户提案并获同意，再更新简报锁定字段后继续——通常应**退回 03** 重锁表 2.3 / 表 3。

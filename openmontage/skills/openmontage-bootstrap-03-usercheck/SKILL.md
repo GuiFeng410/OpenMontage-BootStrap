@@ -290,10 +290,10 @@ produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
 |------|------|--------------|
 | **Agnes** | 付费**视频/图片渠道**（厂商） | `Agnes（付费视频渠道）` |
 | **TokenPlan** | Agnes 账号的**付费/并发档**（`AGNES_ACCOUNT_TIER`） | 仅出现在 Agnes 行说明：`有 TokenPlan 档时并发更高`；**不是**渠道选项 |
-| **TokenHub** | **腾讯**视频网关（混元 `hy-video-1.5`） | `TokenHub（腾讯混元视频渠道，约720p）` |
+| **TokenHub** | **腾讯**视频网关（同一 Key；下挂混元 / Pixverse 等模型） | 须带子名：`TokenHub·混元…` 或 `TokenHub·Pixverse…` |
 
-**禁止：** 把 TokenHub 写成 Agnes 订阅/套餐；把 TokenPlan 写成独立视频渠道；对用户甩光秃秃的 `TokenHub` 而不带括号。  
-**自检：** 写到「Token*」时先分清——**渠道**才进表 2.3 选项；**套餐/档**只挂在 Agnes 说明里。记忆钩子：`Hub=腾讯渠`，`Plan=Agnes 档`。
+**禁止：** 把 TokenHub 写成 Agnes 订阅/套餐；把 TokenPlan 写成独立视频渠道；对用户甩光秃秃的 `TokenHub` 而不带括号；把 **Pixverse** 叫成「混元」或把混元叫成 Pixverse。  
+**自检：** 写到「Token*」时先分清——**渠道**才进表 2.3 选项；**套餐/档**只挂在 Agnes 说明里。记忆钩子：`Hub=腾讯渠`，`Plan=Agnes 档`，`混元≠Pixverse`。
 
 ## Hard protocol
 
@@ -410,17 +410,24 @@ produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
 
 ```text
 请确认选择以下点
-1. 视频渠道：Agnes（付费视频渠道，默认推荐）/ TokenHub（腾讯混元视频渠道，约720p）
-2. 模型：随渠道锁定（Agnes → agnes-video-v2.0；TokenHub → hy-video-1.5）
+1. 视频渠道：Agnes（付费视频渠道，默认推荐）
+            / TokenHub·混元（腾讯混元，约720p，无自定义时长）
+            / TokenHub·Pixverse（腾讯 Pixverse，可设时长，默认5s/720p）
+2. 模型：随上项锁定
+   - Agnes → agnes-video-v2.0
+   - 混元 → hy-video-1.5
+   - Pixverse → pixverse-video-v6.0
 补充说明：
-1. Agnes 与 TokenHub 是两条独立付费渠道，不要互相替换称呼。
+1. Agnes 与 TokenHub 是两条独立付费渠道；TokenHub 下混元与 Pixverse 共用 TOKENHUB_API_KEY，但接口/模型不同，不要混叫。
 2. TokenPlan 是 Agnes 账号的付费/并发档（不是渠道）；有 TokenPlan 档时 Agnes 并发通常更高。
-3. TokenHub（腾讯混元）：约 720p、默认一次一段、无自定义时长；长片靠多段拼接。
-4. 禁止静默换渠；若要换渠道须你明确说。
+3. TokenHub·混元：约 720p、默认一次一段、无自定义时长；长片靠多段拼接；本地图可用 base64。
+4. TokenHub·Pixverse：可设每段 duration（默认 5s）、quality（默认 720p）；图生需公网图片 URL（P0 不接本地路径）。
+5. 禁止静默换渠；若要换渠道须你明确说。
 示例回复：
 1. 我选择 Agnes
 2. 模型按默认
-（或：1. 我选择腾讯混元 / TokenHub）
+（或：1. 我选择腾讯混元 / TokenHub·混元）
+（或：1. 我选择 Pixverse / TokenHub·Pixverse）
 ```
 
 **Agent 内部对照表（勿直接甩给用户光秃秃渠道名）：**
@@ -428,10 +435,11 @@ produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
 | 用户可见名 | 内部 channel | 模型 | 说明 |
 |------------|--------------|------|------|
 | Agnes（付费视频渠道） | `agnes` | `agnes-video-v2.0` | 推荐；TokenPlan=档位不是渠道 |
-| TokenHub（腾讯混元视频渠道，约720p） | `tokenhub` | `hy-video-1.5` | 并发 1；无自定义时长 |
+| TokenHub·混元（腾讯混元，约720p） | `tokenhub` | `hy-video-1.5` | 并发 1；无自定义时长；本地图 OK |
+| TokenHub·Pixverse（可设时长） | `tokenhub` | `pixverse-video-v6.0` | 同 Key；可写 `video_duration_sec`/`video_quality`/`aspect_ratio`；I2V 需公网 URL |
 | eRouter | — | — | ❌ 未实现，勿当可烧 |
 
-写入：`ai_video=enabled`；`video_channel`；`video_model`。  
+写入：`ai_video=enabled`；`video_channel`；`video_model`；选 Pixverse 时可写 `video_duration_sec`（默认 5）、`video_quality`（默认 `720p`）、`aspect_ratio`（如 `16:9` / `9:16`）。  
 非重度：`ai_video=disabled`；渠/模为空。
 
 #### 3.4 画面构成比例（运镜:AI · ≥15s 且可烧 AI 时）
@@ -551,7 +559,10 @@ produce_set_production_profile(
 | `medium_source` | `stock` / `user_assets`；非中度可空 |
 | `ai_video` | 重度且已锁渠模 → `enabled`；否则 `disabled` |
 | `video_channel` | `agnes` / `tokenhub` / …；非重度空 |
-| `video_model` | 模型 id；非重度空 |
+| `video_model` | 模型 id（如 `agnes-video-v2.0` / `hy-video-1.5` / `pixverse-video-v6.0`）；非重度空 |
+| `video_duration_sec` | 可选；Pixverse 每段秒数，默认 `5` |
+| `video_quality` | 可选；Pixverse 画质，默认 `720p` |
+| `aspect_ratio` | 可选；如 `16:9` / `9:16`（Pixverse T2V） |
 | `video_plan` | 表 3 分段规划；商品片须含：切段/重点段、`asset_classes`、`path`、`gap_fill`、每段 `ref_image`（见 references） |
 
 6. 商品片最终 checkpoint 的 `artifacts_json` 至少包含 `brief`、`video_plan`；另带 `segment_cards`（网页逐段文案/镜头/素材规划）和 `asset_ledger`（素材角色、路径、候选、是否选中）时，Backlot 才能完整显示表 3 与素材证据。

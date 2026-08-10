@@ -1,8 +1,12 @@
 """Curated Tencent TokenHub video model catalog (extensible).
 
 status:
-  configured — Key gate + 表② may offer; hy-video-1.5 generation is wired
+  configured — Key gate + 表② may offer; generation is wired
   planned    — registered for later; do not offer as primary pick
+
+Configured today:
+  hy-video-1.5         — 混元 /api/video/* (T2V/I2V; local base64 OK)
+  pixverse-video-v6.0  — Pixverse /wand/pixverse/* (T2V/I2V; public URL for I2V)
 
 Append to EXTRA_MODELS locally to add models without editing the shortlist.
 """
@@ -29,7 +33,13 @@ _VIDEO_MODELS: tuple[TokenHubModel, ...] = (
         "hy-video-1.5",
         "video",
         "configured",
-        "混元 HY-Video（T2V/I2V）；可出片；约720p；默认并发1；无自定义时长",
+        "混元 HY-Video（T2V/I2V）；/api/video/*；约720p；默认并发1；无自定义时长；非 Pixverse",
+    ),
+    TokenHubModel(
+        "pixverse-video-v6.0",
+        "video",
+        "configured",
+        "Pixverse v6（T2V/I2V）；/wand/pixverse/*；可设 duration/quality；I2V 需公网图 URL",
     ),
     TokenHubModel("yt-video-2.0", "video", "planned", "多图图生视频通道"),
     TokenHubModel("yt-video-fx", "video", "planned", "视频特效模型"),

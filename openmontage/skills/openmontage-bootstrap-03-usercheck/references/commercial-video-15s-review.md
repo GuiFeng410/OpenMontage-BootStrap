@@ -65,7 +65,9 @@
 1. 分项来自 `cost_log` / CostTracker entries；合计 = 各笔 actual 之和（CNY 用展示汇率换算）。  
 2. 相对上一节点可加一行「较上次新增 ¥…」，可选。  
 3. 单笔计划 ≥ ¥5 仍按原规则**提示即可**；触顶走费用闸。  
-4. 渠道名对用户展示时遵守 03 Skill「命名防混」（TokenHub≠TokenPlan）。
+4. 渠道名对用户展示时遵守 03 Skill「命名防混」（TokenHub≠TokenPlan；混元≠Pixverse）。
+   - TokenHub·混元：`hy-video-1.5`，无自定义时长。
+   - TokenHub·Pixverse：`pixverse-video-v6.0`，可设每段 duration（默认 5s）/ quality；图生需公网 URL。
 
 ## 1. 触发条件
 
