@@ -625,21 +625,25 @@ def _resolve_commercial_asset(project_dir: Path, raw: str) -> Optional[str]:
     """Resolve a beat asset filename to a project-relative media path."""
     if not raw:
         return None
-    if "/" in raw or "\\" in raw:
-        candidates = [project_dir / raw]
+    if "/" in raw or "\\" in raw or Path(raw).is_absolute():
+        resolved = _resolve_asset_path(project_dir, raw)
+        candidates = [resolved] if resolved is not None else []
     else:
         candidates = [
             project_dir / "assets" / "video" / raw,
             project_dir / "assets" / "video" / "stills" / raw,
+            project_dir / "renders" / raw,
             project_dir / raw,
         ]
     for candidate in candidates:
         try:
-            if candidate.is_file():
-                return _rel(project_dir, candidate)
-        except OSError:
+            if candidate is None or not candidate.is_file():
+                continue
+            candidate.resolve().relative_to(project_dir.resolve())
+            return _rel(project_dir, candidate)
+        except (OSError, ValueError):
             continue
-    return raw
+    return None
 
 
 def _parse_time_span(raw: str) -> tuple[Optional[float], Optional[float]]:
@@ -796,6 +800,10 @@ def _build_commercial_board(
         plan = seg_by_beat.get(beat_id) or {}
         asset = row.get("asset") or ""
         asset_alt = row.get("asset_alt") or ""
+        resolved_asset = _resolve_commercial_asset(project_dir, asset) if asset else None
+        resolved_asset_alt = (
+            _resolve_commercial_asset(project_dir, asset_alt) if asset_alt else None
+        )
         t0 = plan.get("t_start")
         t1 = plan.get("t_end")
         if t0 is None or t1 is None:
@@ -813,8 +821,10 @@ def _build_commercial_board(
                 project_dir,
                 str(row.get("ref") or plan.get("ref") or plan.get("ref_image") or ""),
             ) if row.get("ref") or plan.get("ref") or plan.get("ref_image") else None,
-            "asset_path": _resolve_commercial_asset(project_dir, asset) if asset else None,
-            "asset_alt_path": _resolve_commercial_asset(project_dir, asset_alt) if asset_alt else None,
+            "asset_path": resolved_asset,
+            "asset_missing_path": asset if asset and not resolved_asset else None,
+            "asset_alt_path": resolved_asset_alt,
+            "asset_alt_missing_path": asset_alt if asset_alt and not resolved_asset_alt else None,
             "asset_plan_zh": plan.get("asset_plan_zh"),
             "copy_plan_zh": plan.get("copy_plan_zh"),
             "shot_plan_zh": plan.get("shot_plan_zh"),
@@ -911,9 +921,15 @@ def _build_commercial_board(
         if not path:
             return None
         resolved = _resolve_asset_path(project_dir, path)
+        if resolved is not None:
+            try:
+                resolved.resolve().relative_to(project_dir.resolve())
+            except (OSError, ValueError):
+                resolved = None
         return {
-            "path": _rel(project_dir, resolved) if resolved else path,
+            "path": _rel(project_dir, resolved) if resolved else None,
             "exists": resolved is not None,
+            "missing_path": path if resolved is None else None,
         }
 
     decision_rows = _commercial_decisions_summary(artifacts.get("decision_log") or {})

@@ -157,9 +157,29 @@ def append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def init_project(project_id: str, title: str, pipeline_type: str) -> dict[str, Any]:
-    """Create project layout under sandbox (requires OPENMONTAGE_P1_ALLOW_WRITES)."""
-    return _wrap(T.run_init_project, project_id, title, pipeline_type)
+def init_project(
+    project_id: str,
+    title: str,
+    pipeline_type: str,
+    mode: str = "create_new",
+) -> dict[str, Any]:
+    """Create a fresh isolated project by default, or explicitly resume one."""
+    return _wrap(T.run_init_project, project_id, title, pipeline_type, mode)
+
+
+@mcp.tool()
+def import_project_images(
+    source_project_id: str,
+    target_project_id: str,
+    filenames_json: str,
+) -> dict[str, Any]:
+    """Copy selected original images without copying project state or generated media."""
+    return _wrap(
+        T.run_import_project_images,
+        source_project_id,
+        target_project_id,
+        filenames_json,
+    )
 
 
 def main() -> None:

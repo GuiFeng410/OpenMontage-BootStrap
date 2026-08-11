@@ -137,13 +137,29 @@ metadata:
 
 适用：商品宣传、种草、详情展示、产品佩戴演示等进入 `bootstrap-commercial` 的任务。非商品片继续使用下文完整 Grill 卡。
 
-1. 环境已 `verify_ready`，且已获得最基本的商品主题后，在**表 1 前**生成稳定英文 `project_id`，调用：
+1. 环境已 `verify_ready`，且已获得最基本的商品主题后，在**表 1 前**先判定项目模式：
+   - **默认新建独立项目**。只要用户没有明确说“继续 / 修改某个旧项目”，都按新项目处理；引用旧图片不等于续作。
+   - 仅当用户明确指定旧 `project_id` 并确认续作时，才恢复旧项目。
+   - 新建时生成稳定英文候选 ID；若同名已存在，工具会返回带日期与序号的实际新 ID。之后必须使用返回的 `project_id`，禁止继续使用候选 ID。
 
 ```text
-produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
+默认新建：
+produce_init_project(project_id, title, pipeline_type="bootstrap-commercial", mode="create_new")
+
+明确续作：
+produce_init_project(old_project_id, title, pipeline_type="bootstrap-commercial", mode="resume")
 ```
 
-2. 立即运行 `python -m backlot open <project_id>`。把命令输出的完整项目网址主动发给用户；03→04 全程复用同一网址。打开失败只说明“看板暂不可用”，随后退回完整 Grill 卡，**不得阻塞简报或出片**。
+   固定管线口径：`pipeline_type=bootstrap-commercial`。
+
+   新项目复用旧图时，只复制用户明确选择的原始图片：
+
+```text
+produce_import_project_images(source_project_id, target_project_id, filenames_json)
+```
+
+   该工具只复制 `assets/images/` 中列出的图片，不复制 checkpoint、旧视频、旧渲染或其它 artifact。禁止用目录整体复制代替。
+2. 立即运行 `python -m backlot open <project_id>`，其中 `<project_id>` 必须是初始化工具返回的实际 ID。把命令输出的完整项目网址主动发给用户；03→04 全程复用同一网址。打开失败只说明“看板暂不可用”，随后退回完整 Grill 卡，**不得阻塞简报或出片**。
 3. **网址强制话术（首次决策前必发，禁止等用户追问）：** 在三点卡 / 表 1 等任何确认问题之前，聊天必须先出现固定句式：  
    `你可以查看该网址了解详细信息：{Backlot完整URL}`  
    之后每进入新阶段（写完该阶段 `in_progress` / `awaiting_human` checkpoint 后），再发：  
@@ -173,7 +189,7 @@ produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
 
 5. 此时聊天正文只保留：**项目网址（或「已进入第 N 阶段」句）+ 当前一个问题 + 推荐项 + 一条回复示例**。表 1/2/3 的完整分析仍须生成，但放入网页证据，不在聊天重复大表。若网页不可用，才使用下文完整 Grill 卡。
 6. 用户回复后，用 `produce_append_decision` 追加决定；`user_response_text` 必须是用户原话，修改既有选择时沿用相同 `category + subject`。随后刷新 checkpoint，清除旧的 `needs_user_decision`，再展示下一项。
-7. 表 3 完整产物就绪后，写 `brief_locked/awaiting_human`，其中必须带 `brief` 与 `video_plan`（内联对象或项目内 JSON 路径）。用户回复“确认规划”后用 `produce_approve_checkpoint` 完成阶段；审批必须保留原 artifacts、metadata 与费用。
+7. 表 3 完整产物就绪后，写 `brief_locked/awaiting_human`，其中必须带 `brief`、`asset_precheck`、`video_plan` 与 `segment_cards`（内联对象或项目内 JSON 路径）。`segment_cards` 必须含 `version`、正数 `duration_seconds`、非空 `overall_prompt_zh`，且每段都有 `beat`、`time`、`copy_plan_zh`、`shot_plan_zh`、`asset_plan_zh`。用户回复“确认规划”后用 `produce_approve_checkpoint` 完成阶段；审批必须保留原 artifacts、metadata 与费用。
 
 ### 阶段封板（强制 · 进入下一阶段提示之前）
 
@@ -512,7 +528,7 @@ produce_init_project(project_id, title, pipeline_type="bootstrap-commercial")
 
 1. 安装未闭环 → installer。  
 2. 未 `verify_ready` → setup。  
-3. `produce_init_project`（若尚无项目；商品片用 `pipeline_type=bootstrap-commercial`，其他 BootStrap 任务沿用其已选管线）。商品片通常已在表 1 前初始化，此处只复查，不新建第二个项目。
+3. 复查表 1 前 `produce_init_project` 返回的实际项目 ID；商品片此处禁止再次初始化。非商品片若尚无项目，也默认 `mode=create_new`；只有用户明确续作时才用 `mode=resume`。
 4. 写入档位：
 
 ```text
@@ -565,7 +581,7 @@ produce_set_production_profile(
 | `aspect_ratio` | 可选；如 `16:9` / `9:16`（Pixverse T2V） |
 | `video_plan` | 表 3 分段规划；商品片须含：切段/重点段、`asset_classes`、`path`、`gap_fill`、每段 `ref_image`（见 references） |
 
-6. 商品片最终 checkpoint 的 `artifacts_json` 至少包含 `brief`、`video_plan`；另带 `segment_cards`（网页逐段文案/镜头/素材规划）和 `asset_ledger`（素材角色、路径、候选、是否选中）时，Backlot 才能完整显示表 3 与素材证据。
+6. 商品片 `brief_locked` 最终 checkpoint 的 `artifacts_json` 必须包含 `brief`、`asset_precheck`、`video_plan`、`segment_cards`；`asset_ledger`（素材角色、路径、候选、是否选中）在素材已确认时一并携带。缺少完整 `segment_cards` 时工具会拒绝封板。
 7. `approval_text` 用用户原话（禁止编造）。
 8. 商品片调用 `python -m backlot open <project_id>` 复用原网址；向 04 交接 `project_id` 与网址，不要求用户另开页面。
 9. 交接 **`openmontage-bootstrap-04-produce`**。字幕/BGM → `05-captions-music`（**后置**，不挡本步交接）。
@@ -597,7 +613,7 @@ produce_set_production_profile(
 3. Agent 将结果整理为 `asset_precheck`（可含 `vision_*` 字段）：`suggested_class` 仅为建议。尽量落盘 `artifacts/asset_precheck.json` 与 `artifacts/asset_vision.json`。
 4. 先将 `asset_precheck` 以内联 artifact 写入 `brief_locked/in_progress`（素材收口时写 `assets_gate/in_progress`）。仅在无素材、分类不明、低分辨率、重复、缺少所需角色，或需要补图/降级时，设置 `metadata.needs_user_decision=true` 并出示当前一个问题。
 5. 用户需决定时，完整证据在 Backlot；聊天只给网址 +「已进入第 N 阶段」+ 当前问题 + 推荐 + 回复示例。用户原话以 `asset_decision` 写入 `decision_log`。禁止静默补图或静默开始 I2I / I2V。
-6. 用户确认分类与缺口处理后，用 `lib.asset_precheck.build_asset_ledger` / `build_asset_requirements`（或等价）写入确认角色、`asset_requirements`、`asset_ledger`，再写入每段 `ref_image` / `gap_fill` 到 `video_plan`。最终 `brief_locked/awaiting_human` 必须同时携带 `brief`、`asset_precheck`、`video_plan`（有则带 `asset_ledger`）。
+6. 用户确认分类与缺口处理后，用 `lib.asset_precheck.build_asset_ledger` / `build_asset_requirements`（或等价）写入确认角色、`asset_requirements`、`asset_ledger`，再写入每段 `ref_image` / `gap_fill` 到 `video_plan`。最终 `brief_locked/awaiting_human` 必须同时携带 `brief`、`asset_precheck`、`video_plan`、完整 `segment_cards`（有则带 `asset_ledger`）。
 7. 进入顶层 `assets_gate` 前须落盘 `segment_cards`（时间 + `asset_plan_zh` / 缺口文案）与可展示的 `asset_ledger`（按 beat 挂用户图；AI 扩展用 `kind=image` + `note_zh=AI扩展占位` 或缺口字段）。该阶段面板**只显示图片与安排，不显示入片视频**。
 
 **用户可见边界：**

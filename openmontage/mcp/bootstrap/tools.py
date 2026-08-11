@@ -83,6 +83,7 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_append_decision",
             "produce_read_state",
             "produce_get_next_stage",
+            "produce_import_project_images",
             "produce_scan_user_images",
             "produce_describe_user_images",
             "produce_analyze_public_product_images",
@@ -737,8 +738,26 @@ def verify_ready(deep: bool = False) -> dict[str, Any]:
 # --- produce_* thin wrappers (minimal explainer surface) ---
 
 
-def produce_init_project(project_id: str, title: str, pipeline_type: str = "animated-explainer") -> dict[str, Any]:
-    return doctor_tools.run_init_project(project_id, title, pipeline_type)
+def produce_init_project(
+    project_id: str,
+    title: str,
+    pipeline_type: str = "animated-explainer",
+    mode: str = "create_new",
+) -> dict[str, Any]:
+    return doctor_tools.run_init_project(project_id, title, pipeline_type, mode)
+
+
+def produce_import_project_images(
+    source_project_id: str,
+    target_project_id: str,
+    filenames_json: str,
+) -> dict[str, Any]:
+    """Copy only selected source images into a separate target project."""
+    return doctor_tools.run_import_project_images(
+        source_project_id,
+        target_project_id,
+        filenames_json,
+    )
 
 
 def produce_set_production_profile(

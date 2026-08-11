@@ -992,9 +992,11 @@ function commercialContentView(s) {
 function renderCommercialMediaStack(s, beat, view) {
   const stack = el("div", { class: "beat-media-stack" });
   const ledger = beat.ledger || [];
-  const images = ledger.filter((x) => x.kind === "image" && x.path && x.exists !== false);
-  const videos = ledger.filter((x) => x.kind === "video" && x.path && x.exists !== false);
+  const images = ledger.filter((x) => x.kind === "image" && x.path && x.exists === true);
+  const videos = ledger.filter((x) => x.kind === "video" && x.path && x.exists === true);
   const selectedVideo = videos.find((v) => v.selected) || videos[0];
+  const missingVideo = ledger.find((x) =>
+    x.kind === "video" && x.path && x.exists === false)?.path || beat.asset_missing_path;
 
   if (view === "plan") {
     return null; // 方案确认：不放媒体
@@ -1029,7 +1031,8 @@ function renderCommercialMediaStack(s, beat, view) {
       ? { path: beat.asset_path, label_zh: "入片视频", selected: true }
       : null);
     if (!vid) {
-      stack.append(el("div", { class: "beat-media empty" }, "试片/分段后将显示入片视频"));
+      stack.append(el("div", { class: "beat-media empty" },
+        missingVideo ? `媒体文件不存在：${missingVideo}` : "试片/分段后将显示入片视频"));
       return stack;
     }
     const box = el("div", { class: "beat-media video selected" },
@@ -1256,10 +1259,14 @@ function renderCommercialPlayers(s) {
   if (view === "plan" || view === "assets") return null;
   const evidence = s.commercial?.stage_evidence || {};
   const stagePlayer = {
-    sample: evidence.sample?.path ? { label: "试片", path: evidence.sample.path } : null,
-    draft: evidence.draft?.path ? { label: "完整初稿", path: evidence.draft.path } : null,
-    compose: evidence.compose?.path ? { label: "终稿候选", path: evidence.compose.path } : null,
-    delivery: evidence.delivery?.path ? { label: "终稿", path: evidence.delivery.path } : null,
+    sample: evidence.sample?.path && evidence.sample?.exists === true
+      ? { label: "试片", path: evidence.sample.path } : null,
+    draft: evidence.draft?.path && evidence.draft?.exists === true
+      ? { label: "完整初稿", path: evidence.draft.path } : null,
+    compose: evidence.compose?.path && evidence.compose?.exists === true
+      ? { label: "终稿候选", path: evidence.compose.path } : null,
+    delivery: evidence.delivery?.path && evidence.delivery?.exists === true
+      ? { label: "终稿", path: evidence.delivery.path } : null,
   }[view];
   if ((view === "sample" || view === "segment") && !stagePlayer) return null;
   const players = stagePlayer
@@ -1299,7 +1306,10 @@ function renderCommercialStageEvidence(s) {
         el("span", { class: "kv-v" }, sample.duration_seconds != null ? `${sample.duration_seconds}s` : "待探测")),
       sample.user_confirmation_text
         ? el("div", { class: "commercial-evidence-list" }, el("b", {}, "用户确认"), el("div", {}, sample.user_confirmation_text))
-        : el("div", { class: "hint" }, "尚未记录用户对试片的确认。"));
+        : el("div", { class: "hint" }, "尚未记录用户对试片的确认。"),
+      sample.exists === false && sample.missing_path
+        ? el("div", { class: "hint warn-text" }, `媒体文件不存在：${sample.missing_path}`)
+        : null);
     return el("div", { class: "panel commercial-stage-evidence" },
       el("div", { class: "panel-head" }, el("h2", {}, "试片确认"), el("span", { class: "meta" }, "sample_reel")),
       body);

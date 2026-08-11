@@ -8,6 +8,7 @@ import platform
 import shutil
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -814,13 +815,79 @@ def run_init_project_denied() -> dict[str, Any]:
     )
 
 
-def run_init_project(project_id: str, title: str, pipeline_type: str) -> dict[str, Any]:
+def _allocate_fresh_project_id(requested_project_id: str) -> str:
+    """Return the requested id when free, otherwise a dated unique id."""
+    requested = project_dir(requested_project_id)
+    if not requested.exists():
+        return requested_project_id
+
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
+    for sequence in range(1, 10_000):
+        candidate_id = f"{requested_project_id}-{stamp}-{sequence:02d}"
+        if not project_dir(candidate_id).exists():
+            return candidate_id
+    raise DoctorError(
+        f"Could not allocate a unique project_id for {requested_project_id!r}",
+        code="project_id_exhausted",
+    )
+
+
+def run_init_project(
+    project_id: str,
+    title: str,
+    pipeline_type: str,
+    mode: str = "create_new",
+) -> dict[str, Any]:
     require_p1_writes()
     _ensure_repo_on_path()
     from lib.checkpoint import init_project
 
     root = require_projects_root()
-    # Validate id via sandbox helper
+    if mode not in {"create_new", "resume"}:
+        raise DoctorError(
+            "mode must be create_new or resume",
+            code="bad_request",
+        )
+
+    requested_project_id = project_id
+    requested_target = project_dir(requested_project_id)
+    if mode == "resume":
+        marker_path = requested_target / "project.json"
+        if not marker_path.is_file():
+            raise DoctorError(
+                f"Project {requested_project_id!r} does not exist; resume requires an existing project.json",
+                code="not_found",
+            )
+        try:
+            marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as exc:
+            raise DoctorError(
+                f"Project {requested_project_id!r} has an unreadable project.json",
+                code="invalid_project",
+            ) from exc
+        existing_pipeline = marker.get("pipeline_type")
+        if existing_pipeline and existing_pipeline != pipeline_type:
+            raise DoctorError(
+                f"Project {requested_project_id!r} uses pipeline {existing_pipeline!r}, "
+                f"not {pipeline_type!r}",
+                code="pipeline_mismatch",
+            )
+        return {
+            "project_id": requested_project_id,
+            "requested_project_id": requested_project_id,
+            "project_dir": str(requested_target),
+            "title": marker.get("title") or title,
+            "pipeline_type": existing_pipeline or pipeline_type,
+            "sandbox_root": str(root),
+            "resolved": str(requested_target),
+            "mode": "resume",
+            "created": False,
+            "resumed": True,
+            "conflict_avoided": False,
+            "message_zh": "已明确续作现有项目；原检查点和生成物均保留。",
+        }
+
+    project_id = _allocate_fresh_project_id(requested_project_id)
     target = project_dir(project_id)
     path = init_project(
         project_id,
@@ -830,11 +897,114 @@ def run_init_project(project_id: str, title: str, pipeline_type: str) -> dict[st
     )
     return {
         "project_id": project_id,
+        "requested_project_id": requested_project_id,
         "project_dir": str(path),
         "title": title,
         "pipeline_type": pipeline_type,
         "sandbox_root": str(root),
         "resolved": str(target),
+        "mode": "create_new",
+        "created": True,
+        "resumed": False,
+        "conflict_avoided": project_id != requested_project_id,
+        "message_zh": (
+            f"检测到同名项目，已新建隔离项目 {project_id}；未继承旧检查点和生成物。"
+            if project_id != requested_project_id
+            else "已新建独立项目；未继承其它项目的检查点和生成物。"
+        ),
+    }
+
+
+def run_import_project_images(
+    source_project_id: str,
+    target_project_id: str,
+    filenames_json: str,
+) -> dict[str, Any]:
+    """Copy selected source images into another project without state/media reuse."""
+    require_p1_writes()
+    if source_project_id == target_project_id:
+        raise DoctorError(
+            "source_project_id and target_project_id must be different",
+            code="bad_request",
+        )
+    source_dir = project_dir(source_project_id)
+    target_dir = project_dir(target_project_id)
+    if not (source_dir / "project.json").is_file():
+        raise DoctorError(
+            f"Source project {source_project_id!r} does not exist",
+            code="not_found",
+        )
+    if not (target_dir / "project.json").is_file():
+        raise DoctorError(
+            f"Target project {target_project_id!r} does not exist",
+            code="not_found",
+        )
+    try:
+        filenames = json.loads(filenames_json)
+    except json.JSONDecodeError as exc:
+        raise DoctorError(
+            f"filenames_json invalid: {exc}",
+            code="bad_request",
+        ) from exc
+    if not isinstance(filenames, list) or not filenames:
+        raise DoctorError(
+            "filenames_json must be a non-empty array",
+            code="bad_request",
+        )
+
+    allowed_extensions = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
+    source_images = (source_dir / "assets" / "images").resolve()
+    target_images = target_dir / "assets" / "images"
+    pending: list[tuple[str, Path, Path]] = []
+    for raw_name in filenames:
+        if not isinstance(raw_name, str) or Path(raw_name).name != raw_name or "/" in raw_name or "\\" in raw_name:
+            raise DoctorError(
+                "Each imported image must be a plain filename from source assets/images",
+                code="bad_request",
+            )
+        if Path(raw_name).suffix.lower() not in allowed_extensions:
+            raise DoctorError(
+                f"Unsupported image extension: {raw_name}",
+                code="bad_request",
+            )
+        source = (source_images / raw_name).resolve()
+        try:
+            source.relative_to(source_images)
+        except ValueError as exc:
+            raise DoctorError(
+                f"Image path escapes source project: {raw_name}",
+                code="sandbox_violation",
+            ) from exc
+        if not source.is_file():
+            raise DoctorError(
+                f"Source image not found: {raw_name}",
+                code="not_found",
+            )
+        target = target_images / raw_name
+        if target.exists():
+            raise DoctorError(
+                f"Target image already exists: {raw_name}",
+                code="conflict",
+            )
+        pending.append((raw_name, source, target))
+
+    imported = []
+    target_images.mkdir(parents=True, exist_ok=True)
+    for name, source, target in pending:
+        shutil.copy2(source, target)
+        imported.append({
+            "file": name,
+            "source_project_id": source_project_id,
+            "source_path": f"assets/images/{name}",
+            "target_path": f"assets/images/{name}",
+        })
+    return {
+        "source_project_id": source_project_id,
+        "target_project_id": target_project_id,
+        "imported": imported,
+        "copied_checkpoints": 0,
+        "copied_generated_media": 0,
+        "message_zh": "仅复制了明确选择的原始图片；未继承旧检查点、视频或渲染产物。",
     }
 
 

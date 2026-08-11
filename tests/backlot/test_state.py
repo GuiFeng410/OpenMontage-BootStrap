@@ -351,6 +351,63 @@ class TestBoardState:
         assert commercial["stage_evidence"]["compose"]["path"] == "renders/final.mp4"
         assert commercial["stage_evidence"]["delivery"]["decision"] == "confirmed"
 
+    def test_commercial_missing_media_never_becomes_playable_path(self, projects_root):
+        p = _make_project(projects_root, "commercial-missing-media")
+        _write(p / "project.json", {
+            "project_id": "commercial-missing-media",
+            "title": "缺失媒体",
+            "pipeline_type": "bootstrap-commercial",
+        })
+        _write(p / "artifacts" / "segment_cards.json", {
+            "version": "1.0",
+            "duration_seconds": 5,
+            "overall_prompt_zh": "商品亮相",
+            "segments": [{
+                "beat": "beat_01",
+                "time": "0-5",
+                "copy_plan_zh": "商品亮相",
+                "shot_plan_zh": "慢推",
+                "asset_plan_zh": "使用试片",
+            }],
+        })
+        _write(p / "artifacts" / "review_overview.json", {
+            "overview": [{
+                "beat": "beat_01",
+                "time": "0-5",
+                "asset": "missing-beat.mp4",
+            }],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [{
+                "beat": "beat_01",
+                "kind": "video",
+                "path": "assets/video/missing-ledger.mp4",
+                "selected": True,
+            }],
+        })
+        _write(p / "artifacts" / "sample_reel.json", {
+            "path": "assets/video/missing-sample.mp4",
+            "status": "review",
+        })
+        _write(p / "checkpoint_sample_review.json", {
+            "stage": "sample_review",
+            "status": "in_progress",
+            "timestamp": "2026-08-11T00:00:00Z",
+            "artifacts": {},
+        })
+
+        commercial = load_board_state(p)["commercial"]
+        beat = commercial["beats"][0]
+
+        assert beat["asset_path"] is None
+        assert beat["asset_missing_path"] == "missing-beat.mp4"
+        assert beat["ledger"][0]["exists"] is False
+        assert commercial["stage_evidence"]["sample"]["exists"] is False
+        assert commercial["stage_evidence"]["sample"]["path"] is None
+        assert commercial["stage_evidence"]["sample"]["missing_path"] == (
+            "assets/video/missing-sample.mp4"
+        )
+
 
 class TestCommercialArtifactSchemas:
     def test_full_draft_requires_user_visible_review_evidence(self):
@@ -368,6 +425,17 @@ class TestCommercialArtifactSchemas:
             "issue_segments": [],
             "modification_list": [],
         }, schema)
+
+
+class TestCommercialUIContract:
+    def test_video_players_require_confirmed_existing_files(self):
+        source = (
+            Path(__file__).resolve().parents[2] / "backlot" / "ui" / "board.js"
+        ).read_text(encoding="utf-8")
+
+        assert 'x.kind === "video" && x.path && x.exists === true' in source
+        assert "evidence.sample?.path && evidence.sample?.exists === true" in source
+        assert "媒体文件不存在" in source
 
 
 class TestLibrary:

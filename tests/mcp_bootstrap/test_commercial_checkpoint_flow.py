@@ -58,8 +58,26 @@ def _asset_precheck() -> dict:
     }
 
 
+def _segment_cards() -> dict:
+    return {
+        "version": "1.0",
+        "duration_seconds": 30,
+        "overall_prompt_zh": "商品亮相、细节展示、品牌收尾",
+        "segments": [
+            {
+                "beat": "beat_01",
+                "time": "00:00-00:10",
+                "copy_plan_zh": "先交代商品核心卖点。",
+                "shot_plan_zh": "从全景缓慢推进到主体。",
+                "asset_plan_zh": "使用商品主图，后续可做轻微推镜。",
+            }
+        ],
+    }
+
+
 def test_facade_lists_append_decision() -> None:
     assert "produce_append_decision" in list_bootstrap_tools()["produce_minimal"]
+    assert "produce_import_project_images" in list_bootstrap_tools()["produce_minimal"]
 
 
 def test_facade_scans_uploaded_images_without_writing_artifacts(sandbox: Path) -> None:
@@ -127,6 +145,10 @@ def test_commercial_skills_require_readonly_board_chat_flow() -> None:
         assert "网页" in text and "聊天" in text
     assert "produce_scan_user_images" in usercheck
     assert "produce_describe_user_images" in usercheck
+    assert 'mode="create_new"' in usercheck
+    assert 'mode="resume"' in usercheck
+    assert "produce_import_project_images" in usercheck
+    assert "默认新建独立项目" in usercheck
     assert "你可以查看该网址了解详细信息" in usercheck
     assert "已进入第 N 阶段" in usercheck
     assert "produce_analyze_public_product_images" in usercheck
@@ -151,6 +173,7 @@ def test_commercial_skills_require_readonly_board_chat_flow() -> None:
     assert "clarifyprompt" not in produce
     assert "commercial-prompt-lexicon.md" in produce
     assert "asset-preprocess-gate.md" in produce
+    assert "禁止重新调用 produce_init_project" in produce
 
 
 def test_intermediate_decision_and_approval_preserve_evidence(sandbox: Path) -> None:
@@ -187,6 +210,7 @@ def test_intermediate_decision_and_approval_preserve_evidence(sandbox: Path) -> 
         "brief": _brief(),
         "asset_precheck": _asset_precheck(),
         "video_plan": _video_plan(),
+        "segment_cards": _segment_cards(),
     }
     produce_write_checkpoint(
         "commercial-flow",
@@ -201,15 +225,7 @@ def test_intermediate_decision_and_approval_preserve_evidence(sandbox: Path) -> 
         "commercial-flow",
         "brief_locked",
         "确认规划",
-        artifacts_json=json.dumps(
-            {
-                "segment_cards": {
-                    "overall_prompt_zh": "开场到收尾",
-                    "segments": [{"beat": "beat_01", "copy_plan_zh": "亮相"}],
-                }
-            },
-            ensure_ascii=False,
-        ),
+        artifacts_json="{}",
         pipeline_type="bootstrap-commercial",
     )
 
@@ -217,7 +233,7 @@ def test_intermediate_decision_and_approval_preserve_evidence(sandbox: Path) -> 
     assert approved["status"] == "completed"
     assert approved["artifacts"]["brief"] == artifacts["brief"]
     assert approved["artifacts"]["video_plan"] == artifacts["video_plan"]
-    assert approved["artifacts"]["segment_cards"]["overall_prompt_zh"] == "开场到收尾"
+    assert approved["artifacts"]["segment_cards"]["overall_prompt_zh"] == _segment_cards()["overall_prompt_zh"]
     assert (sandbox / "commercial-flow" / "artifacts" / "brief.json").exists()
     assert approved["metadata"]["decision_title_zh"] == "选择评审模式"
     assert approved["metadata"]["approval_note"] == "确认规划"
@@ -237,6 +253,9 @@ def test_project_local_artifact_refs_validate(sandbox: Path) -> None:
     (pdir / "artifacts" / "asset_precheck.json").write_text(
         json.dumps(_asset_precheck(), ensure_ascii=False), encoding="utf-8"
     )
+    (pdir / "artifacts" / "segment_cards.json").write_text(
+        json.dumps(_segment_cards(), ensure_ascii=False), encoding="utf-8"
+    )
     result = produce_write_checkpoint(
         "commercial-refs",
         "brief_locked",
@@ -246,6 +265,7 @@ def test_project_local_artifact_refs_validate(sandbox: Path) -> None:
                 "brief": "artifacts/brief.json",
                 "asset_precheck": "artifacts/asset_precheck.json",
                 "video_plan": "artifacts/video_plan.json",
+                "segment_cards": "artifacts/segment_cards.json",
             }
         ),
         pipeline_type="bootstrap-commercial",
@@ -261,6 +281,47 @@ def test_manifest_outputs_are_required_on_new_writes(tmp_path: Path) -> None:
             "sample_review",
             "awaiting_human",
             {},
+            pipeline_type="bootstrap-commercial",
+        )
+
+
+def test_brief_locked_requires_complete_segment_cards(sandbox: Path) -> None:
+    produce_init_project("commercial-segments", "分段完整性", "bootstrap-commercial")
+    base_artifacts = {
+        "brief": _brief(),
+        "asset_precheck": _asset_precheck(),
+        "video_plan": _video_plan(),
+    }
+
+    with pytest.raises(CheckpointValidationError, match="segment_cards"):
+        produce_write_checkpoint(
+            "commercial-segments",
+            "brief_locked",
+            "awaiting_human",
+            artifacts_json=json.dumps(base_artifacts, ensure_ascii=False),
+            pipeline_type="bootstrap-commercial",
+        )
+
+    with pytest.raises(CheckpointValidationError, match="segment_cards"):
+        produce_write_checkpoint(
+            "commercial-segments",
+            "brief_locked",
+            "awaiting_human",
+            artifacts_json=json.dumps(
+                {
+                    **base_artifacts,
+                    "segment_cards": {
+                        "overall_prompt_zh": "只有不完整分段",
+                        "segments": [
+                            {
+                                "beat": "beat_01",
+                                "copy_plan_zh": "只有文案，没有镜头和素材规划",
+                            }
+                        ],
+                    },
+                },
+                ensure_ascii=False,
+            ),
             pipeline_type="bootstrap-commercial",
         )
 

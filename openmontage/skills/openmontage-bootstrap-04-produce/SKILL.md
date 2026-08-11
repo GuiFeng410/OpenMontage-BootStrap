@@ -67,7 +67,7 @@ metadata:
 
 商品片从 03 接收 `bootstrap-commercial` 的 `project_id` 和固定 Backlot 网址。进入 04 后：
 
-1. 先调用 `produce_read_state` 核对管线，再运行 `python -m backlot open <project_id>`；主动把**同一网址**发给用户，不创建第二个看板项目。聊天须含：`你可以查看该网址了解详细信息：{URL}`。
+1. 必须接收 03 初始化工具返回的实际 `project_id`。先调用 `produce_read_state` 核对管线，再运行 `python -m backlot open <project_id>`；主动把**同一网址**发给用户，不创建第二个看板项目。聊天须含：`你可以查看该网址了解详细信息：{URL}`。进入 04 后**禁止重新调用 produce_init_project**；缺少项目 ID、状态或完整简报时退回 03，不得猜测新建或续作。
 2. 每进入试片 / 分段 / 初稿 / 合成 / 交付阶段并写完对应 checkpoint 后，聊天固定一句：`已进入第 N 阶段：{中文名}。请打开看板查看最新证据（若未自动更新请刷新页面）。`
 3. 试片、专业批次、初稿和交付需要用户裁定时，先用 `produce_write_checkpoint` 写入当前阶段证据：`artifacts_json` 带阶段产物，`metadata_json` 带当前唯一决策、选项、推荐、回复示例和 `partial_progress`，`cost_snapshot_json` 带累计费用。
 4. 网页可用时，完整审查卡、候选、抽帧、费用明细放网页；聊天只发“网址或阶段句 + 当前一个问题 + 推荐 + 回复示例”。网页不可用时退回完整 Grill 卡，流程继续。
@@ -275,7 +275,7 @@ YT 系列仍 planned，禁止当可烧。试片：混元 `python scripts/_run_to
 
 0. 无已确认简报 → **先交接 03**（表 1→2→3）。  
 1. 锁定复查（见上）；`approval_text` 用用户原话。  
-2. `produce_init_project`（若简报阶段未建；商品片必须 `pipeline_type=bootstrap-commercial`，非商品片沿用已选管线）→ 预建 `assets/*`。若 03 已建，只复用原项目与网址。
+2. 复用 03 返回的项目与网址，禁止重新初始化。商品片固定 `pipeline_type=bootstrap-commercial`。若简报阶段未建项目，先交回 03 以 `mode=create_new` 或经用户明确确认后的 `mode=resume` 初始化。
 3. 核对 / 写入 `production_profile`（简报已写则可跳过或核对）：
 
 ```text

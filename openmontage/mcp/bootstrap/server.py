@@ -143,9 +143,25 @@ def produce_init_project(
     project_id: str,
     title: str,
     pipeline_type: str = "animated-explainer",
+    mode: str = "create_new",
 ) -> dict[str, Any]:
-    """Create sandboxed project (requires OPENMONTAGE_P1_ALLOW_WRITES)."""
-    return _wrap(T.produce_init_project, project_id, title, pipeline_type)
+    """Create a fresh isolated project by default, or explicitly resume one."""
+    return _wrap(T.produce_init_project, project_id, title, pipeline_type, mode)
+
+
+@mcp.tool()
+def produce_import_project_images(
+    source_project_id: str,
+    target_project_id: str,
+    filenames_json: str,
+) -> dict[str, Any]:
+    """Copy selected original images without inheriting old checkpoints or renders."""
+    return _wrap(
+        T.produce_import_project_images,
+        source_project_id,
+        target_project_id,
+        filenames_json,
+    )
 
 
 @mcp.tool()

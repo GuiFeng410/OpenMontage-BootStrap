@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 import sys
@@ -106,5 +107,69 @@ def test_static_navigation_invalid_route_and_active_takes(staged_backlot_server)
             page.goto(staged_backlot_server + "/p/the-last-lighthouse?static=1", wait_until="networkidle")
             page.wait_for_timeout(300)
             assert page.locator(".takes .tk.active").count() >= 1
+        finally:
+            browser.close()
+
+
+def test_missing_commercial_media_does_not_render_video_player(staged_backlot_server):
+    project = backlot_screenshot_stage.STAGE_DIR / "missing-commercial-media"
+    (project / "artifacts").mkdir(parents=True, exist_ok=True)
+    (project / "project.json").write_text(
+        json.dumps({
+            "project_id": "missing-commercial-media",
+            "title": "缺失媒体",
+            "pipeline_type": "bootstrap-commercial",
+        }),
+        encoding="utf-8",
+    )
+    (project / "artifacts" / "segment_cards.json").write_text(
+        json.dumps({
+            "version": "1.0",
+            "duration_seconds": 5,
+            "overall_prompt_zh": "商品亮相",
+            "segments": [{
+                "beat": "beat_01",
+                "time": "0-5",
+                "copy_plan_zh": "商品亮相",
+                "shot_plan_zh": "慢推",
+                "asset_plan_zh": "使用试片",
+            }],
+        }),
+        encoding="utf-8",
+    )
+    (project / "artifacts" / "review_overview.json").write_text(
+        json.dumps({
+            "overview": [{
+                "beat": "beat_01",
+                "time": "0-5",
+                "asset": "missing-beat.mp4",
+            }],
+        }),
+        encoding="utf-8",
+    )
+    (project / "artifacts" / "sample_reel.json").write_text(
+        json.dumps({"path": "assets/video/missing-sample.mp4", "status": "review"}),
+        encoding="utf-8",
+    )
+    (project / "checkpoint_sample_review.json").write_text(
+        json.dumps({
+            "stage": "sample_review",
+            "status": "in_progress",
+            "timestamp": "2026-08-11T00:00:00Z",
+            "artifacts": {},
+        }),
+        encoding="utf-8",
+    )
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + "/p/missing-commercial-media?static=1",
+                wait_until="networkidle",
+            )
+            assert page.locator("video").count() == 0
+            assert "媒体文件不存在" in page.locator("body").inner_text()
         finally:
             browser.close()

@@ -47,8 +47,16 @@ def test_write_checkpoint_materializes_artifacts_json(tmp_path: Path):
         },
         "video_plan": {"segments": [{"id": "beat_01", "t": "0-5", "method": "camera_move"}]},
         "segment_cards": {
+            "version": "1.0",
+            "duration_seconds": 5,
             "overall_prompt_zh": "开场→细节→收尾",
-            "segments": [{"beat": "b1", "copy_plan_zh": "亮相"}],
+            "segments": [{
+                "beat": "b1",
+                "time": "0-5",
+                "copy_plan_zh": "亮相",
+                "shot_plan_zh": "缓慢推进",
+                "asset_plan_zh": "使用商品主图",
+            }],
         },
     }
     write_checkpoint(

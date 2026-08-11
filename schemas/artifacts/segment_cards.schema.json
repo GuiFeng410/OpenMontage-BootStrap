@@ -3,12 +3,33 @@
   "$id": "openmontage/artifacts/segment_cards",
   "title": "Commercial Segment Cards",
   "type": "object",
-  "required": ["segments"],
+  "required": ["version", "duration_seconds", "overall_prompt_zh", "segments"],
   "properties": {
-    "version": { "type": "string" },
-    "duration_seconds": { "type": "number", "minimum": 0 },
-    "overall_prompt_zh": { "type": "string" },
-    "segments": { "type": "array", "items": { "type": "object" } }
+    "version": { "type": "string", "minLength": 1 },
+    "duration_seconds": { "type": "number", "exclusiveMinimum": 0 },
+    "overall_prompt_zh": { "type": "string", "minLength": 1 },
+    "segments": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "beat",
+          "time",
+          "copy_plan_zh",
+          "shot_plan_zh",
+          "asset_plan_zh"
+        ],
+        "properties": {
+          "beat": { "type": "string", "minLength": 1 },
+          "time": { "type": "string", "minLength": 1 },
+          "copy_plan_zh": { "type": "string", "minLength": 1 },
+          "shot_plan_zh": { "type": "string", "minLength": 1 },
+          "asset_plan_zh": { "type": "string", "minLength": 1 }
+        },
+        "additionalProperties": true
+      }
+    }
   },
   "additionalProperties": true
 }

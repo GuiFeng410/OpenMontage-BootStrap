@@ -39,6 +39,7 @@ stages:
       - brief
       - asset_precheck
       - video_plan
+      - segment_cards
     checkpoint_required: true
     human_approval_default: true
 
