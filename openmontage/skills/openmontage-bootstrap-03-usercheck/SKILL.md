@@ -29,7 +29,7 @@ metadata:
 
 `references/commercial-video-15s-review.md`
 
-该参考文档规定：默认**普通评审**（方案→试片→初稿/问题片段）；**专业模式**才强制总览表与 3–4 beat 分批逐段卡（≥15s **须显式请用户选择**，不强制专业，但禁止静默不告知）。另含画面构成比例（运镜:AI，软约束）、累计 API 费用卡、三状态、修改清单确认门，以及 AI 段重试用尽后再询问用户的回退规则。用户决策消息统一用本 Skill「Grill 确认卡」。
+该参考文档规定：默认**普通评审**（方案→试片→初稿/问题片段）；**专业模式**才强制总览表与 3–4 beat 分批逐段卡（≥15s **须显式请用户选择**，不强制专业，但禁止静默不告知）。另含画面构成比例（运镜:AI，软约束）、累计 API 费用卡、三状态、修改清单确认门、**直接出片/快速模式 v1.0**，以及 AI 段重试用尽后再询问用户的回退规则。用户决策消息统一用本 Skill「Grill 确认卡」。
 
 本路由不替代当前 03 -> 04 主链，也不改变已经确认的 provider、模型或 render runtime。它只增加商品视频的展示、暂停、修改和用户确认方式。
 
@@ -198,15 +198,17 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 **在聊天写出「已进入第 N+1 阶段」之前，必须完成封板：**
 
 ```text
-1) produce_append_decision（本阶段每一项用户原话已写入）
-2) 本阶段应展示的全量证据写入 checkpoint（合并写入，勿传残缺对象覆盖掉 brief/video_plan）
+0) 严格前序阶段已是 completed；否则停在当前阶段补证据
+1) 先物化本阶段 canonical artifact 及其项目内媒体路径；Backlot 显示“未挂接媒体”只表示待修复，不是合法阶段证据
+2) produce_append_decision（本阶段每一项用户原话已写入）
+3) 本阶段应展示的全量证据写入 checkpoint（合并写入，勿传残缺对象覆盖掉 brief/video_plan）
    - 方案确认封板至少：brief + video_plan + segment_cards（含 overall_prompt_zh 与各段文案/镜头/素材安排）
    - 另尽量带 asset_precheck；有识图则 asset_vision
-3) produce_approve_checkpoint / produce_write_checkpoint(status=completed 或下一阶段 in_progress)
+4) canonical artifact 与媒体路径均可读取后，才可 produce_approve_checkpoint / produce_write_checkpoint(status=completed 或 awaiting_human)
    → 工具会合并同阶段旧 artifacts，并落盘 artifacts/*.json
-4) 聊天先发封板句（禁止跳过）：
+5) 聊天先发封板句（禁止跳过）：
    「方案确认阶段证据已写入看板（已确认决定 + 整体方案 + 分段规划）。请刷新面板核对；确认无误后再继续。」
-5) 用户有机会刷新后，再发：
+6) 用户有机会刷新后，再写下一阶段 in_progress 并发：
    「已进入第 N 阶段：{中文名}。…」
 ```
 
@@ -216,6 +218,14 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 商品片决定使用固定分类，禁止临时发明 category：主题/时长/渠道用 `brief_selection`，评审方式用 `review_mode_selection`，轻/中/重档用 `production_tier_selection`，候选策略用 `candidate_mode_selection`，运镜/AI 比例用 `motion_mix_selection`，素材取舍用 `asset_decision`，试片/初稿等阶段裁定用 `stage_review_decision`，最终交付确认用 `delivery_signoff`，全程审批策略用 `approval_policy`。
 
 **只读边界：** 网页不放审批按钮、不直接写 JSON、不唤醒 Agent。用户始终在聊天中作出决定，Agent 是唯一写入者。
+
+### 直接出片 / 快速模式 v1.0（冻结）
+
+用户说“直接出片”时，**只能触发** `references/commercial-video-15s-review.md` §0.5 的单问题“商品片快速模式 v1.0”授权卡；该短句本身不是全程预授权，禁止立即写 `approval_policy`。
+
+授权卡必须填入当前实际 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标与分辨率，并一次讲清：自动 `assets_gate`；`sample_review` 必停；试片通过后，只有这些已披露基线及审查结果均无实质变化，才能用本次完整原话作为 `draft_review` 审批证据并自动推进 `final_compose`；任何变化或需修改即暂停；`delivery_signoff` 必停。用户回复包含 reference 给出的**完整同意语义**后，才按其中 schema 合法 JSON 示例调用 `produce_append_decision`。
+
+完整推进、暂停条件、固定话术与回复示例以 §0.5 为唯一展开处。快速模式不允许跳过 canonical artifact、素材证据、项目 preflight、provider registry/MCP availability、试片、费用闸或付费确认，且聊天仍一次只问一个问题。
 
 ## 商品片 ↔ 七阶段（强制对照）
 
@@ -415,6 +425,8 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 
 检测视频渠道 Key：**仅** `AGNES_*`、`TOKENHUB_*`（及日后文档标明已接线的渠道）。`FAL_KEY` 等**不**单独作为本产品重度主渠闸门，除非另有约定。eRouter 视频仍 **planned** 时标 ❌，勿当可烧。
 
+**项目计划预检（只读硬门）：** 将候选渠模、每段 `t2v|i2v` 与图源先物化到当前项目简报草案后，在最终锁定或恢复渠道前调用 `produce_provider_preflight(project_id)`。它只检查项目计划、Pixverse 模式/图源、OSS 和项目授权证据，**不检查** `TOKENHUB_API_KEY` / `AGNES_API_KEY` 或 provider 在线可用性；渠道可用仍须另查 provider registry / 对应 MCP availability。`ready=false` 时只展示项目证据 blockers 并一次问一个问题，不得锁定或开烧。Pixverse 只提供 **T2V/I2V**，不提供 T2I/I2I；商品缺图由 Agnes / Flux / DashScope / OpenAI / Kling / Google / Grok 等**已配置 image provider**完成。若成图随后选作 Pixverse 本地图 I2V 参考图，才进入 OSS 暂存门，详见 3.3.1 与 04「项目计划、Pixverse 与 OSS 预检」。
+
 **推荐规则：**
 
 - 只列出已填 Key 且可出片的渠道/模型。  
@@ -460,19 +472,20 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 
 #### 3.3.1 Pixverse 本地图临时上传（可选阿里云 OSS）
 
-触发条件：用户锁定 `video_model=pixverse-video-v6.0`，某段使用本项目 `assets/images/` 内的本地图，且已配置 OSS。
+触发条件：候选或已锁定 `video_model=pixverse-video-v6.0`，某个 **I2V** beat 使用本项目 `assets/images/` 内的本地图。Pixverse T2V、Pixverse 公网图 I2V、Agnes 均不需要 OSS。
 
-1. **03 只确认并记录，不上传。** 聊天一次只问：
+1. 先调用只读 `produce_provider_preflight(project_id)`。只有返回 `oss_required=true` 的 Pixverse 本地图 I2V 才检查 OSS 与本项目授权；不得因机器已有 OSS 配置就自动上传。
+2. **03 只确认并记录，不上传。** 聊天一次只问：
    > Pixverse 图生需要公网 URL。是否允许本项目把所选图片临时上传到你的私有阿里云 OSS，生成默认 6 小时签名 URL，生成结束后尽量删除？Secret 和签名 URL不会进入看板。
-2. 用户明确同意后，用 `produce_append_decision` 写入当前项目：
+3. 用户明确同意后，用 `produce_append_decision` 写入当前项目：
    - `category="asset_decision"`
    - `subject="Pixverse local image temporary OSS upload"`（之后变更必须保持同一 subject）
    - `options_considered` 至少含 `option_id="approved"` 与 `option_id="denied"`，每项按 schema 写 `label/score/reason`
-   - `selected="approved"`、`user_approved=true`
-   - `user_response_text` 必须是用户原话。
-3. 只认当前 `project_id` 的最新同 subject 决策；新项目不得继承旧项目授权。用户撤销时追加 `selected="denied"`，不得改写旧记录。
-4. 未配置或用户拒绝：继续用公网 `image_url`；若要改 Agnes / 混元，按换渠协议重新确认，禁止静默切换。
-5. 授权不是全局开关。04 每次本地图调用仍须显式传 `project_id` 与 `user_authorized_upload=true`；工具层默认拒绝。
+   - 严格三项批准证据必须同时成立：`selected="approved"`、`user_approved=true`、非空 `user_response_text`（用户原话）。
+4. 只认当前 `project_id` 的最新同 subject 决策；新项目不得继承旧项目授权。用户撤销时追加 `selected="denied"`，不得改写旧记录。
+5. OSS 未配置时交接 06。用户配置后须重启/刷新 MCP，再次调用 preflight 复检 **OSS readiness**；`ready=true` 仍不代表 Key/provider 在线可用。另查 registry/MCP availability 后恢复原 checkpoint 阶段，不重走表 1–3、不自动越级，也不因配置存在而自动上传。
+6. 用户拒绝时可继续用公网 `image_url`；若要改 Agnes / 混元，按换渠协议重新确认，禁止静默切换。
+7. 授权不是全局开关。04 每次本地图调用仍须显式传 `project_id` 与 `user_authorized_upload=true`；工具层默认拒绝。
 
 #### 3.4 画面构成比例（运镜:AI · ≥15s 且可烧 AI 时）
 
@@ -509,8 +522,9 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 
 1. **必须先读**本目录 `references/product-prompt-template.md`。  
 2. 素材分类、缺图询问（默认 I2I）、切段/重点段、每段主参考图、英文提示词组装——按该参考执行。  
-3. 缺口未关闭前**不出最终表 3**、不交接 produce 烧视频。  
-4. 禁止静默 I2I / 静默硬烧佩戴支。
+3. 缺图的 T2I/I2I 只能交给已配置 image provider；**不得把 Pixverse 当成图片生成器**。若补图随后用于 Pixverse 本地图 I2V，再走 3.3.1。
+4. 缺口未关闭前**不出最终表 3**、不交接 produce 烧视频。
+5. 禁止静默 I2I / 静默硬烧佩戴支。
 
 非商品片：跳过本小节，按通用表 3 即可。
 

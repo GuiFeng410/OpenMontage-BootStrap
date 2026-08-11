@@ -150,6 +150,12 @@ def produce_init_project(
 
 
 @mcp.tool()
+def produce_provider_preflight(project_id: str) -> dict[str, Any]:
+    """Read locked channel/mode evidence and report Pixverse OSS readiness."""
+    return _wrap(T.produce_provider_preflight, project_id)
+
+
+@mcp.tool()
 def produce_import_project_images(
     source_project_id: str,
     target_project_id: str,

@@ -86,6 +86,8 @@ metadata:
 4. 失败时**不静默换商**；让用户另选 provider，或退回 Edge 男声 / Piper / 零 Key。  
 5. Key **只**来自环境变量；禁止写入 Skill / extras / 对话明文长期保存。  
 6. 门面 MCP **保持独立**；providers 为并列 MCP（TTS + Image + Video）。
+7. 锁定/恢复视频渠道及付费调用前，必须由 03/04 调只读 `produce_provider_preflight(project_id)`；它只查项目计划、Pixverse 模式/图源、OSS 和项目授权证据，**不查** TokenHub/Agnes Key 或 provider 在线可用性。本 Skill 配 Key 不等于渠道、上传或付费授权。
+8. 付费前仍须独立检查 provider registry / 对应 MCP availability、所需 Key 和费用闸；不能用 preflight 的 `ready=true` 代替。
 
 ## 何时启用本 Skill
 
@@ -130,7 +132,9 @@ metadata:
 
 另需：`OPENMONTAGE_PROJECTS_DIR`（与门面相同沙箱根）。
 
-若用户选择 TokenHub·Pixverse 且要直接使用本地图，可选配置阿里云 OSS：
+Pixverse 是**视频 provider**，只提供 T2V/I2V，不承担 T2I/I2I。商品缺图须选择已配置的 Agnes / Flux / DashScope / OpenAI / Kling / Google / Grok 等 image provider；只有成图随后要作为 Pixverse **本地图 I2V** 参考图时，才需要下列可选阿里云 OSS。Pixverse T2V、Pixverse 公网图 I2V 与 Agnes 均不需要 OSS。
+
+若用户选择 TokenHub·Pixverse 本地图 I2V，可选配置阿里云 OSS：
 
 | Key | 说明 |
 |-----|------|
@@ -141,9 +145,13 @@ metadata:
 | `ALIYUN_OSS_PREFIX` | 可选前缀，默认 `openmontage/tmp/` |
 | `OSS_SIGNED_URL_EXPIRES_SEC` | 默认 `21600` 秒 |
 
-引导口径：建议 RAM 用户仅授予指定前缀的 Put/Get/Delete；把字段写入本机 `.env` 后重启 MCP。**配置 Key 不等于授权上传**：每个新项目仍须在 03 聊天明确确认一次，并写入项目 decision log。不得让用户在 Backlot 填 Secret，不得在回复中要求用户粘贴 Secret。
+引导口径：建议 RAM 用户仅授予指定前缀的 Put/Get/Delete；把字段写入本机 `.env` 后重启/刷新 MCP。**配置 Key 不等于授权上传**：每个新项目仍须在 03 聊天明确确认一次，并写入项目 decision log。批准严格要求最新固定 subject 决策同时具备 `selected=approved`、`user_approved=true`、非空 `user_response_text` 三项证据。不得让用户在 Backlot 填 Secret，不得在回复中要求用户粘贴 Secret。
 
-等用户回复「Key 已写入并已重启 MCP」再继续。
+等用户回复「Key 已写入并已重启 MCP」后，调用只读 `produce_provider_preflight(project_id)` 复检项目证据与 **OSS readiness**：
+
+- `ready=false`：只说明 `blockers`、缺失字段与下一步，一次问一个问题；
+- `ready=true`：不代表 TokenHub/Agnes Key 有效或 provider 在线；继续检查 registry / MCP availability 与费用闸后，才交回原 checkpoint 阶段，不重走表 1–3、不自动越级；
+- 无论结果如何，不因 OSS 配置存在而自动上传；上传仍由当前项目决策证据和每次显式调用参数共同约束。
 
 ### 4. 口述启用执行 Skill
 
@@ -164,7 +172,7 @@ metadata:
 
 ## C-常用白名单（执行层已锁定）
 
-**图：** flux · openai · dashscope · kling · google · grok  
+**图：** agnes · flux · openai · dashscope · kling · google · grok
 **视频：** kling（官方）· seedance · sora · veo · minimax · runway  
 **TTS：** openai · elevenlabs · dashscope · doubao · google · kling  
 

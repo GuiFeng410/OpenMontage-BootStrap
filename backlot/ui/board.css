@@ -1016,10 +1016,18 @@ body:not(.first) .lib-card, body:not(.first) .drawer { animation: none; }
 .tech-details summary { cursor: pointer; color: var(--text-2); }
 .tech-body { margin-top: 6px; display: grid; gap: 4px; }
 .asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.commercial-assets-details .asset-grid { margin-top: 10px; }
 .asset-card {
   border: 1px solid var(--border); border-radius: 6px; overflow: hidden; background: var(--surface-2);
 }
-.asset-card img { width: 100%; aspect-ratio: 1; object-fit: cover; display: block; }
+.asset-card img {
+  width: 100%;
+  height: 132px;
+  max-height: min(180px, 22vh);
+  object-fit: contain;
+  display: block;
+  background: var(--media-bg);
+}
 .asset-card.missing { border-color: var(--red); }
 .asset-missing { padding: 28px 8px; text-align: center; color: var(--red); font-size: calc(11px * var(--fs-scale)); }
 .asset-meta { padding: 8px; font-size: calc(10.5px * var(--fs-scale)); display: grid; gap: 2px; }
@@ -1168,6 +1176,20 @@ body:not(.first) .lib-card, body:not(.first) .drawer { animation: none; }
   margin-top: 8px; font-size: calc(10.5px * var(--fs-scale)); color: var(--text-3);
 }
 .commercial-beat-card .beat-plan-fold summary { cursor: pointer; color: var(--text-2); }
+.beat-generation-grid { display: grid; gap: 6px; margin-top: 8px; }
+.beat-generation-row {
+  display: grid;
+  grid-template-columns: minmax(72px, auto) 1fr;
+  gap: 8px;
+  line-height: 1.45;
+}
+.beat-generation-row b { color: var(--text-3); }
+.beat-generation-row span { color: var(--text-2); overflow-wrap: anywhere; }
+.evidence-path {
+  font-family: var(--mono);
+  font-size: calc(10px * var(--fs-scale));
+  overflow-wrap: anywhere;
+}
 .asset-label-strip {
   display: flex; flex-direction: column; gap: 4px;
   padding: 10px 0 0; border-top: 1px dashed var(--border-soft); margin-top: 10px;
@@ -1182,10 +1204,21 @@ body:not(.first) .lib-card, body:not(.first) .drawer { animation: none; }
   color: var(--text); border-color: var(--green); background: var(--green-dim); font-weight: 600;
 }
 .asset-label.missing { border-color: var(--red); color: var(--red); }
+.commercial-beat-card.mode-assets .beat-media {
+  max-height: min(180px, 24vh);
+}
+.commercial-beat-card.mode-assets .beat-media img { object-fit: contain; }
 
 @media (max-width: 1100px) {
   .beat-card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
   .beat-card-grid { grid-template-columns: 1fr; }
+  .asset-card img {
+    height: 112px;
+    max-height: min(150px, 20vh);
+  }
+  .commercial-beat-card.mode-assets .beat-media {
+    max-height: min(150px, 22vh);
+  }
 }

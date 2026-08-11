@@ -514,7 +514,10 @@ def resolve_production_profile(
     return profile
 
 
-def _sync_production_profile_to_marker(project_id: str, fields: dict[str, Any]) -> dict[str, Any] | None:
+def _build_production_profile_marker_update(
+    project_id: str,
+    fields: dict[str, Any],
+) -> dict[str, Any] | None:
     picked = _pick_profile_fields(fields)
     if "production_tier" not in picked:
         return None
@@ -551,8 +554,19 @@ def _sync_production_profile_to_marker(project_id: str, fields: dict[str, Any]) 
             if key not in profile and key in existing:
                 profile[key] = existing[key]
     marker["production_profile"] = profile
+    return marker
+
+
+def _sync_production_profile_to_marker(
+    project_id: str,
+    fields: dict[str, Any],
+) -> dict[str, Any] | None:
+    """Backward-compatible direct sync for non-checkpoint callers."""
+    marker = _build_production_profile_marker_update(project_id, fields)
+    if marker is None:
+        return None
     _write_marker(project_id, marker)
-    return profile
+    return marker["production_profile"]
 
 
 def run_set_production_profile(
@@ -1046,7 +1060,7 @@ def run_write_checkpoint(
 ) -> dict[str, Any]:
     require_p1_writes()
     _ensure_repo_on_path()
-    from lib.checkpoint import merge_checkpoint_artifacts, read_checkpoint, write_checkpoint
+    from lib.checkpoint import merge_write_checkpoint
 
     root = require_projects_root()
     project_dir(project_id)  # validate id
@@ -1056,40 +1070,40 @@ def run_write_checkpoint(
         raise DoctorError(f"artifacts_json invalid: {exc}", code="bad_request") from exc
     if not isinstance(supplied_artifacts, dict):
         raise DoctorError("artifacts_json must be an object", code="bad_request")
-    current = read_checkpoint(root, project_id, stage)
-    artifacts = merge_checkpoint_artifacts(
-        (current or {}).get("artifacts") if isinstance(current, dict) else None,
-        supplied_artifacts,
-    )
-    synced_profile = _sync_production_profile_to_marker(project_id, artifacts)
     try:
         supplied_metadata = json.loads(metadata_json) if metadata_json else {}
     except json.JSONDecodeError as exc:
         raise DoctorError(f"metadata_json invalid: {exc}", code="bad_request") from exc
     if not isinstance(supplied_metadata, dict):
         raise DoctorError("metadata_json must be an object", code="bad_request")
-    metadata = {**((current or {}).get("metadata") or {}), **supplied_metadata}
     try:
         cost_snapshot = json.loads(cost_snapshot_json) if cost_snapshot_json else None
     except json.JSONDecodeError as exc:
         raise DoctorError(f"cost_snapshot_json invalid: {exc}", code="bad_request") from exc
     if cost_snapshot is not None and not isinstance(cost_snapshot, dict):
         raise DoctorError("cost_snapshot_json must be an object", code="bad_request")
-    if cost_snapshot is None and isinstance(current, dict):
-        cost_snapshot = current.get("cost_snapshot")
     if approval_note:
-        metadata["approval_note"] = approval_note
-    path = write_checkpoint(
+        supplied_metadata["approval_note"] = approval_note
+    path, written, marker_update = merge_write_checkpoint(
         root,
         project_id,
         stage,
         status,
-        artifacts,
+        supplied_artifacts,
         pipeline_type=pipeline_type or None,
         human_approval_required=human_approval_required,
         human_approved=human_approved,
-        cost_snapshot=cost_snapshot,
-        metadata=metadata or None,
+        cost_snapshot_patch=cost_snapshot,
+        metadata_patch=supplied_metadata,
+        project_marker_builder=lambda artifacts: (
+            _build_production_profile_marker_update(project_id, artifacts)
+        ),
+    )
+    artifacts = written["artifacts"]
+    synced_profile = (
+        marker_update.get("production_profile")
+        if isinstance(marker_update, dict)
+        else None
     )
     result: dict[str, Any] = {
         "checkpoint_path": str(path),
@@ -1118,22 +1132,18 @@ def run_approve_checkpoint(
             "approve_checkpoint requires approval_text from the user's chat reply; "
             "MCP cannot invent approval."
         )
+    require_p1_writes()
     _ensure_repo_on_path()
-    from lib.checkpoint import merge_checkpoint_artifacts, read_checkpoint
+    from lib.checkpoint import merge_write_checkpoint
 
     root = require_projects_root()
     project_dir(project_id)
-    current = read_checkpoint(root, project_id, stage)
     try:
         supplied_artifacts = json.loads(artifacts_json) if artifacts_json else {}
     except json.JSONDecodeError as exc:
         raise DoctorError(f"artifacts_json invalid: {exc}", code="bad_request") from exc
     if not isinstance(supplied_artifacts, dict):
         raise DoctorError("artifacts_json must be an object", code="bad_request")
-    artifacts = merge_checkpoint_artifacts(
-        (current or {}).get("artifacts") if isinstance(current, dict) else None,
-        supplied_artifacts,
-    )
 
     try:
         supplied_metadata = json.loads(metadata_json) if metadata_json else {}
@@ -1141,7 +1151,15 @@ def run_approve_checkpoint(
         raise DoctorError(f"metadata_json invalid: {exc}", code="bad_request") from exc
     if not isinstance(supplied_metadata, dict):
         raise DoctorError("metadata_json must be an object", code="bad_request")
-    metadata = {**((current or {}).get("metadata") or {}), **supplied_metadata}
+    supplied_metadata["needs_user_decision"] = False
+    stale_metadata_keys = (
+        "decision_title_zh",
+        "decision_context_zh",
+        "decision_prompt_zh",
+        "decision_options",
+        "recommendation_zh",
+        "examples_zh",
+    )
 
     if cost_snapshot_json:
         try:
@@ -1151,24 +1169,41 @@ def run_approve_checkpoint(
         if not isinstance(cost_snapshot, dict):
             raise DoctorError("cost_snapshot_json must be an object", code="bad_request")
     else:
-        cost_snapshot = (current or {}).get("cost_snapshot")
+        cost_snapshot = None
 
-    return run_write_checkpoint(
-        project_id=project_id,
-        stage=stage,
-        status="completed",
-        artifacts_json=json.dumps(artifacts, ensure_ascii=False),
-        pipeline_type=pipeline_type or str((current or {}).get("pipeline_type") or ""),
+    supplied_metadata["approval_note"] = approval_text.strip()
+    path, written, marker_update = merge_write_checkpoint(
+        root,
+        project_id,
+        stage,
+        "completed",
+        supplied_artifacts,
+        pipeline_type=pipeline_type or None,
         human_approval_required=True,
         human_approved=True,
-        approval_note=approval_text.strip(),
-        metadata_json=json.dumps(metadata, ensure_ascii=False),
-        cost_snapshot_json=(
-            json.dumps(cost_snapshot, ensure_ascii=False)
-            if isinstance(cost_snapshot, dict)
-            else ""
+        cost_snapshot_patch=cost_snapshot,
+        metadata_patch=supplied_metadata,
+        metadata_remove_keys=stale_metadata_keys,
+        project_marker_builder=lambda artifacts: (
+            _build_production_profile_marker_update(project_id, artifacts)
         ),
     )
+    artifacts = written["artifacts"]
+    synced_profile = (
+        marker_update.get("production_profile")
+        if isinstance(marker_update, dict)
+        else None
+    )
+    result: dict[str, Any] = {
+        "checkpoint_path": str(path),
+        "stage": stage,
+        "status": "completed",
+        "artifact_keys": sorted(artifacts.keys()),
+        "materialized_hint_zh": "已写入 checkpoint，并尽量落盘 artifacts/*.json；请刷新看板核对。",
+    }
+    if synced_profile:
+        result["production_profile"] = synced_profile
+    return result
 
 
 def run_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:

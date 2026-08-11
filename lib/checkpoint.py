@@ -7,12 +7,21 @@ checkpoints to resume pipelines and to present state at human checkpoints.
 from __future__ import annotations
 
 import json
-from functools import lru_cache
+import os
+import time
+from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import lru_cache
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
+from uuid import uuid4
 
 import jsonschema
+
+if os.name == "nt":
+    import msvcrt
+else:
+    import fcntl
 
 from schemas.artifacts import ARTIFACT_NAMES, validate_artifact
 
@@ -46,6 +55,16 @@ SUPPLEMENTARY_ARTIFACTS = {
     "final_review",         # Required by compose stage before presenting to user
     "video_analysis_brief", # Reference-video grounding artifact carried alongside stages
 }
+
+_COMMERCIAL_MEDIA_REQUIREMENTS = {
+    "sample_review": ("sample_reel", "path"),
+    "draft_review": ("full_draft_pro", "path"),
+    "final_compose": ("final_review", "output_path"),
+    "delivery_signoff": ("final_review", "output_path"),
+}
+_COMMERCIAL_REVIEW_VIDEO_EXTENSIONS = frozenset(
+    {".mp4", ".webm", ".mov", ".m4v", ".mkv"}
+)
 
 
 def get_pipeline_stages(pipeline_type: str | None) -> list[str]:
@@ -89,10 +108,67 @@ from lib.paths import PROJECTS_DIR  # noqa: E402  (single source of truth)
 
 PROJECT_MARKER_FILENAME = "project.json"
 HISTORY_DIRNAME = "history"
+CHECKPOINT_LOCK_FILENAME = ".checkpoint.lock"
+CHECKPOINT_LOCK_TIMEOUT_SECONDS = 10.0
+CHECKPOINT_LOCK_POLL_SECONDS = 0.02
 
 
 class CheckpointValidationError(ValueError):
     """Raised when a checkpoint or its canonical artifacts are invalid."""
+
+
+@contextmanager
+def _project_checkpoint_lock(pipeline_dir: Path, project_id: str):
+    """Serialize one project's checkpoint transaction with an OS-owned lock."""
+    project_dir = pipeline_dir / project_id
+    project_dir.mkdir(parents=True, exist_ok=True)
+    lock_path = project_dir / CHECKPOINT_LOCK_FILENAME
+    lock_file = open(lock_path, "a+b")
+    deadline = time.monotonic() + CHECKPOINT_LOCK_TIMEOUT_SECONDS
+    acquired = False
+    try:
+        lock_file.seek(0, os.SEEK_END)
+        if lock_file.tell() == 0:
+            lock_file.write(b"\0")
+            lock_file.flush()
+        while not acquired:
+            lock_file.seek(0)
+            try:
+                if os.name == "nt":
+                    msvcrt.locking(
+                        lock_file.fileno(),
+                        msvcrt.LK_NBLCK,
+                        1,
+                    )
+                else:
+                    fcntl.flock(
+                        lock_file.fileno(),
+                        fcntl.LOCK_EX | fcntl.LOCK_NB,
+                    )
+            except OSError as exc:
+                if time.monotonic() >= deadline:
+                    raise CheckpointValidationError(
+                        f"checkpoint lock timeout for project {project_id!r}"
+                    ) from exc
+                time.sleep(CHECKPOINT_LOCK_POLL_SECONDS)
+                continue
+            acquired = True
+        yield
+    finally:
+        if acquired:
+            try:
+                lock_file.seek(0)
+                if os.name == "nt":
+                    msvcrt.locking(
+                        lock_file.fileno(),
+                        msvcrt.LK_UNLCK,
+                        1,
+                    )
+                else:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
+        lock_file.close()
 
 
 @lru_cache(maxsize=1)
@@ -160,6 +236,78 @@ def _validate_artifacts_for_stage(
             ) from exc
 
 
+def _validate_commercial_media_file(
+    pipeline_type: Any,
+    stage: str,
+    status: str,
+    artifacts: dict[str, Any],
+    project_dir: Optional[Path],
+) -> None:
+    """Ensure reviewable commercial media exists inside the current project."""
+    requirement = _COMMERCIAL_MEDIA_REQUIREMENTS.get(stage)
+    if (
+        pipeline_type != "bootstrap-commercial"
+        or status not in {"awaiting_human", "completed"}
+        or requirement is None
+    ):
+        return
+    if project_dir is None:
+        raise CheckpointValidationError(
+            f"商品片媒体阶段 {stage!r} 校验需要当前项目目录"
+        )
+
+    artifact_name, path_key = requirement
+    artifact = artifacts.get(artifact_name)
+    if isinstance(artifact, str):
+        artifact_ref = Path(artifact)
+        if not artifact_ref.is_absolute():
+            artifact_ref = project_dir / artifact_ref
+        try:
+            artifact_ref = artifact_ref.resolve()
+            artifact_ref.relative_to(project_dir.resolve())
+            artifact = json.loads(artifact_ref.read_text(encoding="utf-8"))
+        except (OSError, ValueError, json.JSONDecodeError, UnicodeError) as exc:
+            raise CheckpointValidationError(
+                f"商品片媒体工件 {artifact_name!r} 无法从当前项目读取"
+            ) from exc
+    if not isinstance(artifact, dict):
+        raise CheckpointValidationError(
+            f"商品片媒体工件 {artifact_name!r} 必须提供"
+        )
+
+    raw_path = artifact.get(path_key)
+    if not isinstance(raw_path, str) or not raw_path.strip():
+        raise CheckpointValidationError(
+            f"商品片媒体工件 {artifact_name!r} 的 {path_key!r} 必须为非空路径"
+        )
+    media_path = Path(raw_path)
+    if not media_path.is_absolute():
+        media_path = project_dir / media_path
+    try:
+        resolved_project = project_dir.resolve()
+        media_path = media_path.resolve()
+        media_path.relative_to(resolved_project)
+    except (OSError, ValueError) as exc:
+        raise CheckpointValidationError(
+            f"商品片媒体路径必须位于当前项目目录：{raw_path}"
+        ) from exc
+    if not media_path.exists():
+        raise CheckpointValidationError(
+            f"商品片媒体文件不存在：{media_path}"
+        )
+    if not media_path.is_file():
+        raise CheckpointValidationError(
+            f"商品片媒体路径必须指向实际文件：{media_path}"
+        )
+    if (
+        media_path.suffix.lower() not in _COMMERCIAL_REVIEW_VIDEO_EXTENSIONS
+        or media_path.stat().st_size <= 0
+    ):
+        raise CheckpointValidationError(
+            f"商品片媒体不可评审：必须是非空视频文件（{media_path.name}）"
+        )
+
+
 def validate_checkpoint(
     checkpoint: dict[str, Any],
     *,
@@ -191,7 +339,11 @@ def validate_checkpoint(
     if not isinstance(artifacts, dict):
         raise CheckpointValidationError("Checkpoint artifacts must be a dictionary")
 
-    if enforce_pipeline_outputs and pipeline_type and status in {"completed", "awaiting_human"}:
+    if (
+        enforce_pipeline_outputs
+        and pipeline_type not in {None, "", "unknown"}
+        and status in {"completed", "awaiting_human"}
+    ):
         from lib.pipeline_loader import load_pipeline_readonly
 
         manifest = load_pipeline_readonly(pipeline_type)
@@ -206,6 +358,13 @@ def validate_checkpoint(
             )
 
     _validate_artifacts_for_stage(stage, status, artifacts, project_dir)
+    _validate_commercial_media_file(
+        pipeline_type,
+        stage,
+        status,
+        artifacts,
+        project_dir,
+    )
 
     try:
         jsonschema.validate(instance=checkpoint, schema=_load_checkpoint_schema())
@@ -305,7 +464,69 @@ def _stage_requires_approval(pipeline_type: Optional[str], stage: str) -> Option
     return get_stage_human_approval_default(manifest, stage)
 
 
-def _archive_superseded_checkpoint(path: Path, stage: str) -> None:
+def _enforce_commercial_stage_order(
+    pipeline_dir: Path,
+    project_id: str,
+    pipeline_type: Optional[str],
+    stage: str,
+    status: str,
+) -> None:
+    """Require every prior commercial stage's current checkpoint to be completed."""
+    if pipeline_type != "bootstrap-commercial" or status not in {
+        "in_progress",
+        "awaiting_human",
+        "completed",
+        "failed",
+    }:
+        return
+
+    stages = get_pipeline_stages(pipeline_type)
+    prior_stages = stages[:stages.index(stage)]
+    incomplete: list[str] = []
+    for prior_stage in prior_stages:
+        path = _checkpoint_path(pipeline_dir, project_id, prior_stage)
+        try:
+            with open(path, encoding="utf-8") as f:
+                prior = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            prior = None
+        if not isinstance(prior, dict) or prior.get("status") != "completed":
+            incomplete.append(prior_stage)
+
+    if incomplete:
+        raise CheckpointValidationError(
+            f"商品片阶段顺序违规：写入阶段 {stage!r} 的 {status!r} 状态前，"
+            f"未完成前序阶段：{', '.join(incomplete)}。"
+        )
+
+
+def _required_inline_manifest_outputs(
+    pipeline_type: Optional[str],
+    stage: str,
+    status: str,
+    artifacts: dict[str, Any],
+) -> set[str]:
+    """Return required manifest outputs supplied as inline JSON objects."""
+    if (
+        pipeline_type in {None, "", "unknown"}
+        or status not in {"completed", "awaiting_human"}
+    ):
+        return set()
+    from lib.pipeline_loader import load_pipeline_readonly
+
+    manifest = load_pipeline_readonly(pipeline_type)
+    stage_def = next(
+        (item for item in manifest.get("stages", []) if item.get("name") == stage),
+        {},
+    )
+    return {
+        name
+        for name in stage_def.get("produces", [])
+        if isinstance(artifacts.get(name), dict)
+    }
+
+
+def _archive_superseded_checkpoint(path: Path, stage: str) -> Optional[Path]:
     """Copy an existing checkpoint into history/ before it is overwritten.
 
     Preserves the full run record: stage re-runs (script v1 → v2) and gate
@@ -318,14 +539,14 @@ def _archive_superseded_checkpoint(path: Path, stage: str) -> None:
     files), so we copy rather than move, and swallow archival I/O failures.
     """
     if not path.exists():
-        return
+        return None
     try:
         with open(path) as f:
             existing = json.load(f)
     except (json.JSONDecodeError, OSError):
         existing = {}
     if existing.get("status") == "in_progress":
-        return
+        return None
 
     try:
         import shutil
@@ -337,15 +558,53 @@ def _archive_superseded_checkpoint(path: Path, stage: str) -> None:
         if target.exists():
             target = history_dir / f"checkpoint_{stage}_{safe_stamp}_{path.stat().st_mtime_ns}.json"
         shutil.copyfile(path, target)
+        return target
     except OSError:
         import logging
         logging.getLogger(__name__).warning(
             "Could not archive superseded checkpoint %s to history/", path
         )
+        return None
 
 
 def _decision_log_path(pipeline_dir: Path, project_id: str) -> Path:
     return pipeline_dir / project_id / "decision_log.json"
+
+
+def _resolve_checkpoint_pipeline_type(
+    pipeline_dir: Path,
+    project_id: str,
+    supplied_pipeline_type: Optional[str],
+) -> Optional[str]:
+    """Make a known project marker authoritative for checkpoint writes."""
+    marker_path = pipeline_dir / project_id / PROJECT_MARKER_FILENAME
+    marker_pipeline_type: Optional[str] = None
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        candidate = (
+            str(marker.get("pipeline_type") or "").strip()
+            if isinstance(marker, dict)
+            else ""
+        )
+        if candidate and candidate != "unknown":
+            from lib.pipeline_loader import load_pipeline_readonly
+
+            load_pipeline_readonly(candidate)
+            marker_pipeline_type = candidate
+    except (OSError, json.JSONDecodeError, FileNotFoundError, ValueError):
+        marker_pipeline_type = None
+
+    supplied = str(supplied_pipeline_type or "").strip()
+    if marker_pipeline_type:
+        if supplied in {"", "unknown"}:
+            return marker_pipeline_type
+        if supplied != marker_pipeline_type:
+            raise CheckpointValidationError(
+                f"pipeline_type {supplied!r} conflicts with authoritative "
+                f"project marker pipeline_type {marker_pipeline_type!r}"
+            )
+        return marker_pipeline_type
+    return supplied_pipeline_type or None
 
 
 def _merge_decision_log(
@@ -357,25 +616,71 @@ def _merge_decision_log(
     single cumulative file so reviewers and the bench can inspect the
     full audit trail.
     """
-    path = _decision_log_path(pipeline_dir, project_id)
-    if path.exists():
-        with open(path) as f:
-            existing = json.load(f)
-    else:
-        existing = {
+    with _project_checkpoint_lock(pipeline_dir, project_id):
+        path = _decision_log_path(pipeline_dir, project_id)
+        merged = _merge_decision_log_data(
+            _read_decision_log(path, project_id),
+            new_log,
+            project_id,
+        )
+        temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+        try:
+            temporary.write_text(
+                json.dumps(merged, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            os.replace(temporary, path)
+        finally:
+            _best_effort_unlink(temporary)
+
+
+def _read_decision_log(path: Path, project_id: str) -> dict[str, Any]:
+    if not path.exists():
+        return {
             "version": "1.0",
             "project_id": project_id,
             "decisions": [],
         }
+    try:
+        existing = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeError) as exc:
+        raise CheckpointValidationError(
+            "Existing project decision_log.json is unreadable"
+        ) from exc
+    if not isinstance(existing, dict) or not isinstance(
+        existing.get("decisions"), list
+    ):
+        raise CheckpointValidationError(
+            "Existing project decision_log.json must contain decisions"
+        )
+    return existing
 
-    existing_ids = {d["decision_id"] for d in existing.get("decisions", [])}
+
+def _merge_decision_log_data(
+    existing: dict[str, Any],
+    new_log: dict[str, Any],
+    project_id: str,
+) -> dict[str, Any]:
+    """Pure append-only merge with decision_id deduplication."""
+    merged = {
+        **existing,
+        "version": str(existing.get("version") or "1.0"),
+        "project_id": str(existing.get("project_id") or project_id),
+        "decisions": list(existing.get("decisions") or []),
+    }
+    existing_ids = {
+        decision.get("decision_id")
+        for decision in merged["decisions"]
+        if isinstance(decision, dict)
+    }
     for decision in new_log.get("decisions", []):
-        if decision.get("decision_id") not in existing_ids:
-            existing["decisions"].append(decision)
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with open(path, "w") as f:
-        json.dump(existing, f, indent=2)
+        if not isinstance(decision, dict):
+            continue
+        decision_id = decision.get("decision_id")
+        if decision_id not in existing_ids:
+            merged["decisions"].append(decision)
+            existing_ids.add(decision_id)
+    return merged
 
 
 def write_checkpoint(
@@ -395,20 +700,135 @@ def write_checkpoint(
     error: Optional[str] = None,
     metadata: Optional[dict] = None,
 ) -> Path:
+    """Write one fully serialized, rollback-safe project checkpoint."""
+    with _project_checkpoint_lock(pipeline_dir, project_id):
+        return _write_checkpoint_locked(
+            pipeline_dir,
+            project_id,
+            stage,
+            status,
+            artifacts,
+            pipeline_type=pipeline_type,
+            style_playbook=style_playbook,
+            checkpoint_policy=checkpoint_policy,
+            human_approval_required=human_approval_required,
+            human_approved=human_approved,
+            review=review,
+            cost_snapshot=cost_snapshot,
+            error=error,
+            metadata=metadata,
+        )
+
+
+def merge_write_checkpoint(
+    pipeline_dir: Path,
+    project_id: str,
+    stage: str,
+    status: str,
+    artifacts_patch: dict[str, Any],
+    *,
+    pipeline_type: Optional[str] = None,
+    style_playbook: Optional[str] = None,
+    checkpoint_policy: str = "guided",
+    human_approval_required: bool = False,
+    human_approved: bool = False,
+    review: Optional[dict] = None,
+    cost_snapshot_patch: Optional[dict] = None,
+    error: Optional[str] = None,
+    metadata_patch: Optional[dict] = None,
+    metadata_remove_keys: tuple[str, ...] = (),
+    project_marker_builder: Optional[
+        Callable[[dict[str, Any]], Optional[dict[str, Any]]]
+    ] = None,
+) -> tuple[Path, dict[str, Any], Optional[dict[str, Any]]]:
+    """Merge a partial checkpoint update and commit it under one project lock."""
+    with _project_checkpoint_lock(pipeline_dir, project_id):
+        current = read_checkpoint(pipeline_dir, project_id, stage)
+        current = current if isinstance(current, dict) else {}
+        artifacts = merge_checkpoint_artifacts(
+            current.get("artifacts"),
+            artifacts_patch,
+        )
+        metadata = {
+            **(
+                current.get("metadata")
+                if isinstance(current.get("metadata"), dict)
+                else {}
+            ),
+            **(metadata_patch or {}),
+        }
+        for key in metadata_remove_keys:
+            metadata.pop(key, None)
+        current_cost = (
+            current.get("cost_snapshot")
+            if isinstance(current.get("cost_snapshot"), dict)
+            else {}
+        )
+        cost_snapshot = {**current_cost, **(cost_snapshot_patch or {})}
+        effective_pipeline_type = (
+            pipeline_type
+            or str(current.get("pipeline_type") or "")
+            or None
+        )
+        effective_style_playbook = (
+            style_playbook
+            if style_playbook is not None
+            else current.get("style_playbook")
+        )
+        project_marker = (
+            project_marker_builder(artifacts)
+            if project_marker_builder is not None
+            else None
+        )
+        path = _write_checkpoint_locked(
+            pipeline_dir,
+            project_id,
+            stage,
+            status,
+            artifacts,
+            pipeline_type=effective_pipeline_type,
+            style_playbook=effective_style_playbook,
+            checkpoint_policy=checkpoint_policy,
+            human_approval_required=human_approval_required,
+            human_approved=human_approved,
+            review=review,
+            cost_snapshot=cost_snapshot or None,
+            error=error,
+            metadata=metadata or None,
+            project_marker=project_marker,
+        )
+        written = read_checkpoint(pipeline_dir, project_id, stage)
+        if written is None:
+            raise CheckpointValidationError(
+                f"Checkpoint {stage!r} disappeared after commit"
+            )
+        return path, written, project_marker
+
+
+def _write_checkpoint_locked(
+    pipeline_dir: Path,
+    project_id: str,
+    stage: str,
+    status: str,
+    artifacts: dict[str, Any],
+    *,
+    pipeline_type: Optional[str] = None,
+    style_playbook: Optional[str] = None,
+    checkpoint_policy: str = "guided",
+    human_approval_required: bool = False,
+    human_approved: bool = False,
+    review: Optional[dict] = None,
+    cost_snapshot: Optional[dict] = None,
+    error: Optional[str] = None,
+    metadata: Optional[dict] = None,
+    project_marker: Optional[dict[str, Any]] = None,
+) -> Path:
     """Write a checkpoint file for a pipeline stage."""
-    # Backfill a missing pipeline_type from the project marker so that
-    # omitting the kwarg doesn't quietly bypass gate enforcement.
-    if not pipeline_type:
-        marker = None
-        marker_path = pipeline_dir / project_id / PROJECT_MARKER_FILENAME
-        if marker_path.exists():
-            try:
-                with open(marker_path) as f:
-                    marker = json.load(f)
-            except (json.JSONDecodeError, OSError):
-                marker = None
-        if isinstance(marker, dict) and marker.get("pipeline_type"):
-            pipeline_type = marker["pipeline_type"]
+    pipeline_type = _resolve_checkpoint_pipeline_type(
+        pipeline_dir,
+        project_id,
+        pipeline_type,
+    )
 
     valid_stages = (
         set(get_pipeline_stages(pipeline_type)) if pipeline_type
@@ -419,6 +839,13 @@ def write_checkpoint(
             f"Invalid stage: {stage!r} for pipeline {pipeline_type!r}. "
             f"Valid stages: {sorted(valid_stages)}"
         )
+    _enforce_commercial_stage_order(
+        pipeline_dir,
+        project_id,
+        pipeline_type,
+        stage,
+        status,
+    )
 
     # --- Gate enforcement (GI-4) ---
     # The pipeline manifest is the binding source of truth for whether a stage
@@ -449,6 +876,29 @@ def write_checkpoint(
                 f"re-write with status='completed', human_approved=True."
             )
 
+    artifacts = dict(artifacts)
+    merged_decision_log: Optional[dict[str, Any]] = None
+    if isinstance(artifacts.get("decision_log"), dict):
+        merged_decision_log = _merge_decision_log_data(
+            _read_decision_log(
+                _decision_log_path(pipeline_dir, project_id),
+                project_id,
+            ),
+            artifacts["decision_log"],
+            project_id,
+        )
+        artifacts["decision_log"] = merged_decision_log
+        log_ref = str(_decision_log_path(pipeline_dir, project_id))
+        for artifact_key in ("proposal_packet", "render_report"):
+            if artifact_key in artifacts and isinstance(artifacts[artifact_key], dict):
+                plan_or_top = artifacts[artifact_key]
+                if artifact_key == "proposal_packet":
+                    plan = plan_or_top.get("production_plan")
+                    if isinstance(plan, dict):
+                        plan["decision_log_ref"] = log_ref
+                else:
+                    plan_or_top["decision_log_ref"] = log_ref
+
     checkpoint = {
         "version": "1.0",
         "project_id": project_id,
@@ -472,26 +922,6 @@ def write_checkpoint(
     if metadata is not None:
         checkpoint["metadata"] = metadata
 
-    # Merge decision_log: if this checkpoint carries new decisions,
-    # append them to the project-level decision log file, then write the
-    # reference back into relevant artifacts so downstream consumers can find it.
-    if "decision_log" in artifacts and isinstance(artifacts["decision_log"], dict):
-        _merge_decision_log(pipeline_dir, project_id, artifacts["decision_log"])
-        log_ref = str(_decision_log_path(pipeline_dir, project_id))
-
-        # Write decision_log_ref into proposal_packet and render_report
-        # artifacts if they are present in this checkpoint.
-        for artifact_key in ("proposal_packet", "render_report"):
-            if artifact_key in artifacts and isinstance(artifacts[artifact_key], dict):
-                plan_or_top = artifacts[artifact_key]
-                # proposal_packet stores it under production_plan
-                if artifact_key == "proposal_packet":
-                    plan = plan_or_top.get("production_plan")
-                    if isinstance(plan, dict):
-                        plan["decision_log_ref"] = log_ref
-                else:
-                    plan_or_top["decision_log_ref"] = log_ref
-
     validate_checkpoint(
         checkpoint,
         project_dir=pipeline_dir / project_id,
@@ -500,21 +930,86 @@ def write_checkpoint(
 
     path = _checkpoint_path(pipeline_dir, project_id, stage)
     path.parent.mkdir(parents=True, exist_ok=True)
+    project_root = pipeline_dir / project_id
+    required_inline = _required_inline_manifest_outputs(
+        pipeline_type,
+        stage,
+        status,
+        artifacts,
+    )
+    transactional_inline = set(required_inline)
+    if merged_decision_log is not None:
+        transactional_inline.add("decision_log")
+    required_transaction: list[dict[str, Any]] = []
+    if transactional_inline or project_marker is not None:
+        try:
+            required_transaction = _prepare_required_artifacts(
+                project_root,
+                {name: artifacts[name] for name in transactional_inline},
+                root_decision_log=merged_decision_log,
+                project_marker=project_marker,
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            raise CheckpointValidationError(
+                "required manifest artifacts failed to materialize: "
+                f"{sorted(transactional_inline)}"
+            ) from exc
     # Serialize to a temp file first so a mid-write failure (disk full,
     # unserializable metadata) can never leave the stage with a truncated
     # current checkpoint; then archive the superseded file and swap in the
     # new one atomically.
-    tmp_path = path.with_suffix(".json.tmp")
-    with open(tmp_path, "w", encoding="utf-8") as f:
-        json.dump(checkpoint, f, indent=2)
+    tmp_path = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        with open(tmp_path, "w", encoding="utf-8") as f:
+            json.dump(checkpoint, f, indent=2)
+    except Exception:
+        _cleanup_required_artifact_transaction(required_transaction)
+        _best_effort_unlink(tmp_path)
+        raise
+
+    try:
+        _commit_required_artifacts(required_transaction)
+    except (OSError, CheckpointValidationError) as exc:
+        _best_effort_unlink(tmp_path)
+        if isinstance(exc, CheckpointValidationError):
+            raise
+        raise CheckpointValidationError(
+            "required manifest artifacts failed to materialize: "
+            f"{sorted(transactional_inline)}"
+        ) from exc
+
     # Preserve run history: a superseded completed/awaiting_human checkpoint
     # is copied to history/ (stage versioning, gate audit trail, replay).
-    _archive_superseded_checkpoint(path, stage)
-    import os
-    os.replace(tmp_path, path)
+    archived_path = _archive_superseded_checkpoint(path, stage)
+    try:
+        os.replace(tmp_path, path)
+    except OSError as exc:
+        rollback_error: Optional[CheckpointValidationError] = None
+        try:
+            _rollback_required_artifacts(required_transaction)
+        except CheckpointValidationError as rollback_exc:
+            rollback_error = rollback_exc
+        _best_effort_unlink(tmp_path)
+        if archived_path is not None:
+            _best_effort_unlink(archived_path)
+        if rollback_error is not None:
+            raise CheckpointValidationError(
+                f"Checkpoint {stage!r} failed to commit and artifact rollback "
+                f"was incomplete: {rollback_error}"
+            ) from exc
+        raise CheckpointValidationError(
+            f"Checkpoint {stage!r} failed to commit; prior state was restored"
+        ) from exc
+    _finalize_required_artifacts(required_transaction)
 
-    project_root = pipeline_dir / project_id
-    _materialize_artifacts(project_root, artifacts)
+    _materialize_artifacts(
+        project_root,
+        {
+            name: value
+            for name, value in artifacts.items()
+            if name not in transactional_inline
+        },
+    )
 
     return path
 
@@ -537,6 +1032,148 @@ _MATERIALIZE_ARTIFACT_FILES = {
 }
 
 
+def _artifact_materialization_filename(name: str) -> Optional[str]:
+    filename = _MATERIALIZE_ARTIFACT_FILES.get(name)
+    if filename:
+        return filename
+    if name.replace("_", "").isalnum():
+        return f"{name}.json"
+    return None
+
+
+def _prepare_required_artifacts(
+    project_dir: Path,
+    artifacts: dict[str, dict[str, Any]],
+    *,
+    root_decision_log: Optional[dict[str, Any]] = None,
+    project_marker: Optional[dict[str, Any]] = None,
+) -> list[dict[str, Any]]:
+    """Serialize all required inline artifacts before touching current files."""
+    if (
+        not artifacts
+        and root_decision_log is None
+        and project_marker is None
+    ):
+        return []
+    art_dir = project_dir / "artifacts"
+    art_dir.mkdir(parents=True, exist_ok=True)
+    transaction: list[dict[str, Any]] = []
+
+    def prepare_entry(name: str, target: Path, payload: dict[str, Any]) -> None:
+        token = uuid4().hex
+        entry = {
+            "name": name,
+            "target": target,
+            "temp": target.parent / f".{target.name}.{token}.tmp",
+            "rollback_temp": (
+                target.parent / f".{target.name}.{token}.rollback.tmp"
+            ),
+            "original_bytes": target.read_bytes() if target.exists() else None,
+            "installed": False,
+        }
+        transaction.append(entry)
+        entry["temp"].write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
+    try:
+        for name in sorted(artifacts):
+            filename = _artifact_materialization_filename(name)
+            if filename is None:
+                raise ValueError(f"Unsafe artifact name: {name!r}")
+            prepare_entry(
+                name,
+                art_dir / filename,
+                artifacts[name],
+            )
+        if root_decision_log is not None:
+            prepare_entry(
+                "root_decision_log",
+                project_dir / "decision_log.json",
+                root_decision_log,
+            )
+        if project_marker is not None:
+            prepare_entry(
+                "project_marker",
+                project_dir / PROJECT_MARKER_FILENAME,
+                project_marker,
+            )
+    except Exception:
+        _cleanup_required_artifact_transaction(transaction)
+        raise
+    return transaction
+
+
+def _commit_required_artifacts(transaction: list[dict[str, Any]]) -> None:
+    """Replace required artifact targets, rolling all of them back on failure."""
+    try:
+        for entry in transaction:
+            target = entry["target"]
+            os.replace(entry["temp"], target)
+            entry["installed"] = True
+    except OSError as exc:
+        try:
+            _rollback_required_artifacts(transaction)
+        except CheckpointValidationError as rollback_exc:
+            raise CheckpointValidationError(
+                "required manifest artifacts failed to materialize and rollback "
+                f"was incomplete: {rollback_exc}"
+            ) from exc
+        raise CheckpointValidationError(
+            "required manifest artifacts failed to materialize"
+        ) from exc
+
+
+def _rollback_required_artifacts(transaction: list[dict[str, Any]]) -> None:
+    """Restore every required artifact target to its pre-call state."""
+    errors: list[str] = []
+    for entry in reversed(transaction):
+        target = entry["target"]
+        try:
+            if entry["installed"]:
+                original_bytes = entry["original_bytes"]
+                if original_bytes is None:
+                    target.unlink(missing_ok=True)
+                else:
+                    rollback_temp = entry["rollback_temp"]
+                    rollback_temp.write_bytes(original_bytes)
+                    os.replace(rollback_temp, target)
+        except OSError as exc:
+            errors.append(f"{entry['name']}: {exc}")
+        finally:
+            _best_effort_unlink(entry["temp"])
+            _best_effort_unlink(entry["rollback_temp"])
+    if errors:
+        raise CheckpointValidationError("; ".join(errors))
+
+
+def _best_effort_unlink(path: Path) -> None:
+    try:
+        path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def _cleanup_required_artifact_transaction(
+    transaction: list[dict[str, Any]],
+) -> None:
+    """Remove prepared files, restoring targets if commit had started."""
+    if any(entry["installed"] for entry in transaction):
+        _rollback_required_artifacts(transaction)
+        return
+    for entry in transaction:
+        _best_effort_unlink(entry["temp"])
+        _best_effort_unlink(entry["rollback_temp"])
+
+
+def _finalize_required_artifacts(transaction: list[dict[str, Any]]) -> None:
+    """Best-effort cleanup after a successful commit; never reverse success."""
+    for entry in transaction:
+        _best_effort_unlink(entry["temp"])
+        _best_effort_unlink(entry["rollback_temp"])
+
+
 def _materialize_artifacts(project_dir: Path, artifacts: dict[str, Any]) -> list[str]:
     """Write inline dict artifacts to artifacts/<name>.json. Skip path strings."""
     if not isinstance(artifacts, dict) or not artifacts:
@@ -547,11 +1184,9 @@ def _materialize_artifacts(project_dir: Path, artifacts: dict[str, Any]) -> list
     for name, value in artifacts.items():
         if not isinstance(value, dict):
             continue
-        filename = _MATERIALIZE_ARTIFACT_FILES.get(name)
-        if not filename:
-            if not name.replace("_", "").isalnum():
-                continue
-            filename = f"{name}.json"
+        filename = _artifact_materialization_filename(name)
+        if filename is None:
+            continue
         target = art_dir / filename
         try:
             target.write_text(

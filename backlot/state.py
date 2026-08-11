@@ -752,26 +752,50 @@ def _build_commercial_board(
             "hero_only_motion": role == "product_hero",
         })
 
-    segment_rows = segment_doc.get("segments") or video_plan.get("segments") or []
     seg_by_beat: dict[str, dict] = {}
-    for row in segment_rows:
-        if not isinstance(row, dict):
-            continue
-        beat_id = str(row.get("beat") or row.get("id") or "").strip()
-        if not beat_id:
-            continue
-        normalized = dict(row)
-        normalized["beat"] = beat_id
-        if not normalized.get("time"):
-            normalized["time"] = normalized.get("t")
-        if not normalized.get("asset_plan_zh"):
-            normalized["asset_plan_zh"] = normalized.get("purpose")
-        seg_by_beat[beat_id] = normalized
+
+    def present(value: Any) -> bool:
+        return value is not None and value != ""
+
+    def first_present(*values: Any) -> Any:
+        return next((value for value in values if present(value)), None)
+
+    # A real commercial run may split the same beat across video_plan
+    # (method/provider/model/timing) and segment_cards (copy/shot/prompt).
+    # Merge both documents by beat instead of letting one document hide the
+    # other. Later segment_cards values win only when they are non-empty.
+    for source_rows in (
+        video_plan.get("segments") or [],
+        segment_doc.get("segments") or [],
+    ):
+        for row in source_rows:
+            if not isinstance(row, dict):
+                continue
+            beat_id = str(first_present(row.get("beat"), row.get("id")) or "").strip()
+            if not beat_id:
+                continue
+            normalized = dict(row)
+            normalized["beat"] = beat_id
+            normalized["time"] = first_present(normalized.get("time"), normalized.get("t"))
+            normalized["asset_plan_zh"] = first_present(
+                normalized.get("asset_plan_zh"),
+                normalized.get("purpose"),
+            )
+            normalized["generation_prompt_zh"] = first_present(
+                normalized.get("generation_prompt_zh"),
+                normalized.get("prompt_zh"),
+                normalized.get("video_prompt_zh"),
+            )
+            merged = dict(seg_by_beat.get(beat_id) or {})
+            for key, value in normalized.items():
+                if present(value) or key not in merged:
+                    merged[key] = value
+            seg_by_beat[beat_id] = merged
     ledger_by_beat: dict[str, list[dict]] = {}
     for entry in ledger_doc.get("entries") or []:
         if not isinstance(entry, dict):
             continue
-        beat_id = entry.get("beat") or ""
+        beat_id = str(first_present(entry.get("beat"), entry.get("id")) or "").strip()
         path = entry.get("path") or ""
         resolved = _resolve_asset_path(project_dir, path) if path else None
         item = {
@@ -796,10 +820,10 @@ def _build_commercial_board(
     for row in overview_rows:
         if not isinstance(row, dict):
             continue
-        beat_id = row.get("beat") or ""
+        beat_id = str(first_present(row.get("beat"), row.get("id")) or "").strip()
         plan = seg_by_beat.get(beat_id) or {}
-        asset = row.get("asset") or ""
-        asset_alt = row.get("asset_alt") or ""
+        asset = first_present(row.get("asset"), plan.get("asset")) or ""
+        asset_alt = first_present(row.get("asset_alt"), plan.get("asset_alt")) or ""
         resolved_asset = _resolve_commercial_asset(project_dir, asset) if asset else None
         resolved_asset_alt = (
             _resolve_commercial_asset(project_dir, asset_alt) if asset_alt else None
@@ -807,31 +831,47 @@ def _build_commercial_board(
         t0 = plan.get("t_start")
         t1 = plan.get("t_end")
         if t0 is None or t1 is None:
-            t0, t1 = _parse_time_span(row.get("time") or plan.get("time") or "")
+            t0, t1 = _parse_time_span(first_present(row.get("time"), plan.get("time")) or "")
+        reference = first_present(
+            row.get("ref"),
+            plan.get("ref"),
+            plan.get("ref_image"),
+        )
         beats.append({
             "beat": beat_id,
-            "time": row.get("time") or plan.get("time"),
+            "time": first_present(row.get("time"), plan.get("time")),
             "t_start": t0,
             "t_end": t1,
-            "method": row.get("method"),
-            "angle_use": row.get("angle_use"),
-            "status": row.get("status") or plan.get("status"),
-            "ref": row.get("ref") or plan.get("ref") or plan.get("ref_image"),
+            "method": first_present(row.get("method"), plan.get("method")),
+            "provider": first_present(row.get("provider"), plan.get("provider")),
+            "model": first_present(row.get("model"), plan.get("model")),
+            "generation_prompt_zh": first_present(
+                row.get("generation_prompt_zh"),
+                row.get("prompt_zh"),
+                row.get("video_prompt_zh"),
+                plan.get("generation_prompt_zh"),
+            ),
+            "angle_use": first_present(row.get("angle_use"), plan.get("angle_use")),
+            "status": first_present(row.get("status"), plan.get("status")),
+            "ref": reference,
             "reference_path": _resolve_commercial_asset(
                 project_dir,
-                str(row.get("ref") or plan.get("ref") or plan.get("ref_image") or ""),
-            ) if row.get("ref") or plan.get("ref") or plan.get("ref_image") else None,
+                str(reference or ""),
+            ) if reference else None,
             "asset_path": resolved_asset,
             "asset_missing_path": asset if asset and not resolved_asset else None,
             "asset_alt_path": resolved_asset_alt,
             "asset_alt_missing_path": asset_alt if asset_alt and not resolved_asset_alt else None,
-            "asset_plan_zh": plan.get("asset_plan_zh"),
-            "copy_plan_zh": plan.get("copy_plan_zh"),
-            "shot_plan_zh": plan.get("shot_plan_zh"),
-            "need_count": plan.get("need_count"),
-            "have_count": plan.get("have_count"),
-            "gap_status": plan.get("gap_status"),
-            "need_detail_zh": plan.get("need_detail_zh"),
+            "asset_plan_zh": first_present(row.get("asset_plan_zh"), plan.get("asset_plan_zh")),
+            "copy_plan_zh": first_present(row.get("copy_plan_zh"), plan.get("copy_plan_zh")),
+            "shot_plan_zh": first_present(row.get("shot_plan_zh"), plan.get("shot_plan_zh")),
+            "need_count": first_present(row.get("need_count"), plan.get("need_count")),
+            "have_count": first_present(row.get("have_count"), plan.get("have_count")),
+            "gap_status": first_present(row.get("gap_status"), plan.get("gap_status")),
+            "need_detail_zh": first_present(
+                row.get("need_detail_zh"),
+                plan.get("need_detail_zh"),
+            ),
             "ledger": ledger_by_beat.get(beat_id) or [],
         })
 
@@ -943,9 +983,33 @@ def _build_commercial_board(
     sample_media = evidence_media(sample_doc.get("path"))
     draft_media = evidence_media(draft_doc.get("path"))
     final_media = evidence_media(final_review.get("output_path"))
+
+    def named_render_candidate(kind: str) -> dict[str, Any] | None:
+        """Find explicit legacy sample/draft names without treating them as evidence."""
+        for render in media.get("renders") or []:
+            path = str(render.get("path") or "")
+            filename = Path(path).name.lower()
+            matches = (
+                "sample" in filename
+                if kind == "sample"
+                else ("full_draft" in filename or "draft" in filename)
+            )
+            if matches:
+                return {"path": path, "exists": True}
+        return None
+
+    sample_attached = bool(sample_doc)
+    draft_attached = bool(draft_doc)
+    sample_candidate = None if sample_attached else named_render_candidate("sample")
+    draft_candidate = None if draft_attached else named_render_candidate("draft")
     stage_evidence = {
         "sample": {
+            "path": None,
+            "exists": False,
             **(sample_media or {}),
+            "artifact_path": "artifacts/sample_reel.json" if sample_attached else None,
+            "evidence_attached": sample_attached,
+            "candidate": sample_candidate,
             "duration_seconds": sample_doc.get("duration_seconds"),
             "status": sample_doc.get("status"),
             "user_confirmation_text": (
@@ -955,7 +1019,12 @@ def _build_commercial_board(
             ),
         },
         "draft": {
+            "path": None,
+            "exists": False,
             **(draft_media or {}),
+            "artifact_path": "artifacts/full_draft_pro.json" if draft_attached else None,
+            "evidence_attached": draft_attached,
+            "candidate": draft_candidate,
             "status": draft_doc.get("status"),
             "issue_segments": draft_doc.get("issue_segments") or [],
             "modification_list": draft_doc.get("modification_list") or [],
@@ -996,9 +1065,9 @@ def _build_commercial_board(
             lower = fname.lower()
             batch_match = re.search(r"batch[_-]?(\d+)", lower)
             if "sample" in lower:
-                label = "试片"
+                label = "试片" if sample_attached else "未挂接阶段证据 · 试片候选"
             elif "full_draft" in lower or "draft" in lower:
-                label = "完整初稿"
+                label = "完整初稿" if draft_attached else "未挂接阶段证据 · 初稿候选"
             elif batch_match:
                 label = f"第{int(batch_match.group(1))}批预览"
             elif "final" in lower:

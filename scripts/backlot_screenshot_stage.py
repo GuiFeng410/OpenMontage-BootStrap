@@ -262,6 +262,220 @@ def stage_project(pid: str, title: str, palette: str, scenes: list, *,
                    check=False, timeout=60)
 
 
+def _write_json(path: Path, data: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _commercial_checkpoint(
+    project: Path,
+    stage: str,
+    status: str,
+    *,
+    metadata: dict | None = None,
+) -> None:
+    _write_json(project / f"checkpoint_{stage}.json", {
+        "version": "1.0",
+        "project_id": project.name,
+        "pipeline_type": "bootstrap-commercial",
+        "stage": stage,
+        "status": status,
+        "timestamp": "2026-08-11T08:00:00Z",
+        "human_approved": status == "completed",
+        "artifacts": {},
+        "metadata": metadata or {},
+    })
+
+
+def _make_commercial_video(source_image: Path, output: Path) -> None:
+    output.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [
+            "ffmpeg", "-y", "-loglevel", "error", "-loop", "1",
+            "-i", str(source_image), "-t", "2", "-vf", "scale=640:360",
+            "-pix_fmt", "yuv420p", str(output),
+        ],
+        check=True,
+        timeout=60,
+    )
+
+
+def stage_commercial_task3() -> None:
+    """Commercial fixtures for task-3 state and browser regressions."""
+    project = STAGE_DIR / "commercial-task3"
+    (project / "artifacts").mkdir(parents=True)
+    (project / "assets" / "images").mkdir(parents=True)
+    (project / "assets" / "video").mkdir(parents=True)
+    (project / "renders").mkdir(parents=True)
+    _write_json(project / "project.json", {
+        "project_id": project.name,
+        "title": "任务三商品片",
+        "pipeline_type": "bootstrap-commercial",
+        "production_profile": {
+            "duration_seconds": 8,
+            "review_mode": "normal",
+            "video_model": "kling-v2.1",
+        },
+    })
+
+    image_specs = [
+        ("identity.png", "product_identity_anchor", "身份基准"),
+        ("angle.png", "product_angle", "侧面角度"),
+        ("detail.png", "product_detail", "材质细节"),
+        ("hero.png", "product_hero", "主图运镜"),
+    ]
+    brief_images = {}
+    precheck_entries = []
+    for index, (filename, role, description) in enumerate(image_specs):
+        rel = f"assets/images/{filename}"
+        cinematic_frame(
+            project / rel,
+            (20 + index * 4, 12, 18),
+            (42, 26 + index * 4, 18),
+            (240, 168, 60),
+            seed=700 + index,
+            label=description,
+        )
+        brief_images[filename] = {"path": rel, "role": role}
+        precheck_entries.append({
+            "file": filename,
+            "path": rel,
+            "suggested_class": role,
+            "vision_description_zh": description,
+            "issues": [],
+        })
+
+    sample_path = project / "renders" / "task3_sample.mp4"
+    _make_commercial_video(project / "assets" / "images" / "identity.png", sample_path)
+    shutil.copy2(sample_path, project / "renders" / "task3_full_draft.mp4")
+    shutil.copy2(sample_path, project / "assets" / "video" / "beat_01.mp4")
+
+    _write_json(project / "artifacts" / "brief.json", {
+        "theme": "商品身份与材质展示",
+        "duration_seconds": 8,
+        "images": brief_images,
+    })
+    _write_json(project / "artifacts" / "asset_precheck.json", {
+        "version": "1.0",
+        "entries": precheck_entries,
+        "summary": {
+            "total_images": len(precheck_entries),
+            "low_resolution_count": 0,
+            "duplicate_group_count": 0,
+            "needs_user_attention": True,
+            "vision_enriched": True,
+            "vision_model": "fixture-vision",
+        },
+    })
+    _write_json(project / "artifacts" / "video_plan.json", {
+        "version": "1.0",
+        "segments": [{
+            "id": "beat_01",
+            "t": "00:00-00:08",
+            "purpose": "建立商品身份",
+            "method": "视频生成",
+            "provider": "fal",
+            "model": "kling-v2.1",
+            "video_prompt_zh": "真实材质，缓慢环绕，保持商标清晰",
+        }],
+    })
+    _write_json(project / "artifacts" / "segment_cards.json", {
+        "version": "1.0",
+        "duration_seconds": 8,
+        "overall_prompt_zh": "先建立身份，再展示材质。",
+        "segments": [{
+            "beat": "beat_01",
+            "copy_plan_zh": "一眼认出产品，随后聚焦材质。",
+            "shot_plan_zh": "中景缓慢环绕，末尾推近。",
+            "generation_prompt_zh": "商标稳定，金属高光自然，镜头平滑。",
+            "need_count": 2,
+            "have_count": 4,
+            "gap_status": "足够",
+        }],
+    })
+    _write_json(project / "artifacts" / "review_overview.json", {
+        "version": "1.0",
+        "overview": [{
+            "id": "beat_01",
+            "status": "可以",
+            "asset": "beat_01.mp4",
+        }],
+    })
+    _write_json(project / "artifacts" / "asset_ledger.json", {
+        "version": "1.0",
+        "entries": [
+            {
+                "beat": "beat_01",
+                "kind": "image",
+                "file": "identity.png",
+                "path": "assets/images/identity.png",
+                "label_zh": "身份基准",
+                "selected": True,
+            },
+            {
+                "beat": "beat_01",
+                "kind": "video",
+                "file": "beat_01.mp4",
+                "path": "assets/video/beat_01.mp4",
+                "label_zh": "入片视频",
+                "selected": True,
+            },
+        ],
+    })
+    _write_json(project / "artifacts" / "sample_reel.json", {
+        "version": "1.0",
+        "path": "renders/task3_sample.mp4",
+        "duration_seconds": 2,
+        "status": "review",
+    })
+    _write_json(project / "artifacts" / "full_draft_pro.json", {
+        "version": "1.0",
+        "path": "renders/task3_full_draft.mp4",
+        "status": "review",
+        "issue_segments": [],
+        "modification_list": [],
+    })
+
+    _commercial_checkpoint(project, "brief_locked", "completed")
+    _commercial_checkpoint(project, "assets_gate", "completed", metadata={
+        "decision_prompt_zh": "这条旧提示在阶段完成后不得显示",
+        "approval_note": "素材已确认",
+    })
+    _commercial_checkpoint(project, "sample_review", "in_progress", metadata={
+        "needs_user_decision": True,
+        "decision_title_zh": "试片是否通过",
+        "decision_prompt_zh": "请在聊天确认试片",
+    })
+    _write_json(project / "history" / "checkpoint_sample_review_20260810.json", {
+        "stage": "sample_review",
+        "status": "completed",
+        "timestamp": "2026-08-10T08:00:00Z",
+    })
+
+    legacy = STAGE_DIR / "commercial-task3-legacy"
+    (legacy / "artifacts").mkdir(parents=True)
+    (legacy / "renders").mkdir(parents=True)
+    _write_json(legacy / "project.json", {
+        "project_id": legacy.name,
+        "title": "遗留证据候选",
+        "pipeline_type": "bootstrap-commercial",
+    })
+    shutil.copy2(sample_path, legacy / "renders" / "legacy_sample_preview.mp4")
+    shutil.copy2(sample_path, legacy / "renders" / "legacy_full_draft_preview.mp4")
+    _commercial_checkpoint(legacy, "sample_review", "in_progress")
+
+    polling = STAGE_DIR / "commercial-task3-polling"
+    (polling / "artifacts").mkdir(parents=True)
+    (polling / "renders").mkdir(parents=True)
+    _write_json(polling / "project.json", {
+        "project_id": polling.name,
+        "title": "断线轮询",
+        "pipeline_type": "bootstrap-commercial",
+    })
+    shutil.copy2(sample_path, polling / "renders" / "poll-ready.mp4")
+    _commercial_checkpoint(polling, "sample_review", "in_progress")
+
+
 SCENES_LIGHTHOUSE = [
     ("sc1", "Opening — a lighthouse at dusk", 0, 4, "The coast holds its breath."),
     ("sc2", "The beam sweeps the water", 4, 9, "Every night, the same promise."),
@@ -304,7 +518,8 @@ def build_stage() -> None:
                   SCENES_ORCHARD, state="script_gate", hero="sc3")
     stage_project("paper-boats", "Paper Boats", "paper",
                   SCENES_PAPER, state="early", hero="sc3")
-    print(f"[stage] built 4 demo projects in {STAGE_DIR}")
+    stage_commercial_task3()
+    print(f"[stage] built demo projects in {STAGE_DIR}")
 
 
 # ---------------------------------------------------------------------------

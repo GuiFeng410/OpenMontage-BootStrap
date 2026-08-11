@@ -76,6 +76,7 @@ def list_bootstrap_tools() -> dict[str, Any]:
         ],
         "produce_minimal": [
             "produce_init_project",
+            "produce_provider_preflight",
             "produce_set_production_profile",
             "produce_budget_cny_snapshot",
             "produce_write_checkpoint",
@@ -745,6 +746,425 @@ def produce_init_project(
     mode: str = "create_new",
 ) -> dict[str, Any]:
     return doctor_tools.run_init_project(project_id, title, pipeline_type, mode)
+
+
+_PIXVERSE_MODEL = "pixverse-video-v6.0"
+_PIXVERSE_OSS_UPLOAD_SUBJECT = "Pixverse local image temporary OSS upload"
+_IMAGE_REFERENCE_FIELDS = (
+    "image_url",
+    "image_path",
+    "ref_image",
+    "ref",
+    "reference_image",
+)
+
+
+def _read_project_json(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        return {}
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise DoctorError(
+            f"Invalid locked project evidence: {path.name}",
+            code="invalid_project_evidence",
+        ) from exc
+    if not isinstance(value, dict):
+        raise DoctorError(
+            f"Locked project evidence must be an object: {path.name}",
+            code="invalid_project_evidence",
+        )
+    return value
+
+
+def _evidence_views(value: dict[str, Any]) -> list[dict[str, Any]]:
+    views: list[dict[str, Any]] = []
+    for key in ("channel", "production", "selected_video"):
+        nested = value.get(key)
+        if isinstance(nested, dict):
+            views.append(nested)
+    views.append(value)
+    return views
+
+
+def _first_evidence_text(
+    documents: list[dict[str, Any]], keys: tuple[str, ...]
+) -> str:
+    for document in documents:
+        for view in _evidence_views(document):
+            for key in keys:
+                value = str(view.get(key) or "").strip()
+                if value:
+                    return value
+    return ""
+
+
+def _image_source(segment: dict[str, Any], project: Path | None = None) -> str:
+    for field in _IMAGE_REFERENCE_FIELDS:
+        value = str(segment.get(field) or "").strip()
+        if value:
+            if value.lower().startswith(("http://", "https://")):
+                return "public_url"
+            candidate = Path(value).expanduser()
+            if project is None:
+                return "unknown"
+            if not candidate.is_absolute():
+                candidate = project / candidate
+            try:
+                candidate.resolve().relative_to(
+                    (project / "assets" / "images").resolve()
+                )
+            except (OSError, ValueError):
+                return "unknown"
+            if candidate.suffix.lower() not in {".jpg", ".jpeg", ".png", ".webp"}:
+                return "unknown"
+            try:
+                from tools.media.public_image import _validate_project_image
+
+                _, _, image_format = _validate_project_image(
+                    candidate.resolve(),
+                    project_id=project.name,
+                    projects_root=project.parent,
+                )
+            except Exception:
+                return "unknown"
+            expected_formats = {
+                ".jpg": "JPEG",
+                ".jpeg": "JPEG",
+                ".png": "PNG",
+                ".webp": "WEBP",
+            }
+            if image_format != expected_formats[candidate.suffix.lower()]:
+                return "unknown"
+            return "local_project"
+    return "none"
+
+
+def _mode_from_segment(
+    segment: dict[str, Any], project: Path | None = None
+) -> tuple[str, str]:
+    raw = str(
+        segment.get("mode")
+        or segment.get("method")
+        or segment.get("capability")
+        or segment.get("generation_method")
+        or segment.get("generation_mode")
+        or ""
+    ).strip().lower()
+    normalized = raw.replace("-", "_").replace(" ", "_")
+    source = _image_source(segment, project)
+    if normalized in {"t2i", "i2i", "text_to_image", "image_to_image"}:
+        return "unsupported", source
+    if "i2v" in normalized or normalized == "image_to_video":
+        return "i2v", source
+    if "t2v" in normalized or normalized == "text_to_video":
+        return "t2v", "none"
+    return "", source
+
+
+def _project_video_modes(
+    video_plan: dict[str, Any],
+    brief: dict[str, Any],
+    profile: dict[str, Any],
+    project: Path | None = None,
+) -> tuple[list[dict[str, str]], bool]:
+    plan = (
+        video_plan.get("video_plan")
+        if isinstance(video_plan.get("video_plan"), dict)
+        else video_plan
+    )
+    raw_segments = plan.get("segments") or plan.get("beats") or []
+    segments = raw_segments if isinstance(raw_segments, list) else []
+    modes: list[dict[str, str]] = []
+    unsupported = False
+    for index, item in enumerate(segments, start=1):
+        if not isinstance(item, dict):
+            continue
+        mode, source = _mode_from_segment(item, project)
+        if mode == "unsupported":
+            unsupported = True
+            continue
+        if not mode:
+            continue
+        modes.append(
+            {
+                "beat_id": str(item.get("id") or item.get("beat") or f"beat_{index:02d}"),
+                "mode": mode,
+                "image_source": source,
+            }
+        )
+    if modes or unsupported:
+        return modes, unsupported
+
+    for document in (plan, brief, profile):
+        mode, source = _mode_from_segment(document, project)
+        if mode == "unsupported":
+            return [], True
+        if mode:
+            return [
+                {
+                    "beat_id": "project",
+                    "mode": mode,
+                    "image_source": source,
+                }
+            ], False
+    return [], False
+
+
+def _pixverse_upload_decisions(path: Path) -> list[dict[str, Any]]:
+    decision_log = _read_project_json(path)
+    decisions = decision_log.get("decisions")
+    if not isinstance(decisions, list):
+        return []
+    return [
+        item
+        for item in decisions
+        if (
+            isinstance(item, dict)
+            and item.get("category") == "asset_decision"
+            and item.get("subject") == _PIXVERSE_OSS_UPLOAD_SUBJECT
+        )
+    ]
+
+
+def _latest_pixverse_upload_decision(project: Path) -> dict[str, Any] | None:
+    root_decisions = _pixverse_upload_decisions(project / "decision_log.json")
+    if root_decisions:
+        return root_decisions[-1]
+    artifact_decisions = _pixverse_upload_decisions(
+        project / "artifacts" / "decision_log.json"
+    )
+    return artifact_decisions[-1] if artifact_decisions else None
+
+
+def _pixverse_upload_approved(project: Path) -> bool:
+    latest = _latest_pixverse_upload_decision(project)
+    return bool(
+        latest
+        and latest.get("selected") == "approved"
+        and latest.get("user_approved") is True
+        and str(latest.get("user_response_text") or "").strip()
+    )
+
+
+def _missing_oss_config_fields() -> list[str]:
+    field_aliases = (
+        ("OSS_ACCESS_KEY_ID", ("OSS_ACCESS_KEY_ID", "ALIYUN_OSS_ACCESS_KEY_ID")),
+        (
+            "OSS_ACCESS_KEY_SECRET",
+            ("OSS_ACCESS_KEY_SECRET", "ALIYUN_OSS_ACCESS_KEY_SECRET"),
+        ),
+        ("ALIYUN_OSS_BUCKET", ("ALIYUN_OSS_BUCKET",)),
+        ("ALIYUN_OSS_REGION", ("ALIYUN_OSS_REGION",)),
+    )
+    return [
+        canonical
+        for canonical, aliases in field_aliases
+        if not any(str(os.environ.get(alias) or "").strip() for alias in aliases)
+    ]
+
+
+def _invalid_oss_config_fields(error: Exception) -> list[str]:
+    """Map configuration failures to allowlisted field names only."""
+    message = str(error)
+    return [
+        field
+        for field in ("ALIYUN_OSS_ENDPOINT", "OSS_SIGNED_URL_EXPIRES_SEC")
+        if field in message
+    ]
+
+
+def _provider_preflight_mode(modes: list[dict[str, str]]) -> str:
+    if not modes:
+        return "unknown"
+    if all(item["mode"] == "t2v" for item in modes):
+        return "t2v"
+    i2v_sources = {
+        item["image_source"] for item in modes if item["mode"] == "i2v"
+    }
+    has_t2v = any(item["mode"] == "t2v" for item in modes)
+    if not has_t2v and i2v_sources == {"public_url"}:
+        return "i2v_public"
+    if not has_t2v and i2v_sources == {"local_project"}:
+        return "i2v_local"
+    if any(source == "unknown" for source in i2v_sources):
+        return "unknown"
+    return "mixed"
+
+
+def _provider_preflight_next_action(blockers: list[dict[str, str]]) -> str:
+    if not blockers:
+        return "前置条件已满足，可按已锁定的视频计划继续。"
+    actions = {
+        "project_marker_missing": "先恢复或初始化当前项目的 project.json。",
+        "brief_missing": "先完成并落盘 artifacts/brief.json。",
+        "video_plan_missing": "先完成并落盘 artifacts/video_plan.json。",
+        "video_channel_missing": "回到简报阶段，明确并落盘视频渠道。",
+        "video_model_missing": "回到简报阶段，明确并落盘视频模型。",
+        "video_mode_missing": "在 video_plan 中明确每段是文本生视频还是图生视频。",
+        "image_source_invalid": "图生视频仅使用公网 HTTP(S) URL，或当前项目 assets/images 下的图片。",
+        "pixverse_mode_unsupported": "图片生成请使用 image provider，再把成图交给视频渠道。",
+        "oss_not_configured": (
+            "补齐 missing_config_fields 或修正 invalid_config_fields 中的 OSS 配置，"
+            "然后重启 MCP。"
+        ),
+        "oss_upload_not_approved": "在当前项目聊天中确认临时上传，并追加同 subject 的 asset_decision。",
+    }
+    return actions.get(
+        blockers[0]["code"],
+        "根据 blockers 补齐项目证据后重新运行预检。",
+    )
+
+
+def produce_provider_preflight(project_id: str) -> dict[str, Any]:
+    """Return secret-free readiness derived only from persisted project evidence."""
+    from tools.media.backends.aliyun_oss import (
+        AliyunOSSConfig,
+        AliyunOSSConfigurationError,
+    )
+
+    project = project_dir(project_id)
+    marker_path = project / "project.json"
+    brief_path = project / "artifacts" / "brief.json"
+    video_plan_path = project / "artifacts" / "video_plan.json"
+    brief = _read_project_json(brief_path)
+    video_plan = _read_project_json(video_plan_path)
+    marker = _read_project_json(marker_path)
+    profile = (
+        marker.get("production_profile")
+        if isinstance(marker.get("production_profile"), dict)
+        else {}
+    )
+    prioritized = [brief, video_plan, profile]
+    video_channel = _first_evidence_text(
+        prioritized, ("video_channel", "channel", "video_provider", "provider")
+    )
+    video_model = _first_evidence_text(
+        prioritized, ("video_model", "model")
+    )
+    modes, unsupported_mode = _project_video_modes(
+        video_plan,
+        brief,
+        profile,
+        project,
+    )
+    is_pixverse = (
+        "pixverse" in video_channel.strip().lower()
+        or video_model.strip().lower() == _PIXVERSE_MODEL
+        or "pixverse" in video_model.strip().lower()
+    )
+    is_agnes = (
+        "agnes" in video_channel.strip().lower()
+        or "agnes" in video_model.strip().lower()
+    )
+    provider = (
+        "pixverse"
+        if is_pixverse
+        else ("agnes" if is_agnes else (video_channel or "unknown"))
+    )
+    aggregate_mode = _provider_preflight_mode(modes)
+    oss_required = is_pixverse and any(
+        item["mode"] == "i2v" and item["image_source"] == "local_project"
+        for item in modes
+    )
+    missing_config_fields: list[str] = []
+    invalid_config_fields: list[str] = []
+    try:
+        AliyunOSSConfig.from_env()
+        oss_configured = True
+    except AliyunOSSConfigurationError as exc:
+        oss_configured = False
+        if oss_required:
+            missing_config_fields = _missing_oss_config_fields()
+            if not missing_config_fields:
+                invalid_config_fields = _invalid_oss_config_fields(exc)
+                if not invalid_config_fields:
+                    invalid_config_fields = ["OSS_CONFIGURATION"]
+    oss_upload_approved = _pixverse_upload_approved(project)
+
+    blockers: list[dict[str, str]] = []
+    if not marker_path.is_file():
+        blockers.append(
+            {"code": "project_marker_missing", "message": "project.json is missing."}
+        )
+    if not brief_path.is_file():
+        blockers.append(
+            {"code": "brief_missing", "message": "artifacts/brief.json is missing."}
+        )
+    if not video_plan_path.is_file():
+        blockers.append(
+            {
+                "code": "video_plan_missing",
+                "message": "artifacts/video_plan.json is missing.",
+            }
+        )
+    if not video_channel and provider == "unknown":
+        blockers.append(
+            {"code": "video_channel_missing", "message": "Locked video channel is missing."}
+        )
+    if not video_model:
+        blockers.append(
+            {"code": "video_model_missing", "message": "Locked video model is missing."}
+        )
+    if not modes and not unsupported_mode:
+        blockers.append(
+            {"code": "video_mode_missing", "message": "Locked video mode is missing."}
+        )
+    if any(
+        item["mode"] == "i2v" and item["image_source"] in {"none", "unknown"}
+        for item in modes
+    ):
+        blockers.append(
+            {
+                "code": "image_source_invalid",
+                "message": "I2V image source is outside the current project or is not a public URL.",
+            }
+        )
+    if is_pixverse and unsupported_mode:
+        blockers.append(
+            {
+                "code": "pixverse_mode_unsupported",
+                "message": "Pixverse supports video T2V/I2V only.",
+            }
+        )
+    if oss_required and not oss_configured:
+        blockers.append(
+            {
+                "code": "oss_not_configured",
+                "message": "Pixverse local-image I2V requires configured Alibaba OSS.",
+            }
+        )
+    if oss_required and not oss_upload_approved:
+        blockers.append(
+            {
+                "code": "oss_upload_not_approved",
+                "message": "This project has no current approval for temporary OSS upload.",
+            }
+        )
+
+    upload_consent = oss_upload_approved if oss_required else False
+    return {
+        "project_id": project_id,
+        "provider": provider,
+        "model": video_model or "unknown",
+        "mode": aggregate_mode,
+        "video_channel": video_channel,
+        "video_model": video_model,
+        "modes": modes,
+        "oss_required": oss_required,
+        "oss_configured": oss_configured,
+        "upload_consent": upload_consent,
+        "oss_upload_approved": oss_upload_approved,
+        "ready": not blockers,
+        "missing_config_fields": missing_config_fields,
+        "invalid_config_fields": invalid_config_fields,
+        "blockers": blockers,
+        "next_action_zh": _provider_preflight_next_action(blockers),
+        "capability_note_zh": (
+            "图片生成请使用 image provider；OSS 仅用于把本项目本地图临时暂存给 "
+            "Pixverse 图生视频，不用于图片生成。"
+        ),
+    }
 
 
 def produce_import_project_images(

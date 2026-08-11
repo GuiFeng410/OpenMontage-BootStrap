@@ -4,9 +4,11 @@
 
 它是 `openmontage-bootstrap-03-usercheck` 与 `openmontage-bootstrap-04-produce` 的商品片审查扩展，不替代原有的 03 -> 04 生产顺序。
 
-## 0. 评审模式（P0 冻结）
+## 0. P0 冻结总则
 
-说明：本节定义用户**默认看到多少细节**，不是另起一条生产管线。生产顺序仍是 03 简报 → 04 出片。
+本节不是另起生产管线；生产顺序仍是 03 简报 → 04 出片。
+
+### 0.1 评审模式
 
 | 模式 | `review_mode` | 用户默认看到 |
 |------|---------------|--------------|
@@ -18,21 +20,7 @@
 普通模式下：完整总览、逐 beat 卡、候选状态机、五点抽帧等仍作为**内部证据**生成与保存，但不默认甩给用户。  
 补充说明推荐话术：专业模式方便进一步提高可控性，15s 以上商品片推荐可选；普通模式默认方案，快，只过试片+初稿。
 
-### 0.3 只读网页 + 聊天决策
-
-- 03 在商品主题已知且环境就绪后初始化 `bootstrap-commercial`，主动运行 `python -m backlot open <project_id>` 并给出固定项目网址；04 继续复用。
-- Backlot 展示完整方案、素材、选项、推荐、试片、分段、**镜提示词全文**、费用与当前唯一待决定事项。
-- 聊天一次只发：项目网址、当前问题、推荐项、回复示例（**不**贴长提示词全文）。用户只在聊天回复，Agent 用用户原话写 `decision_log` 并推进 checkpoint。
-- 方案阶段中间选择使用 `brief_locked/in_progress + metadata.needs_user_decision=true`；阶段正式产物就绪后才写 `awaiting_human`。不得用缺失 canonical artifact 的空 checkpoint 冒充审批关。
-- 网页保持只读；不得直接提交审批、修改项目 JSON 或自动唤醒 Agent。看板不可用时回退完整 Grill 卡，生产继续。
-- 与七阶段对照、原「表 1/2/3」落点：见 `03-usercheck`「商品片 ↔ 七阶段」。
-
-**强制回复协议适用：**
-
-- **专业模式**、以及用户明确要求的商品实验分批：每批结束后必须使用第 5.1 节「固定回复协议」。
-- **普通模式**：不强制本批段表；但试片关仍建议两点确认（试片是否过关 / 是否继续全长）；确认消息用 Grill 卡。
-
-## 0.1 画面构成比例（推荐目标 · 软约束）
+### 0.2 画面构成比例（推荐目标 · 软约束）
 
 简报字段：`motion_mix`（`1:1` / `1:2` / `0:1` / `2:1`）、`motion_mix_source`。
 
@@ -48,7 +36,7 @@
 - 偏离时脚注或口头告知：相对推荐偏动态/偏运镜，及费用或一致性风险。  
 - **禁止**把比例当成交付硬门槛。
 
-## 0.2 累计 API 费用卡（用户可见 · 强制）
+### 0.3 累计 API 费用卡（用户可见 · 强制）
 
 权威账本仍是 `CostTracker`（USD）。对用户每次涉及付费结果的汇报（试片完成、某一批结束、全长初稿、终稿）必须贴齐下面结构，**禁止**只报单笔或只报剩余预算：
 
@@ -68,6 +56,126 @@
 4. 渠道名对用户展示时遵守 03 Skill「命名防混」（TokenHub≠TokenPlan；混元≠Pixverse）。
    - TokenHub·混元：`hy-video-1.5`，无自定义时长。
    - TokenHub·Pixverse：`pixverse-video-v6.0`，可设每段 duration（默认 5s）/ quality；图生需公网 URL，或经本项目明确授权后把项目内图片临时传私有 OSS。
+
+### 0.4 只读网页 + 聊天决策
+
+- 03 在商品主题已知且环境就绪后初始化 `bootstrap-commercial`，主动运行 `python -m backlot open <project_id>` 并给出固定项目网址；04 继续复用。
+- Backlot 展示完整方案、素材、选项、推荐、试片、分段、**镜提示词全文**、费用与当前唯一待决定事项。
+- 聊天一次只发：项目网址、当前问题、推荐项、回复示例（**不**贴长提示词全文）。用户只在聊天回复，Agent 用用户原话写 `decision_log` 并推进 checkpoint。
+- 方案阶段中间选择使用 `brief_locked/in_progress + metadata.needs_user_decision=true`；严格前序 `completed` 后才能进入下一阶段。每阶段先物化 canonical artifact 及其中引用的项目内媒体路径，确认可读取后才写 `completed` / `awaiting_human`。不得用空 checkpoint 冒充审批关；Backlot 的“未挂接媒体”只是修复提示，不是合法阶段证据。
+- 网页保持只读；不得直接提交审批、修改项目 JSON 或自动唤醒 Agent。看板不可用时回退完整 Grill 卡，生产继续。
+- 与七阶段对照、原「表 1/2/3」落点：见 `03-usercheck`「商品片 ↔ 七阶段」。
+
+**强制回复协议适用：**
+
+- **专业模式**、以及用户明确要求的商品实验分批：每批结束后必须使用第 5.1 节「固定回复协议」。
+- **普通模式**：不强制本批段表；但试片关仍建议两点确认（试片是否过关 / 是否继续全长）；确认消息用 Grill 卡。
+
+### 0.5 直接出片 / 快速模式 v1.0（冻结）
+
+用户说“直接出片”时，**只能触发下面这张单问题授权卡**；这句话本身不是全程预授权，也不得立即写 `approval_policy`。
+
+```text
+是否授权“商品片快速模式 v1.0”？
+当前已披露基线：provider={provider}；model={model}；runtime={runtime}；预估单价={单次/单段估价}；总成本区间={区间}；预算基线={预算上限}；质量目标={承诺}；分辨率={分辨率}。
+授权范围：方案确认后自动完成素材检查；试片必须停下由你批准；试片通过后，仅在 provider/model/runtime、已披露的预估单价/总成本区间/预算基线、质量目标/分辨率及审查结果均无实质变化时，可使用你本次明确回复的原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或审查发现需修改都立即暂停；delivery_signoff 必须停下由你签收。
+推荐：若你接受上述完整范围，回复下面示例；否则回复“逐阶段确认”。
+示例回复：我明确同意商品片快速模式 v1.0，并接受本卡列出的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标和分辨率基线：方案确认后自动完成素材检查；试片必须停下由我批准；试片通过后，仅在上述基线及审查结果均无实质变化时，可使用本条原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或需修改即暂停；delivery_signoff 必须停下由我签收。
+```
+
+只有用户回复包含上述**完整同意语义**后，才可用 `produce_append_decision` 写入。下例符合 `schemas/artifacts/decision_log.schema.json`，并同时展示授权项 `d-001` 与后续自动完成初稿审查时才追加的追溯项 `d-002`；授权当下只追加 `d-001`。实际写入时替换示例 ID、基线占位符，并把两处 `user_response_text` 整段替换为同一条用户真实原话，不得新增 schema 外字段：
+
+```json
+{
+  "version": "1.0",
+  "project_id": "commercial-demo",
+  "decisions": [
+    {
+      "decision_id": "d-001",
+      "stage": "brief_locked",
+      "category": "approval_policy",
+      "subject": "Commercial fast-track production",
+      "options_considered": [
+        {
+          "option_id": "fast_track_v1",
+          "label": "商品片快速模式 v1.0",
+          "score": 1.0,
+          "reason": "当前基线：provider=<provider>；model=<model>；runtime=<runtime>；预估单价=<estimate>；总成本区间=<range>；预算基线=<budget>；质量目标=<target>；分辨率=<resolution>。仅在这些基线及审查结果无实质变化时，以本次明确原话覆盖 draft_review 审批并自动推进 final_compose；sample_review 与 delivery_signoff 仍停下。"
+        },
+        {
+          "option_id": "guided",
+          "label": "逐阶段确认",
+          "score": 0.8,
+          "reason": "每个人审阶段都停下，控制最严格。",
+          "rejected_because": "用户明确选择完整范围的快速模式 v1.0。"
+        }
+      ],
+      "selected": "fast_track_v1",
+      "reason": "用户接受卡内已披露基线：provider=<provider>；model=<model>；runtime=<runtime>；预估单价=<estimate>；总成本区间=<range>；预算基线=<budget>；质量目标=<target>；分辨率=<resolution>。授权自动完成 assets_gate；sample_review 必停；仅在这些基线及审查结果均无实质变化时，以本条原话作为 draft_review 审批证据并自动推进 final_compose；异常暂停；delivery_signoff 必停。",
+      "user_visible": true,
+      "user_approved": true,
+      "user_response_text": "我明确同意商品片快速模式 v1.0，并接受本卡列出的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标和分辨率基线：方案确认后自动完成素材检查；试片必须停下由我批准；试片通过后，仅在上述基线及审查结果均无实质变化时，可使用本条原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或需修改即暂停；delivery_signoff 必须停下由我签收。"
+    },
+    {
+      "decision_id": "d-002",
+      "stage": "draft_review",
+      "category": "stage_review_decision",
+      "subject": "Commercial fast-track draft review",
+      "options_considered": [
+        {
+          "option_id": "approved_by_fast_track_v1",
+          "label": "按快速模式预授权完成初稿审查",
+          "score": 1.0,
+          "reason": "full_draft_pro 已物化；provider/model/runtime、费用基线、质量目标、分辨率及审查结果相对 d-001 无实质变化，且无需修改项。"
+        },
+        {
+          "option_id": "pause_for_review",
+          "label": "暂停并重新请求初稿审批",
+          "score": 0.5,
+          "reason": "若任一基线变化、候选低于承诺或审查发现需修改则必须选择。",
+          "rejected_because": "本次逐项比对无变化且无修改项。"
+        }
+      ],
+      "selected": "approved_by_fast_track_v1",
+      "reason": "审批依据为 approval_policy decision_id=d-001；已完成 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标、分辨率和审查结果比对，无实质变化且无修改项。",
+      "user_visible": true,
+      "user_approved": true,
+      "user_response_text": "我明确同意商品片快速模式 v1.0，并接受本卡列出的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标和分辨率基线：方案确认后自动完成素材检查；试片必须停下由我批准；试片通过后，仅在上述基线及审查结果均无实质变化时，可使用本条原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或需修改即暂停；delivery_signoff 必须停下由我签收。"
+    }
+  ]
+}
+```
+
+后续维持、缩小或撤销快速模式必须沿用相同 `category + subject` 追加新决定，禁止改写历史。流程固定为：
+
+| 节点 | 快速模式行为 |
+|------|--------------|
+| `brief_locked` 完成后 | 在 `asset_ledger` 与素材路径已物化、前序已完成时，自动推进 `assets_gate` 到 `sample_review` |
+| `sample_review` | **必须停下**，展示试片、费用基线和当前唯一问题，等待用户明确批准试片 |
+| 试片通过后 | 逐项比对授权时已披露的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标、分辨率与实际审查结果；全部无实质变化才可自动推进 |
+| `draft_review` | `full_draft_pro` 已物化且审查无“需修改”后，必须调用 `produce_approve_checkpoint(stage="draft_review")`；`approval_text` 使用快速模式授权时的完整用户原话 |
+| `final_compose` | `draft_review` 合法完成后自动进入并物化 `final_review` |
+| 任一异常 | provider/model/runtime 变化；预估单价、总成本区间或预算基线变化（即使未越限）；质量目标或分辨率变化；候选结果低于承诺；审查发现需修改——均立即暂停，一次只问一个问题 |
+| `delivery_signoff` | **永远停下签收**，不得被快速模式覆盖 |
+
+正常在**已披露预算基线和总成本区间内**累计消费，不构成变化；但费用估计或基线本身变化必须停。快速模式仍须逐阶段生成 canonical artifact、挂接媒体路径、记录决定与费用，并遵守试片闸、项目 preflight、provider 可用性检查、付费确认和费用闸。
+
+`draft_review` 自动完成前还必须：
+
+1. 用 `produce_append_decision` 追加 schema 合法的 `category="stage_review_decision"` 审计项（字段结构见上例 `d-002`）；`reason` 引用上述 `approval_policy.decision_id` 并记录费用/质量/渠模逐项比对结果，`user_approved=true`，`user_response_text` 复用同一条完整授权原话。
+2. 在 `draft_review` checkpoint `metadata` 写入授权 decision ID、固定 subject、`approval_source="fast_track_v1"`、基线比对结论和对应 `stage_review_decision` ID。
+3. 调用 `produce_approve_checkpoint(project_id, stage="draft_review", approval_text=<完整授权用户原话>, ...)`，保留 `full_draft_pro`、metadata 与费用快照。只改 checkpoint 状态或只写 metadata 均不算完成。
+
+### 0.6 项目 provider preflight 与 Pixverse 边界
+
+最终锁定/恢复视频渠道前及每次付费调用前，调用只读 `produce_provider_preflight(project_id)`。它**只检查**已落盘项目计划、Pixverse T2V/I2V 模式、图源、OSS 配置和当前项目上传授权证据；**不检查** `TOKENHUB_API_KEY` / `AGNES_API_KEY`，也不探测 provider 在线可用性。
+
+因此付费前还必须分别检查 provider registry / 对应 MCP availability、所需 Key 与费用闸。配置 OSS 后重启/刷新 MCP 并再次调用，只能说明 OSS readiness 已复检；`ready=true` 不代表 Key 有效、provider 在线、费用获准或上传自动发生。修复后从原 checkpoint 恢复，不重走表 1–3、不自动越级。
+
+- Pixverse 仅有 T2V/I2V；商品缺图的 T2I/I2I 使用 Agnes / Flux / DashScope / OpenAI / Kling / Google / Grok 等已配置 image provider。
+- Pixverse T2V、Pixverse 公网图 I2V、Agnes 不需要 OSS。
+- 只有 Pixverse 本地图 I2V 需要 OSS + 当前项目明确上传授权；授权严格要求最新固定 subject 决策同时具备 `selected=approved`、`user_approved=true`、非空用户原话。
+- image provider 生成的本地图只有在后续交给 Pixverse I2V 时，才进入 OSS 暂存链。
 
 ## 1. 触发条件
 
@@ -387,7 +495,7 @@ beat_编号 + 问题字母 + 具体位置 + 修改意见
 - 重新生成前，必须保留原候选编号和用户问题记录。
 - 任何付费或云端生成，仍须先说明 provider、模型、用途、候选数量和费用，再执行。
 - **单笔计划费用**：若某一 beat 预计费用 **≥ ¥5**（不论累计），向用户**提示即可**，不因此强制停烧；触实验预算上限仍走费用闸。  
-- **累计费用卡**：见 §0.2；试片/分批/初稿/终稿对用户汇报时强制分项+合计+剩余。
+- **累计费用卡**：见 §0.3；试片/分批/初稿/终稿对用户汇报时强制分项+合计+剩余。
 
 ## 12. 与 03 -> 04 主链的关系
 

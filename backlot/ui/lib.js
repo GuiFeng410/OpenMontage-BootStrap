@@ -69,14 +69,55 @@ export function thumbURL(projectId, relPath, w = 640) {
 }
 
 // Subscribe to a server-sent change feed; call onChange (debounced) per burst.
+// If SSE cannot connect or drops, poll every four seconds until it recovers.
 // onStatus(status) optional: "connecting" | "live" | "disconnected"
-export function subscribe(url, onChange, onStatus) {
-  let timer = null;
-  let opened = false;
-  const source = new EventSource(url);
+export function subscribe(url, onChange, onStatus, pollMs = 4000) {
+  let changeTimer = null;
+  let pollTimer = null;
+  let pollInFlight = false;
+  let closed = false;
+  let source = null;
+
+  const runPoll = () => {
+    if (closed || pollInFlight) return;
+    pollInFlight = true;
+    Promise.resolve()
+      .then(onChange)
+      .catch((error) => console.error(error))
+      .finally(() => { pollInFlight = false; });
+  };
+  const startPolling = () => {
+    if (closed || pollTimer != null) return;
+    pollTimer = setInterval(runPoll, pollMs);
+  };
+  const stopPolling = () => {
+    if (pollTimer == null) return;
+    clearInterval(pollTimer);
+    pollTimer = null;
+  };
+
   if (typeof onStatus === "function") onStatus("connecting");
+  try {
+    source = new EventSource(url);
+  } catch {
+    if (typeof onStatus === "function") onStatus("disconnected");
+    startPolling();
+  }
+  if (!source) {
+    const controller = {
+      source: null,
+      close() {
+        if (closed) return;
+        closed = true;
+        clearTimeout(changeTimer);
+        stopPolling();
+      },
+    };
+    window.addEventListener("beforeunload", () => controller.close(), { once: true });
+    return controller;
+  }
   source.onopen = () => {
-    opened = true;
+    stopPolling();
     if (typeof onStatus === "function") onStatus("live");
   };
   source.onmessage = (msg) => {
@@ -86,16 +127,27 @@ export function subscribe(url, onChange, onStatus) {
     } catch {
       return;
     }
-    clearTimeout(timer);
-    timer = setTimeout(onChange, 250);
+    clearTimeout(changeTimer);
+    changeTimer = setTimeout(onChange, 250);
   };
   source.onerror = () => {
-    if (typeof onStatus === "function") {
-      onStatus(opened ? "disconnected" : "connecting");
-    }
+    if (typeof onStatus === "function") onStatus("disconnected");
+    startPolling();
     /* EventSource auto-reconnects */
   };
-  return source;
+  const controller = {
+    source,
+    close() {
+      if (closed) return;
+      closed = true;
+      clearTimeout(changeTimer);
+      stopPolling();
+      source.close();
+    },
+  };
+  const unload = () => controller.close();
+  window.addEventListener("beforeunload", unload, { once: true });
+  return controller;
 }
 
 // Deterministic pseudo-waveform bars (seeded by a string).

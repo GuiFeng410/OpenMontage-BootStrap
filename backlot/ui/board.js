@@ -20,6 +20,7 @@ let activeRender = 0;
 let firstPaint = true;
 let sseStatus = "connecting"; // connecting | live | disconnected
 let replay = null;          // {t0, t1, t, playing} — replay mode when non-null
+let renderPlaybackState = null;
 
 function applyTheme(theme) {
   currentTheme = theme === "light" ? "light" : "dark";
@@ -52,8 +53,22 @@ function stageLabel(st) {
   return st.label_zh || st.name;
 }
 
+function stageNeedsDecision(st) {
+  return st?.status === "awaiting_human"
+    || (st?.status === "in_progress" && st?.metadata?.needs_user_decision === true);
+}
+
+function stageWasCompletedBefore(st) {
+  return (st?.history_entries || []).some((entry) => entry?.status === "completed");
+}
+
 function stageSubZh(st) {
   if (st.status === "awaiting_human") return "等你聊天确认\n在聊天里回复继续";
+  if (st.status === "in_progress" && stageWasCompletedBefore(st)) {
+    return st.stalled
+      ? `重试中·此前已通过\n可能卡住 · ${st.stalled_minutes} 分钟无活动`
+      : "重试中·此前已通过";
+  }
   if (st.status === "in_progress" && st.stalled) {
     return `可能卡住 · ${st.stalled_minutes} 分钟无活动\n可询问 Agent 状态`;
   }
@@ -268,7 +283,7 @@ function renderDrawer(s) {
       el("br"),
       "原始 JSON 见 ", el("code", {}, "artifacts/"), " 目录；审批请在聊天进行。"));
     const meta = st.metadata || {};
-    if (meta.decision_prompt_zh) {
+    if (stageNeedsDecision(st) && meta.decision_prompt_zh) {
       body.append(el("div", { class: "commercial-decision-hint" },
         el("b", {}, "若本阶段等待你："),
         el("div", {}, meta.decision_prompt_zh)));
@@ -655,6 +670,34 @@ function renderStoryboard(s) {
 // renders + degraded media
 // ---------------------------------------------------------------------------
 
+function captureRenderPlaybackState() {
+  const video = app.querySelector(".render-hero video");
+  if (!video) {
+    renderPlaybackState = null;
+    return;
+  }
+  renderPlaybackState = {
+    src: video.getAttribute("src"),
+    currentTime: Number.isFinite(video.currentTime) ? video.currentTime : 0,
+    wasPlaying: !video.paused && !video.ended,
+  };
+}
+
+function restoreRenderPlaybackState(video, src) {
+  const saved = renderPlaybackState;
+  if (!saved || saved.src !== src) return;
+  const restore = () => {
+    try {
+      video.currentTime = saved.currentTime;
+    } catch {
+      // A sparse/invalid media file must not break the read-only board.
+    }
+    if (saved.wasPlaying) video.play().catch(() => {});
+  };
+  video.addEventListener("loadedmetadata", restore, { once: true });
+  if (saved.wasPlaying) video.autoplay = true;
+}
+
 function renderRenders(s) {
   const renders = s.media.renders;
   if (!renders.length) return null;
@@ -662,7 +705,6 @@ function renderRenders(s) {
   const current = renders[activeRender];
   // Full re-renders (every SSE refresh) must not reset an in-progress
   // watch: carry playback position/state over to the recreated element.
-  const prev = document.querySelector(".render-hero video");
   const src = mediaURL(s.project_id, current.path);
   // preload="metadata" gives the element its intrinsic aspect ratio (and a
   // poster frame) before playback — without it a portrait 9:16 render sits
@@ -671,13 +713,7 @@ function renderRenders(s) {
   // Click the frame to start playback (controls handle pause/scrub) — the
   // big player was inert to a click on the picture itself.
   video.addEventListener("click", () => { if (video.paused) video.play().catch(() => {}); });
-  if (prev && prev.getAttribute("src") === src && (prev.currentTime > 0 || !prev.paused)) {
-    const t = prev.currentTime;
-    const wasPlaying = !prev.paused && !prev.ended;
-    video.addEventListener("loadedmetadata", () => { video.currentTime = t; }, { once: true });
-    video.setAttribute("preload", "metadata");
-    if (wasPlaying) video.autoplay = true;
-  }
+  restoreRenderPlaybackState(video, src);
   const versions = el("div", { class: "render-meta" },
     renders.map((r, i) => el("span", {
       class: `v${i === activeRender ? " active" : ""}`,
@@ -718,7 +754,7 @@ function renderNoState(s) {
 
 function renderAwaitingNotice(s) {
   const awaiting = s.stages.find((x) => x.status === "awaiting_human") ||
-    (isCommercial(s) ? s.stages.find((x) => x.status === "in_progress" && x.metadata?.needs_user_decision === true) : null);
+    (isCommercial(s) ? s.stages.find(stageNeedsDecision) : null);
   if (!awaiting) return null;
   if (isCommercial(s)) {
     const dec = s.commercial?.decision;
@@ -846,7 +882,19 @@ function renderCommercialSummary(s) {
 function renderCommercialAssets(s) {
   const assets = s.commercial?.assets || [];
   if (!assets.length) return null;
-  const body = el("div", { class: "panel-body asset-grid" });
+  const roleCounts = new Map();
+  for (const img of assets) {
+    roleCounts.set(img.role_zh || "素材", (roleCounts.get(img.role_zh || "素材") || 0) + 1);
+  }
+  const body = el("div", { class: "panel-body commercial-summary" },
+    el("div", { class: "kv-row" },
+      el("span", { class: "kv-k" }, "素材总数"),
+      el("span", { class: "kv-v" }, `共 ${assets.length} 张`)),
+    el("div", { class: "kv-row" },
+      el("span", { class: "kv-k" }, "用途"),
+      el("span", { class: "kv-v" },
+        [...roleCounts.entries()].map(([role, count]) => `${role}×${count}`).join(" · "))));
+  const grid = el("div", { class: "asset-grid" });
   for (const img of assets) {
     const card = el("div", { class: `asset-card${img.exists ? "" : " missing"}` });
     if (img.exists) {
@@ -863,9 +911,12 @@ function renderCommercialAssets(s) {
         el("b", {}, img.role_zh),
         el("span", {}, img.file),
         img.hero_only_motion ? el("span", { class: "asset-hint" }, "仅运镜，不作 I2V 锚点") : null));
-    body.append(card);
+    grid.append(card);
   }
-  return el("div", { class: "panel" },
+  body.append(el("details", { class: "tech-details commercial-assets-details" },
+    el("summary", {}, "展开图片清单"),
+    grid));
+  return el("div", { class: "panel commercial-assets-panel" },
     el("div", { class: "panel-head" }, el("h2", {}, "素材检查"), el("span", { class: "meta" }, "身份与角度")),
     body);
 }
@@ -891,7 +942,7 @@ function renderCommercialAssetPrecheck(s) {
       el("span", { class: "kv-v" }, value)));
   }
   if (summary.needs_user_attention || entries.some((e) => e.vision_description_zh)) {
-    body.append(el("details", { class: "tech-details", open: view === "assets" ? true : undefined },
+    body.append(el("details", { class: "tech-details" },
       el("summary", {}, view === "assets" ? "素材清单与识图摘要" : "查看需确认的素材"),
       el("div", { class: "tech-body" },
         entries.map((entry) => {
@@ -931,12 +982,30 @@ function formatCommercialMethod(beat) {
     if (/转场/.test(raw)) return "图片转场-非AI生成（Remotion）";
     return "图片缩放-非AI生成（Remotion）";
   }
-  if (/Agnes|视频生成/.test(raw)) {
-    if (/佩戴/.test(raw)) return "视频生成-AI（Agnes）·佩戴微动";
-    if (/双候选/.test(raw)) return "视频生成-AI（Agnes）·双候选";
-    return "视频生成-AI（Agnes）";
+  const engine = [beat.provider, beat.model].filter(Boolean).join(" / ");
+  if (/AI|视频生成|Agnes/i.test(raw) || engine) {
+    const detail = engine ? `（${engine}）` : "";
+    const qualifier = raw && !/^视频生成$/i.test(raw) ? ` · ${raw}` : "";
+    return `视频生成-AI${detail}${qualifier}`;
   }
   return raw || "—";
+}
+
+function renderBeatGenerationDetails(beat) {
+  const rows = [
+    ["文案", beat.copy_plan_zh],
+    ["镜头", beat.shot_plan_zh],
+    ["生成说明", beat.generation_prompt_zh],
+    ["制作方式", formatCommercialMethod(beat)],
+    ["Provider", beat.provider],
+    ["Model", beat.model],
+  ];
+  return el("details", { class: "beat-plan-fold" },
+    el("summary", {}, "文案、镜头与生成说明"),
+    el("div", { class: "beat-generation-grid" },
+      rows.map(([label, value]) => el("div", { class: "beat-generation-row" },
+        el("b", {}, label),
+        el("span", {}, value || "—")))));
 }
 
 function beatOrdinalZh(beatId, index) {
@@ -1161,6 +1230,9 @@ function renderCommercialBeatCard(s, beat, index = 0) {
       el("div", { class: "cbc-method" }, formatCommercialMethod(beat)),
       beat.angle_use ? el("div", { class: "cbc-sub" }, beat.angle_use) : null,
       beat.ref ? el("div", { class: "cbc-sub" }, `参考 · ${beat.ref}`) : null);
+    if (["sample", "segment", "draft"].includes(view)) {
+      body.append(renderBeatGenerationDetails(beat));
+    }
     if (["compose", "delivery"].includes(view) && (beat.copy_plan_zh || beat.shot_plan_zh)) {
       body.append(el("details", { class: "beat-plan-fold" },
         el("summary", {}, "规划摘要"),
@@ -1258,11 +1330,27 @@ function renderCommercialPlayers(s) {
   // 试片确认起才显示下方成片播放器；方案/素材阶段不出现
   if (view === "plan" || view === "assets") return null;
   const evidence = s.commercial?.stage_evidence || {};
+  const stageEvidence = {
+    sample: evidence.sample,
+    segment: evidence.sample,
+    draft: evidence.draft,
+    compose: evidence.compose,
+    delivery: evidence.delivery,
+  }[view] || {};
+  const canonical = stageEvidence?.path && stageEvidence?.exists === true
+    ? { path: stageEvidence.path }
+    : null;
+  const candidate = !canonical && stageEvidence?.candidate?.path && stageEvidence.candidate?.exists === true
+    ? { path: stageEvidence.candidate.path, candidate: true }
+    : null;
+  const selectedStageMedia = canonical || candidate;
   const stagePlayer = {
-    sample: evidence.sample?.path && evidence.sample?.exists === true
-      ? { label: "试片", path: evidence.sample.path } : null,
-    draft: evidence.draft?.path && evidence.draft?.exists === true
-      ? { label: "完整初稿", path: evidence.draft.path } : null,
+    sample: selectedStageMedia
+      ? { label: selectedStageMedia.candidate ? "试片候选 · 未挂接证据" : "试片", ...selectedStageMedia } : null,
+    segment: selectedStageMedia
+      ? { label: selectedStageMedia.candidate ? "试片候选 · 未挂接证据" : "试片", ...selectedStageMedia } : null,
+    draft: selectedStageMedia
+      ? { label: selectedStageMedia.candidate ? "初稿候选 · 未挂接证据" : "完整初稿", ...selectedStageMedia } : null,
     compose: evidence.compose?.path && evidence.compose?.exists === true
       ? { label: "终稿候选", path: evidence.compose.path } : null,
     delivery: evidence.delivery?.path && evidence.delivery?.exists === true
@@ -1283,12 +1371,15 @@ function renderCommercialPlayers(s) {
   });
   if (activeRender >= players.length) activeRender = 0;
   const current = players[activeRender];
+  const src = mediaURL(s.project_id, current.path);
   const video = el("video", {
-    src: mediaURL(s.project_id, current.path),
+    src,
     controls: "", preload: "metadata",
   });
+  video.addEventListener("click", () => { if (video.paused) video.play().catch(() => {}); });
+  restoreRenderPlaybackState(video, src);
   return el("div", {},
-    el("div", { class: "section-title" }, "成片预览",
+    el("div", { class: "section-title" }, current.candidate ? "候选预览（未挂接阶段证据）" : "成片预览",
       el("span", { class: "meta" }, current.path.split("/").pop())),
     el("div", { class: "render-hero" }, video),
     tabs);
@@ -1304,11 +1395,23 @@ function renderCommercialStageEvidence(s) {
         el("span", { class: "kv-v" }, sample.status || "待生成")),
       el("div", { class: "kv-row" }, el("span", { class: "kv-k" }, "时长"),
         el("span", { class: "kv-v" }, sample.duration_seconds != null ? `${sample.duration_seconds}s` : "待探测")),
+      sample.path
+        ? el("div", { class: "kv-row" }, el("span", { class: "kv-k" }, "项目相对路径"),
+          el("span", { class: "kv-v evidence-path" }, sample.path))
+        : null,
+      sample.artifact_path
+        ? el("div", { class: "kv-row" }, el("span", { class: "kv-k" }, "阶段 artifact"),
+          el("span", { class: "kv-v evidence-path" }, sample.artifact_path))
+        : null,
       sample.user_confirmation_text
         ? el("div", { class: "commercial-evidence-list" }, el("b", {}, "用户确认"), el("div", {}, sample.user_confirmation_text))
         : el("div", { class: "hint" }, "尚未记录用户对试片的确认。"),
       sample.exists === false && sample.missing_path
         ? el("div", { class: "hint warn-text" }, `媒体文件不存在：${sample.missing_path}`)
+        : null,
+      sample.candidate?.path
+        ? el("div", { class: "hint warn-text" },
+          `未挂接阶段证据：发现候选 ${sample.candidate.path}。可预览，但需补写 sample_reel artifact。`)
         : null);
     return el("div", { class: "panel commercial-stage-evidence" },
       el("div", { class: "panel-head" }, el("h2", {}, "试片确认"), el("span", { class: "meta" }, "sample_reel")),
@@ -1318,7 +1421,22 @@ function renderCommercialStageEvidence(s) {
     const draft = evidence.draft || {};
     const issues = draft.issue_segments || [];
     const modifications = draft.modification_list || [];
-    const body = el("div", { class: "panel-body" },
+    const body = el("div", { class: "panel-body commercial-summary" },
+      draft.path
+        ? el("div", { class: "kv-row" }, el("span", { class: "kv-k" }, "项目相对路径"),
+          el("span", { class: "kv-v evidence-path" }, draft.path))
+        : null,
+      draft.artifact_path
+        ? el("div", { class: "kv-row" }, el("span", { class: "kv-k" }, "阶段 artifact"),
+          el("span", { class: "kv-v evidence-path" }, draft.artifact_path))
+        : null,
+      draft.exists === false && draft.missing_path
+        ? el("div", { class: "hint warn-text" }, `媒体文件不存在：${draft.missing_path}`)
+        : null,
+      draft.candidate?.path
+        ? el("div", { class: "hint warn-text" },
+          `未挂接阶段证据：发现候选 ${draft.candidate.path}。可预览，但需补写 full_draft_pro artifact。`)
+        : null,
       issues.length
         ? el("div", { class: "commercial-evidence-list" },
           el("b", {}, "问题片段"),
@@ -1384,7 +1502,7 @@ function renderSseBanner(s) {
   if (!isCommercial(s)) return null;
   if (sseStatus === "live") return null;
   const text = sseStatus === "disconnected"
-    ? "看板实时连接已断开，内容可能未刷新。请手动刷新页面，或等待自动重连。"
+    ? "看板实时连接已断开，已启用低频自动轮询；SSE 恢复后会自动停止轮询。"
     : "正在连接看板实时更新…";
   return el("div", { class: `notice sse-banner ${sseStatus}` },
     el("span", {}, "⟳"),
@@ -1616,6 +1734,7 @@ function render() {
   document.title = `Backlot — ${s.title}`;
   document.body.classList.toggle("first", firstPaint);
   firstPaint = false;
+  captureRenderPlaybackState();
   app.innerHTML = "";
   app.append(renderSlate(s));
   app.append(renderRail(s));

@@ -408,6 +408,97 @@ class TestBoardState:
             "assets/video/missing-sample.mp4"
         )
 
+    def test_commercial_beat_join_uses_overview_id_and_merges_plan_sources(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-beat-join")
+        _write(p / "project.json", {
+            "project_id": "commercial-beat-join",
+            "title": "Beat 合并",
+            "pipeline_type": "bootstrap-commercial",
+        })
+        _write(p / "artifacts" / "video_plan.json", {
+            "version": "1.0",
+            "segments": [{
+                "id": "beat_01",
+                "t": "00:00-00:05",
+                "method": "视频生成",
+                "provider": "fal",
+                "model": "kling-v2.1",
+                "video_prompt_zh": "保持商品身份，轻微环绕",
+                "purpose": "建立商品身份",
+            }],
+        })
+        _write(p / "artifacts" / "segment_cards.json", {
+            "version": "1.0",
+            "segments": [{
+                "beat": "beat_01",
+                "copy_plan_zh": "五秒建立核心卖点",
+                "shot_plan_zh": "中景环绕后推近",
+                "generation_prompt_zh": "保持材质与标识，柔和运镜",
+            }],
+        })
+        _write(p / "artifacts" / "review_overview.json", {
+            "version": "1.0",
+            "overview": [{
+                "id": "beat_01",
+                "status": "可以",
+            }],
+        })
+
+        beat = load_board_state(p)["commercial"]["beats"][0]
+
+        assert beat["beat"] == "beat_01"
+        assert beat["time"] == "00:00-00:05"
+        assert beat["copy_plan_zh"] == "五秒建立核心卖点"
+        assert beat["shot_plan_zh"] == "中景环绕后推近"
+        assert beat["asset_plan_zh"] == "建立商品身份"
+        assert beat["generation_prompt_zh"] == "保持材质与标识，柔和运镜"
+        assert beat["method"] == "视频生成"
+        assert beat["provider"] == "fal"
+        assert beat["model"] == "kling-v2.1"
+
+    def test_commercial_stage_evidence_keeps_artifact_path_and_labels_legacy_candidates(
+        self, projects_root
+    ):
+        linked = _make_project(projects_root, "commercial-linked-evidence")
+        _write(linked / "project.json", {
+            "project_id": "commercial-linked-evidence",
+            "pipeline_type": "bootstrap-commercial",
+        })
+        linked_sample = linked / "renders" / "linked_sample.mp4"
+        linked_sample.write_bytes(b"video")
+        _write(linked / "artifacts" / "sample_reel.json", {
+            "path": "renders/linked_sample.mp4",
+            "status": "review",
+        })
+
+        linked_evidence = load_board_state(linked)["commercial"]["stage_evidence"]["sample"]
+        assert linked_evidence["artifact_path"] == "artifacts/sample_reel.json"
+        assert linked_evidence["path"] == "renders/linked_sample.mp4"
+        assert linked_evidence["evidence_attached"] is True
+        assert linked_evidence["candidate"] is None
+
+        legacy = _make_project(projects_root, "commercial-legacy-candidates")
+        _write(legacy / "project.json", {
+            "project_id": "commercial-legacy-candidates",
+            "pipeline_type": "bootstrap-commercial",
+        })
+        (legacy / "renders" / "legacy_sample_preview.mp4").write_bytes(b"video")
+        (legacy / "renders" / "legacy_full_draft_preview.mp4").write_bytes(b"video")
+
+        legacy_evidence = load_board_state(legacy)["commercial"]["stage_evidence"]
+        assert legacy_evidence["sample"]["path"] is None
+        assert legacy_evidence["sample"]["evidence_attached"] is False
+        assert legacy_evidence["sample"]["candidate"]["path"] == (
+            "renders/legacy_sample_preview.mp4"
+        )
+        assert legacy_evidence["draft"]["path"] is None
+        assert legacy_evidence["draft"]["evidence_attached"] is False
+        assert legacy_evidence["draft"]["candidate"]["path"] == (
+            "renders/legacy_full_draft_preview.mp4"
+        )
+
 
 class TestCommercialArtifactSchemas:
     def test_full_draft_requires_user_visible_review_evidence(self):
@@ -434,7 +525,8 @@ class TestCommercialUIContract:
         ).read_text(encoding="utf-8")
 
         assert 'x.kind === "video" && x.path && x.exists === true' in source
-        assert "evidence.sample?.path && evidence.sample?.exists === true" in source
+        assert "stageEvidence?.path && stageEvidence?.exists === true" in source
+        assert "stageEvidence.candidate?.exists === true" in source
         assert "媒体文件不存在" in source
 
 
