@@ -4,10 +4,12 @@
 Usage:
   python scripts/_run_tokenhub_pixverse_smoke.py --mode t2v
   python scripts/_run_tokenhub_pixverse_smoke.py --mode i2v --image-url https://...
+  python scripts/_run_tokenhub_pixverse_smoke.py --mode i2v --image-path a.png --confirm-cloud-upload
   python scripts/_run_tokenhub_pixverse_smoke.py --force
 
 Requires TOKENHUB_API_KEY in .env. Skips when output exists unless --force.
-I2V needs a public http(s) image URL (local path not supported in P0).
+I2V accepts a public URL, or a project-local image when OSS is configured and
+--confirm-cloud-upload is supplied explicitly.
 """
 
 from __future__ import annotations
@@ -30,18 +32,26 @@ from tools._tokenhub.client import (  # noqa: E402
 )
 from tools._tokenhub.pixverse import PIXVERSE_DEFAULT_MODEL  # noqa: E402
 from tools._tokenhub.video import generate_video  # noqa: E402
-
-OUT_ROOT = REPO / "projects" / "tokenhub-pixverse-smoke"
-RENDER_DIR = OUT_ROOT / "renders"
-
+from lib.paths import PROJECTS_DIR  # noqa: E402
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="TokenHub Pixverse T2V/I2V smoke")
     parser.add_argument("--mode", choices=("t2v", "i2v"), default="t2v")
+    parser.add_argument("--project-id", default="tokenhub-pixverse-smoke")
     parser.add_argument(
         "--image-url",
         default="",
-        help="public http(s) URL for I2V (required when --mode i2v)",
+        help="public http(s) URL for I2V",
+    )
+    parser.add_argument(
+        "--image-path",
+        default="",
+        help="absolute path or filename relative to this project's assets/images",
+    )
+    parser.add_argument(
+        "--confirm-cloud-upload",
+        action="store_true",
+        help="explicitly authorize this smoke run to upload the local image temporarily",
     )
     parser.add_argument("--prompt", default="")
     parser.add_argument("--duration", type=int, default=5)
@@ -55,7 +65,8 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    out = RENDER_DIR / f"pixverse_{args.mode}.mp4"
+    render_dir = PROJECTS_DIR / args.project_id / "renders"
+    out = render_dir / f"pixverse_{args.mode}.mp4"
     key = get_tokenhub_api_key()
     base = get_tokenhub_base_url()
     print(f"base_url={base}")
@@ -74,10 +85,24 @@ def main() -> int:
         )
         return 2
 
-    if args.mode == "i2v" and not str(args.image_url).startswith(("http://", "https://")):
+    if args.image_url and args.image_path:
         print(
-            "ERROR: --mode i2v requires --image-url https://... "
-            "(local paths not supported in P0).",
+            "ERROR: choose only one of --image-url or --image-path.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.mode == "i2v" and not args.image_url and not args.image_path:
+        print(
+            "ERROR: --mode i2v requires --image-url or --image-path.",
+            file=sys.stderr,
+        )
+        return 2
+    if args.image_url and not str(args.image_url).startswith(("http://", "https://")):
+        print("ERROR: --image-url must be http(s).", file=sys.stderr)
+        return 2
+    if args.image_path and not args.confirm_cloud_upload:
+        print(
+            "ERROR: local image staging requires --confirm-cloud-upload.",
             file=sys.stderr,
         )
         return 2
@@ -88,7 +113,7 @@ def main() -> int:
         else "一只橙色小猫在窗台上看向镜头，自然转头，柔和光线"
     )
 
-    RENDER_DIR.mkdir(parents=True, exist_ok=True)
+    render_dir.mkdir(parents=True, exist_ok=True)
     print(f"generate {args.mode} …")
     kwargs = {
         "model": args.model,
@@ -98,7 +123,21 @@ def main() -> int:
         "aspect_ratio": args.aspect_ratio,
     }
     if args.mode == "i2v":
-        kwargs["image_url"] = args.image_url
+        if args.image_url:
+            kwargs["image_url"] = args.image_url
+        else:
+            image_path = Path(args.image_path)
+            if not image_path.is_absolute():
+                image_path = (
+                    PROJECTS_DIR
+                    / args.project_id
+                    / "assets"
+                    / "images"
+                    / image_path
+                )
+            kwargs["image_path"] = str(image_path.resolve())
+            kwargs["project_id"] = args.project_id
+            kwargs["user_authorized_upload"] = args.confirm_cloud_upload
 
     result = generate_video(prompt, **kwargs)
     print(f"job_id={result.get('job_id')} path={result.get('output_path')}")

@@ -1,7 +1,8 @@
 """TokenHub Pixverse video — T2V / I2V via /wand/pixverse/* (P0).
 
 Reference / start-end modes are deferred (P2).
-I2V requires a public http(s) image URL (img_id); local base64 is not wired yet.
+I2V sends a public http(s) image URL (img_id). A project-local image may be
+staged to an explicitly authorized Alibaba OSS backend first; base64 is not sent.
 """
 
 from __future__ import annotations
@@ -18,6 +19,13 @@ from tools._tokenhub.client import (
 )
 from tools._tokenhub.models import get_model
 from tools._tokenhub.video import download_video
+from tools.media.public_image import (
+    PublicImageError,
+    StagedPublicImage,
+    cleanup_public_image,
+    ensure_public_image_url,
+    retain_public_image,
+)
 
 PIXVERSE_DEFAULT_MODEL = "pixverse-video-v6.0"
 _DEFAULT_DURATION = 5
@@ -36,6 +44,7 @@ _TERMINAL_OK = frozenset(
     }
 )
 _TERMINAL_FAIL = frozenset({"failed", "error", "cancelled", "canceled"})
+_REDACTED_SIGNED_URL = "<redacted-signed-url>"
 
 PixverseMode = Literal["t2v", "i2v"]
 
@@ -158,6 +167,22 @@ def _error_message(payload: dict[str, Any]) -> str:
     if err is not None and err != 0:
         return f"ErrCode={err}"
     return ""
+
+
+def _redact_signed_url(value: Any, signed_url: str) -> Any:
+    """Recursively redact one staging URL from provider errors/responses."""
+    if isinstance(value, str):
+        return value.replace(signed_url, _REDACTED_SIGNED_URL)
+    if isinstance(value, dict):
+        return {
+            key: _redact_signed_url(item, signed_url)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_signed_url(item, signed_url) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_signed_url(item, signed_url) for item in value)
+    return value
 
 
 def _submit_ok(payload: dict[str, Any]) -> bool:
@@ -309,6 +334,8 @@ def generate_pixverse_video(
     model: str = PIXVERSE_DEFAULT_MODEL,
     image_url: str | None = None,
     image_path: str | None = None,
+    project_id: str | None = None,
+    user_authorized_upload: bool = False,
     output_path: str | Path | None = None,
     duration: int = _DEFAULT_DURATION,
     quality: str = _DEFAULT_QUALITY,
@@ -321,72 +348,114 @@ def generate_pixverse_video(
     if not get_tokenhub_api_key() and (client is None or not client.api_key):
         raise TokenHubError("TOKENHUB_API_KEY is not set", http_status=401)
 
+    staged_image: StagedPublicImage | None = None
     if image_path and not image_url:
-        raise TokenHubError(
-            "Pixverse I2V does not accept local image_path in P0; "
-            "pass a public http(s) image_url (maps to img_id)."
-        )
+        if mode != "i2v":
+            raise TokenHubError("Pixverse image_path is only valid in i2v mode")
+        if not project_id or not user_authorized_upload:
+            raise TokenHubError(
+                "Pixverse local image_path requires explicit project upload authorization "
+                "(project_id + user_authorized_upload=true)."
+            )
+        try:
+            staged_image = ensure_public_image_url(
+                image_path,
+                project_id=project_id,
+                user_authorized_upload=user_authorized_upload,
+            )
+        except PublicImageError as exc:
+            raise TokenHubError(f"Pixverse local image staging failed: {exc}") from exc
+        image_url = staged_image.url
 
-    if mode == "i2v":
-        if not image_url:
-            raise TokenHubError("Pixverse I2V requires image_url (public http(s) URL)")
-        submit = submit_image_to_video(
-            prompt,
-            image_url=image_url,
-            model=model,
-            duration=duration,
-            quality=quality,
-            client=client,
-        )
-    else:
-        submit = submit_text_to_video(
-            prompt,
-            model=model,
-            duration=duration,
-            quality=quality,
-            aspect_ratio=aspect_ratio,
-            client=client,
-        )
+    try:
+        if mode == "i2v":
+            if not image_url:
+                raise TokenHubError("Pixverse I2V requires image_url (public http(s) URL)")
+            submit = submit_image_to_video(
+                prompt,
+                image_url=image_url,
+                model=model,
+                duration=duration,
+                quality=quality,
+                client=client,
+            )
+        else:
+            submit = submit_text_to_video(
+                prompt,
+                model=model,
+                duration=duration,
+                quality=quality,
+                aspect_ratio=aspect_ratio,
+                client=client,
+            )
 
-    task_id = _extract_task_id(submit)
-    status = _extract_status(submit)
-    if status in _TERMINAL_FAIL or not _submit_ok(submit) or not task_id:
-        raise TokenHubError(
-            f"Pixverse submit failed: {_error_message(submit) or submit}",
-            response=submit,
-        )
+        task_id = _extract_task_id(submit)
+        status = _extract_status(submit)
+        if status in _TERMINAL_FAIL or not _submit_ok(submit) or not task_id:
+            raise TokenHubError(
+                f"Pixverse submit failed: {_error_message(submit) or submit}",
+                response=submit,
+            )
 
-    # Some gateways return the video immediately on submit.
-    video_url = _extract_video_url(submit)
-    final = submit
-    if not video_url:
-        final = poll_pixverse_task(
-            task_id,
-            poll_interval_seconds=poll_interval_seconds,
-            timeout_seconds=timeout_seconds,
-            client=client,
-        )
-        video_url = _extract_video_url(final)
+        # Some gateways return the video immediately on submit.
+        video_url = _extract_video_url(submit)
+        final = submit
+        if not video_url:
+            final = poll_pixverse_task(
+                task_id,
+                poll_interval_seconds=poll_interval_seconds,
+                timeout_seconds=timeout_seconds,
+                client=client,
+            )
+            video_url = _extract_video_url(final)
 
-    if not video_url:
-        raise TokenHubError(
-            "Pixverse completed task missing video URL",
-            response=final,
-        )
+        if not video_url:
+            raise TokenHubError(
+                "Pixverse completed task missing video URL",
+                response=final,
+            )
 
-    result: dict[str, Any] = {
-        "job_id": task_id,
-        "model": model,
-        "mode": mode,
-        "status": _extract_status(final) or "completed",
-        "video_url": video_url,
-        "output_path": None,
-        "duration": int(duration),
-        "quality": quality,
-        "aspect_ratio": aspect_ratio if mode == "t2v" else None,
-    }
-    if output_path is not None:
-        session = client.session if client is not None else None
-        path = _download_with_cdn_retry(video_url, output_path, session=session)
-        result["output_path"] = str(path)
+        # Pixverse has ingested the image once the task reaches a stable video URL.
+        # Delete before local download so CDN timeouts cannot retain the OSS object.
+        if staged_image is not None and project_id:
+            cleanup_public_image(staged_image, project_id=project_id)
+            staged_image = None
+
+        result: dict[str, Any] = {
+            "job_id": task_id,
+            "model": model,
+            "mode": mode,
+            "status": _extract_status(final) or "completed",
+            "video_url": video_url,
+            "output_path": None,
+            "duration": int(duration),
+            "quality": quality,
+            "aspect_ratio": aspect_ratio if mode == "t2v" else None,
+        }
+        if output_path is not None:
+            session = client.session if client is not None else None
+            path = _download_with_cdn_retry(video_url, output_path, session=session)
+            result["output_path"] = str(path)
+    except Exception as exc:
+        if staged_image is not None and project_id:
+            if isinstance(exc, TokenHubError) and "timed out" in str(exc).lower():
+                retain_public_image(
+                    staged_image,
+                    project_id=project_id,
+                    reason="pixverse_task_timeout",
+                )
+            else:
+                cleanup_public_image(staged_image, project_id=project_id)
+            if isinstance(exc, TokenHubError):
+                raise TokenHubError(
+                    _redact_signed_url(str(exc), staged_image.url),
+                    http_status=exc.http_status,
+                    response=_redact_signed_url(exc.response, staged_image.url),
+                ) from None
+            if staged_image.url in str(exc):
+                raise TokenHubError(
+                    _redact_signed_url(str(exc), staged_image.url)
+                ) from None
+        raise
+
     return result

@@ -146,9 +146,20 @@ metadata:
 | `video_model` | 路径 | 注意 |
 |---------------|------|------|
 | `hy-video-1.5`（默认） | 混元 `/api/video/*` | 约 720p、无自定义时长；本地参考图 `image.base64`；公网图 `image.url`；长片多段 + ffmpeg |
-| `pixverse-video-v6.0` | Pixverse `/wand/pixverse/*` | 传 `duration`（简报 `video_duration_sec`，默认 5）、`quality`（`video_quality`，默认 `720p`）、`aspect_ratio`；**I2V 仅公网 `image_url`**（P0 不接本地 path）；T2V 无图；长片仍多段 + ffmpeg |
+| `pixverse-video-v6.0` | Pixverse `/wand/pixverse/*` | 传 `duration`（简报 `video_duration_sec`，默认 5）、`quality`（`video_quality`，默认 `720p`）、`aspect_ratio`；I2V 用公网 `image_url`，或在当前项目已明确授权且 OSS 已配置时传项目内 `image_path`；T2V 无图；长片仍多段 + ffmpeg |
 
-YT 系列仍 planned，禁止当可烧。试片：混元 `python scripts/_run_tokenhub_shop_wear_10s.py`；Pixverse `python scripts/_run_tokenhub_pixverse_smoke.py --mode t2v`（I2V 加 `--image-url https://...`）。
+YT 系列仍 planned，禁止当可烧。试片：混元 `python scripts/_run_tokenhub_shop_wear_10s.py`；Pixverse `python scripts/_run_tokenhub_pixverse_smoke.py --mode t2v`（I2V 可加 `--image-url https://...`，或项目内 `--image-path ... --confirm-cloud-upload`）。
+
+**Pixverse 本地图硬门禁：**
+
+1. 先读当前项目 `decision_log`；只有最新 `category=asset_decision`、`subject="Pixverse local image temporary OSS upload"` 为 `selected=approved` 且含用户原话时，才视为本项目已授权。
+2. 调用 `tools._tokenhub.generate_video` 时必须同时传：
+   - `image_path=<project>/assets/images/...`
+   - `project_id=<当前项目>`
+   - `user_authorized_upload=true`
+3. 缺任一项即停止并回 03 确认；禁止把授权布尔值凭空设为 true。
+4. signed URL 仅在内存中交给 Pixverse，禁止写入 checkpoint、decision、asset ledger、Backlot 或聊天。
+5. 工具每次生成使用独立临时对象：成功或明确终态失败后尽量删除；轮询超时保留并写 `artifacts/oss_staging.json`，不阻断仍可能运行的 Pixverse 任务。
 
 **同渠限流：** 可先并行，遇 429/402/可重试错误后转**串行补片**；已有合格片段跳过。TokenHub 按串行规划。  
 **跨渠：** 即使另一渠道已填 Key，也**禁止静默切换**；须向用户提案并获同意，再更新简报锁定字段后继续——通常应**退回 03** 重锁表 2.3 / 表 3。

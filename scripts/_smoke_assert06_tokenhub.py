@@ -79,8 +79,8 @@ def main() -> int:
         traceback.print_exc()
         results.append(("pixverse-video-v6.0 T2V", "FAIL"))
 
-    # 3) Pixverse I2V with local path — expect clear reject (document behavior)
-    print("\n=== TEST 3: pixverse I2V local path (expect reject) ===")
+    # 3) Pixverse I2V local path without project authorization — fail closed.
+    print("\n=== TEST 3: pixverse I2V local path without authorization (expect reject) ===")
     try:
         generate_video(
             "gentle turn",

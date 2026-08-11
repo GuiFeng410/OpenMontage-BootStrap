@@ -138,6 +138,9 @@ def test_commercial_skills_require_readonly_board_chat_flow() -> None:
     produce = (
         root / "openmontage" / "skills" / "openmontage-bootstrap-04-produce" / "SKILL.md"
     ).read_text(encoding="utf-8")
+    providers = (
+        root / "openmontage" / "skills" / "openmontage-bootstrap-06-providers" / "SKILL.md"
+    ).read_text(encoding="utf-8")
     for text in (usercheck, produce):
         assert "pipeline_type=bootstrap-commercial" in text
         assert "python -m backlot open <project_id>" in text
@@ -174,6 +177,12 @@ def test_commercial_skills_require_readonly_board_chat_flow() -> None:
     assert "commercial-prompt-lexicon.md" in produce
     assert "asset-preprocess-gate.md" in produce
     assert "禁止重新调用 produce_init_project" in produce
+    assert 'subject="Pixverse local image temporary OSS upload"' in usercheck
+    assert "user_authorized_upload=true" in usercheck
+    assert "user_authorized_upload=true" in produce
+    assert "oss_staging.json" in produce
+    assert "OSS_ACCESS_KEY_ID" in providers
+    assert "配置 Key 不等于授权上传" in providers
 
 
 def test_intermediate_decision_and_approval_preserve_evidence(sandbox: Path) -> None:

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import traceback
+from datetime import datetime, timezone
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -191,14 +193,206 @@ def test_generate_video_routes_pixverse(monkeypatch, tmp_path: Path):
     assert "routed.mp4" in result["video_url"]
 
 
-def test_generate_pixverse_rejects_local_path_only(monkeypatch, tmp_path: Path):
+def test_generate_pixverse_rejects_local_path_without_upload_authorization(
+    monkeypatch,
+    tmp_path: Path,
+):
     monkeypatch.setenv("TOKENHUB_API_KEY", "test-key")
     img = tmp_path / "a.jpg"
     img.write_bytes(b"jpeg")
-    with pytest.raises(TokenHubError, match="local image_path"):
+    with pytest.raises(TokenHubError, match="explicit project upload authorization"):
         generate_pixverse_video(
             "x",
             mode="i2v",
             image_path=str(img),
+            project_id="demo",
             client=TokenHubClient(api_key="test-key"),
         )
+
+
+def test_generate_pixverse_never_stages_local_image_in_t2v_mode(monkeypatch):
+    monkeypatch.setenv("TOKENHUB_API_KEY", "test-key")
+    ensure = MagicMock()
+    monkeypatch.setattr("tools._tokenhub.pixverse.ensure_public_image_url", ensure)
+
+    with pytest.raises(TokenHubError, match="only valid in i2v mode"):
+        generate_pixverse_video(
+            "x",
+            mode="t2v",
+            image_path="projects/demo/assets/images/a.png",
+            project_id="demo",
+            user_authorized_upload=True,
+            client=TokenHubClient(api_key="test-key"),
+        )
+
+    ensure.assert_not_called()
+
+
+def test_generate_video_stages_local_pixverse_image_and_cleans_after_download(
+    monkeypatch,
+    tmp_path: Path,
+):
+    monkeypatch.setenv("TOKENHUB_API_KEY", "test-key")
+    image = tmp_path / "projects" / "demo" / "assets" / "images" / "a.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"png")
+    output = tmp_path / "projects" / "demo" / "renders" / "clip.mp4"
+    output.parent.mkdir(parents=True)
+    output.write_bytes(b"0" * 12000)
+
+    from tools.media.public_image import StagedPublicImage
+
+    staged = StagedPublicImage(
+        url="https://bucket.example.com/signed.png?signature=secret",
+        backend="aliyun_oss",
+        object_key="openmontage/tmp/demo/object.png",
+        source_sha256="abc",
+        expires_at=datetime.now(timezone.utc),
+        staged=True,
+    )
+    ensure = MagicMock(return_value=staged)
+    cleanup = MagicMock(return_value=True)
+    monkeypatch.setattr("tools._tokenhub.pixverse.ensure_public_image_url", ensure)
+    monkeypatch.setattr("tools._tokenhub.pixverse.cleanup_public_image", cleanup)
+
+    client = TokenHubClient(api_key="test-key", base_url="https://tokenhub.test/v1")
+
+    def fake_post(path: str, payload: dict, **_kwargs):
+        assert path == "/wand/pixverse/image-to-video"
+        assert payload["img_id"] == staged.url
+        return {"task_id": "pv-local", "status": "submitted"}
+
+    client.post = fake_post  # type: ignore[method-assign]
+    client.get = lambda *_args, **_kwargs: {
+        "status": "completed",
+        "video_url": "https://cdn.example.com/local.mp4",
+    }  # type: ignore[method-assign]
+    monkeypatch.setattr(
+        "tools._tokenhub.pixverse.download_video",
+        MagicMock(return_value=output),
+    )
+    monkeypatch.setattr("tools._tokenhub.pixverse.time.sleep", lambda *_: None)
+
+    result = generate_video(
+        "自然转头",
+        model=PIXVERSE_DEFAULT_MODEL,
+        image_path=str(image),
+        project_id="demo",
+        user_authorized_upload=True,
+        output_path=output,
+        client=client,
+        poll_interval_seconds=0.01,
+    )
+
+    assert result["output_path"] == str(output)
+    ensure.assert_called_once_with(
+        str(image),
+        project_id="demo",
+        user_authorized_upload=True,
+    )
+    cleanup.assert_called_once_with(staged, project_id="demo")
+
+
+def test_staged_signed_url_is_redacted_from_pixverse_errors(monkeypatch, tmp_path: Path):
+    monkeypatch.setenv("TOKENHUB_API_KEY", "test-key")
+    image = tmp_path / "projects" / "demo" / "assets" / "images" / "a.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"png")
+    signed_url = "https://bucket.example.com/a.png?signature=must-not-leak"
+
+    from tools.media.public_image import StagedPublicImage
+
+    staged = StagedPublicImage(
+        url=signed_url,
+        backend="aliyun_oss",
+        object_key="openmontage/tmp/demo/object.png",
+        source_sha256="abc",
+        expires_at=datetime.now(timezone.utc),
+        staged=True,
+    )
+    monkeypatch.setattr(
+        "tools._tokenhub.pixverse.ensure_public_image_url",
+        MagicMock(return_value=staged),
+    )
+    monkeypatch.setattr(
+        "tools._tokenhub.pixverse.cleanup_public_image",
+        MagicMock(return_value=True),
+    )
+    client = TokenHubClient(api_key="test-key", base_url="https://tokenhub.test/v1")
+    client.post = lambda *_args, **_kwargs: {
+        "status": "failed",
+        "message": signed_url,
+    }  # type: ignore[method-assign]
+
+    with pytest.raises(TokenHubError) as caught:
+        generate_video(
+            "自然转头",
+            model=PIXVERSE_DEFAULT_MODEL,
+            image_path=str(image),
+            project_id="demo",
+            user_authorized_upload=True,
+            client=client,
+        )
+
+    assert signed_url not in str(caught.value)
+    assert signed_url not in repr(caught.value.response)
+    assert signed_url not in "".join(
+        traceback.format_exception(
+            type(caught.value),
+            caught.value,
+            caught.value.__traceback__,
+        )
+    )
+
+
+def test_download_timeout_cleans_staged_image_instead_of_retaining(
+    monkeypatch,
+    tmp_path: Path,
+):
+    monkeypatch.setenv("TOKENHUB_API_KEY", "test-key")
+    image = tmp_path / "projects" / "demo" / "assets" / "images" / "a.png"
+    image.parent.mkdir(parents=True)
+    image.write_bytes(b"png")
+
+    from tools.media.public_image import StagedPublicImage
+
+    staged = StagedPublicImage(
+        url="https://bucket.example.com/signed.png?signature=secret",
+        backend="aliyun_oss",
+        object_key="openmontage/tmp/demo/object.png",
+        source_sha256="abc",
+        expires_at=datetime.now(timezone.utc),
+        staged=True,
+    )
+    cleanup = MagicMock(return_value=True)
+    retain = MagicMock()
+    monkeypatch.setattr(
+        "tools._tokenhub.pixverse.ensure_public_image_url",
+        MagicMock(return_value=staged),
+    )
+    monkeypatch.setattr("tools._tokenhub.pixverse.cleanup_public_image", cleanup)
+    monkeypatch.setattr("tools._tokenhub.pixverse.retain_public_image", retain)
+    monkeypatch.setattr(
+        "tools._tokenhub.pixverse._download_with_cdn_retry",
+        MagicMock(side_effect=TokenHubError("Read timed out")),
+    )
+    client = TokenHubClient(api_key="test-key", base_url="https://tokenhub.test/v1")
+    client.post = lambda *_args, **_kwargs: {
+        "task_id": "pv-download-timeout",
+        "status": "completed",
+        "video_url": "https://cdn.example.com/video.mp4",
+    }  # type: ignore[method-assign]
+
+    with pytest.raises(TokenHubError, match="Read timed out"):
+        generate_video(
+            "自然转头",
+            model=PIXVERSE_DEFAULT_MODEL,
+            image_path=str(image),
+            project_id="demo",
+            user_authorized_upload=True,
+            output_path=tmp_path / "clip.mp4",
+            client=client,
+        )
+
+    cleanup.assert_called_once_with(staged, project_id="demo")
+    retain.assert_not_called()

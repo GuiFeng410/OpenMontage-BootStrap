@@ -437,7 +437,7 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 1. Agnes 与 TokenHub 是两条独立付费渠道；TokenHub 下混元与 Pixverse 共用 TOKENHUB_API_KEY，但接口/模型不同，不要混叫。
 2. TokenPlan 是 Agnes 账号的付费/并发档（不是渠道）；有 TokenPlan 档时 Agnes 并发通常更高。
 3. TokenHub·混元：约 720p、默认一次一段、无自定义时长；长片靠多段拼接；本地图可用 base64。
-4. TokenHub·Pixverse：可设每段 duration（默认 5s）、quality（默认 720p）；图生需公网图片 URL（P0 不接本地路径）。
+4. TokenHub·Pixverse：可设每段 duration（默认 5s）、quality（默认 720p）；图生需公网图片 URL，或按 3.3.1 在当前项目明确授权后临时上传项目内本地图。
 5. 禁止静默换渠；若要换渠道须你明确说。
 示例回复：
 1. 我选择 Agnes
@@ -452,11 +452,27 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 |------------|--------------|------|------|
 | Agnes（付费视频渠道） | `agnes` | `agnes-video-v2.0` | 推荐；TokenPlan=档位不是渠道 |
 | TokenHub·混元（腾讯混元，约720p） | `tokenhub` | `hy-video-1.5` | 并发 1；无自定义时长；本地图 OK |
-| TokenHub·Pixverse（可设时长） | `tokenhub` | `pixverse-video-v6.0` | 同 Key；可写 `video_duration_sec`/`video_quality`/`aspect_ratio`；I2V 需公网 URL |
+| TokenHub·Pixverse（可设时长） | `tokenhub` | `pixverse-video-v6.0` | 同 Key；可写 `video_duration_sec`/`video_quality`/`aspect_ratio`；I2V 需公网 URL，或经本项目明确授权后把项目内本地图临时传 OSS |
 | eRouter | — | — | ❌ 未实现，勿当可烧 |
 
 写入：`ai_video=enabled`；`video_channel`；`video_model`；选 Pixverse 时可写 `video_duration_sec`（默认 5）、`video_quality`（默认 `720p`）、`aspect_ratio`（如 `16:9` / `9:16`）。  
 非重度：`ai_video=disabled`；渠/模为空。
+
+#### 3.3.1 Pixverse 本地图临时上传（可选阿里云 OSS）
+
+触发条件：用户锁定 `video_model=pixverse-video-v6.0`，某段使用本项目 `assets/images/` 内的本地图，且已配置 OSS。
+
+1. **03 只确认并记录，不上传。** 聊天一次只问：
+   > Pixverse 图生需要公网 URL。是否允许本项目把所选图片临时上传到你的私有阿里云 OSS，生成默认 6 小时签名 URL，生成结束后尽量删除？Secret 和签名 URL不会进入看板。
+2. 用户明确同意后，用 `produce_append_decision` 写入当前项目：
+   - `category="asset_decision"`
+   - `subject="Pixverse local image temporary OSS upload"`（之后变更必须保持同一 subject）
+   - `options_considered` 至少含 `option_id="approved"` 与 `option_id="denied"`，每项按 schema 写 `label/score/reason`
+   - `selected="approved"`、`user_approved=true`
+   - `user_response_text` 必须是用户原话。
+3. 只认当前 `project_id` 的最新同 subject 决策；新项目不得继承旧项目授权。用户撤销时追加 `selected="denied"`，不得改写旧记录。
+4. 未配置或用户拒绝：继续用公网 `image_url`；若要改 Agnes / 混元，按换渠协议重新确认，禁止静默切换。
+5. 授权不是全局开关。04 每次本地图调用仍须显式传 `project_id` 与 `user_authorized_upload=true`；工具层默认拒绝。
 
 #### 3.4 画面构成比例（运镜:AI · ≥15s 且可烧 AI 时）
 

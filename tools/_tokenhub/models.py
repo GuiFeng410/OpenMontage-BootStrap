@@ -6,7 +6,7 @@ status:
 
 Configured today:
   hy-video-1.5         — 混元 /api/video/* (T2V/I2V; local base64 OK)
-  pixverse-video-v6.0  — Pixverse /wand/pixverse/* (T2V/I2V; public URL for I2V)
+  pixverse-video-v6.0  — Pixverse /wand/pixverse/* (T2V/I2V; public/signed URL for I2V)
 
 Append to EXTRA_MODELS locally to add models without editing the shortlist.
 """
@@ -39,7 +39,7 @@ _VIDEO_MODELS: tuple[TokenHubModel, ...] = (
         "pixverse-video-v6.0",
         "video",
         "configured",
-        "Pixverse v6（T2V/I2V）；/wand/pixverse/*；可设 duration/quality；I2V 需公网图 URL",
+        "Pixverse v6（T2V/I2V）；/wand/pixverse/*；可设 duration/quality；I2V 需公网图 URL（本地图可选 OSS 临时签名）",
     ),
     TokenHubModel("yt-video-2.0", "video", "planned", "多图图生视频通道"),
     TokenHubModel("yt-video-fx", "video", "planned", "视频特效模型"),

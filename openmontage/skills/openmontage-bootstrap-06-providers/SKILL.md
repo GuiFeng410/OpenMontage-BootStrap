@@ -21,6 +21,8 @@ metadata:
         required: false
       - name: FAL_KEY
         required: false
+      - name: TOKENHUB_API_KEY
+        required: false
       - name: OPENAI_API_KEY
         required: false
       - name: DASHSCOPE_API_KEY
@@ -44,6 +46,14 @@ metadata:
       - name: ELEVENLABS_API_KEY
         required: false
       - name: DOUBAO_SPEECH_API_KEY
+        required: false
+      - name: OSS_ACCESS_KEY_ID
+        required: false
+      - name: OSS_ACCESS_KEY_SECRET
+        required: false
+      - name: ALIYUN_OSS_BUCKET
+        required: false
+      - name: ALIYUN_OSS_REGION
         required: false
     os:
       - win32
@@ -107,6 +117,7 @@ metadata:
 
 | Key | 常见覆盖 |
 |-----|----------|
+| `TOKENHUB_API_KEY` | 腾讯 TokenHub：混元 / Pixverse 视频 |
 | `FAL_KEY` | 图 flux；视频 seedance / minimax；（veo 可选 fal 后端） |
 | `OPENAI_API_KEY` | TTS openai；图 openai；视频 sora |
 | `DASHSCOPE_API_KEY` | TTS dashscope；图 dashscope |
@@ -118,6 +129,19 @@ metadata:
 | `DOUBAO_SPEECH_API_KEY` | TTS doubao |
 
 另需：`OPENMONTAGE_PROJECTS_DIR`（与门面相同沙箱根）。
+
+若用户选择 TokenHub·Pixverse 且要直接使用本地图，可选配置阿里云 OSS：
+
+| Key | 说明 |
+|-----|------|
+| `OSS_ACCESS_KEY_ID` / `OSS_ACCESS_KEY_SECRET` | 官方 OSS SDK 凭据；兼容 `ALIYUN_OSS_ACCESS_KEY_ID` / `ALIYUN_OSS_ACCESS_KEY_SECRET` |
+| `OSS_SESSION_TOKEN` | 可选 STS 临时凭据 |
+| `ALIYUN_OSS_BUCKET` / `ALIYUN_OSS_REGION` | 私有桶与区域 |
+| `ALIYUN_OSS_ENDPOINT` | 可选外网 endpoint；禁止 `internal` |
+| `ALIYUN_OSS_PREFIX` | 可选前缀，默认 `openmontage/tmp/` |
+| `OSS_SIGNED_URL_EXPIRES_SEC` | 默认 `21600` 秒 |
+
+引导口径：建议 RAM 用户仅授予指定前缀的 Put/Get/Delete；把字段写入本机 `.env` 后重启 MCP。**配置 Key 不等于授权上传**：每个新项目仍须在 03 聊天明确确认一次，并写入项目 decision log。不得让用户在 Backlot 填 Secret，不得在回复中要求用户粘贴 Secret。
 
 等用户回复「Key 已写入并已重启 MCP」再继续。
 

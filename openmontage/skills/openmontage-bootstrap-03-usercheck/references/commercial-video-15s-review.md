@@ -67,7 +67,7 @@
 3. 单笔计划 ≥ ¥5 仍按原规则**提示即可**；触顶走费用闸。  
 4. 渠道名对用户展示时遵守 03 Skill「命名防混」（TokenHub≠TokenPlan；混元≠Pixverse）。
    - TokenHub·混元：`hy-video-1.5`，无自定义时长。
-   - TokenHub·Pixverse：`pixverse-video-v6.0`，可设每段 duration（默认 5s）/ quality；图生需公网 URL。
+   - TokenHub·Pixverse：`pixverse-video-v6.0`，可设每段 duration（默认 5s）/ quality；图生需公网 URL，或经本项目明确授权后把项目内图片临时传私有 OSS。
 
 ## 1. 触发条件
 
