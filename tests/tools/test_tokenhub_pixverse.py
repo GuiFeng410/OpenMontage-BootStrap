@@ -44,7 +44,11 @@ def test_submit_text_to_video_payload(monkeypatch):
 
     def fake_post(path: str, payload: dict, **_kwargs):
         seen.append((path, payload))
-        return {"task_id": "pv-1", "status": "submitted"}
+        return {
+            "ErrCode": 0,
+            "ErrMsg": "success",
+            "Resp": {"video_id": "pv-1"},
+        }
 
     client.post = fake_post  # type: ignore[method-assign]
     out = submit_text_to_video(
@@ -54,7 +58,7 @@ def test_submit_text_to_video_payload(monkeypatch):
         aspect_ratio="16:9",
         client=client,
     )
-    assert out["task_id"] == "pv-1"
+    assert out["Resp"]["video_id"] == "pv-1"
     assert seen[0][0] == "/wand/pixverse/text-to-video"
     assert seen[0][1]["model"] == PIXVERSE_DEFAULT_MODEL
     assert seen[0][1]["duration"] == 5
@@ -98,14 +102,21 @@ def test_generate_pixverse_t2v_poll_download(monkeypatch, tmp_path: Path):
 
     def fake_post(path: str, payload: dict, **_kwargs):
         posts.append(path)
-        return {"task_id": "pv-t2v", "status": "submitted"}
+        return {
+            "ErrCode": 0,
+            "ErrMsg": "success",
+            "Resp": {"video_id": "pv-t2v"},
+        }
 
     def fake_get(path: str, **_kwargs):
         gets.append(path)
         return {
-            "task_id": "pv-t2v",
-            "status": "completed",
-            "data": {"url": "https://cdn.example.com/pix.mp4"},
+            "ErrCode": 0,
+            "ErrMsg": "success",
+            "Resp": {
+                "status": "completed",
+                "url": "https://cdn.example.com/pix.mp4",
+            },
         }
 
     client.post = fake_post  # type: ignore[method-assign]
@@ -129,6 +140,15 @@ def test_generate_pixverse_t2v_poll_download(monkeypatch, tmp_path: Path):
     assert posts == ["/wand/pixverse/text-to-video"]
     assert gets == ["/wand/pixverse/tasks/pv-t2v"]
     downloaded.assert_called_once()
+
+
+def test_normalize_media_url_unquotes_path():
+    from tools._tokenhub.pixverse import _normalize_media_url
+
+    raw = "https://media.pixverseai.cn/pixverse%2Fmp4%2Fmedia%2Fweb%2Fori%2Fa.mp4"
+    assert _normalize_media_url(raw) == (
+        "https://media.pixverseai.cn/pixverse/mp4/media/web/ori/a.mp4"
+    )
 
 
 def test_generate_video_routes_pixverse(monkeypatch, tmp_path: Path):
