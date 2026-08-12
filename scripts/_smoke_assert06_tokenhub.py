@@ -66,7 +66,8 @@ def main() -> int:
             model="pixverse-video-v6.0",
             output_path=pv_out,
             duration=5,
-            quality="720p",
+            quality="360p",
+            generate_audio_switch=False,
             aspect_ratio="16:9",
             poll_interval_seconds=5.0,
             timeout_seconds=600.0,
@@ -87,7 +88,7 @@ def main() -> int:
             model="pixverse-video-v6.0",
             image_path=str(REF),
             duration=5,
-            quality="720p",
+            quality="360p",
         )
         results.append(("pixverse I2V local", "UNEXPECTED_PASS"))
     except Exception as exc:

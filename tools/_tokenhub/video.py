@@ -172,6 +172,7 @@ def generate_video(
     duration: int | None = None,
     quality: str | None = None,
     aspect_ratio: str | None = None,
+    generate_audio_switch: bool | None = None,
     poll_interval_seconds: float = 8.0,
     timeout_seconds: float = 900.0,
     client: TokenHubClient | None = None,
@@ -186,7 +187,12 @@ def generate_video(
 
     model_id = model or DEFAULT_VIDEO_MODEL
 
-    from tools._tokenhub.pixverse import generate_pixverse_video, is_pixverse_model
+    from tools._tokenhub.pixverse import (
+        PIXVERSE_DEFAULT_GENERATE_AUDIO,
+        PIXVERSE_DEFAULT_QUALITY,
+        generate_pixverse_video,
+        is_pixverse_model,
+    )
 
     if is_pixverse_model(model_id):
         mode = "i2v" if (image_url or image_path) else "t2v"
@@ -200,8 +206,13 @@ def generate_video(
             user_authorized_upload=user_authorized_upload,
             output_path=output_path,
             duration=int(duration) if duration is not None else 5,
-            quality=quality or resolution or "720p",
+            quality=quality or PIXVERSE_DEFAULT_QUALITY,
             aspect_ratio=aspect_ratio or "16:9",
+            generate_audio_switch=(
+                PIXVERSE_DEFAULT_GENERATE_AUDIO
+                if generate_audio_switch is None
+                else bool(generate_audio_switch)
+            ),
             poll_interval_seconds=poll_interval_seconds,
             timeout_seconds=timeout_seconds,
             client=client,

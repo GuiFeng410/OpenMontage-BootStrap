@@ -29,6 +29,22 @@ def test_pixverse_in_configured_catalog():
     assert not is_pixverse_model("hy-video-1.5")
 
 
+def test_submit_text_to_video_defaults_360p_silent(monkeypatch):
+    monkeypatch.setenv("TOKENHUB_API_KEY", "test-key")
+    client = TokenHubClient(api_key="test-key", base_url="https://tokenhub.test/v1")
+    seen: list[tuple[str, dict]] = []
+
+    def fake_post(path: str, payload: dict, **_kwargs):
+        seen.append((path, payload))
+        return {"ErrCode": 0, "Resp": {"video_id": "pv-default"}}
+
+    client.post = fake_post  # type: ignore[method-assign]
+    submit_text_to_video("默认档", client=client)
+    assert seen[0][1]["quality"] == "360p"
+    assert seen[0][1]["generate_audio_switch"] is False
+    assert seen[0][1]["duration"] == 5
+
+
 def test_submit_video_job_rejects_pixverse_model(monkeypatch):
     monkeypatch.setenv("TOKENHUB_API_KEY", "test-key")
     with pytest.raises(TokenHubError, match="Pixverse"):
@@ -58,13 +74,16 @@ def test_submit_text_to_video_payload(monkeypatch):
         duration=5,
         quality="720p",
         aspect_ratio="16:9",
+        generate_audio_switch=True,
         client=client,
     )
     assert out["Resp"]["video_id"] == "pv-1"
     assert seen[0][0] == "/wand/pixverse/text-to-video"
     assert seen[0][1]["model"] == PIXVERSE_DEFAULT_MODEL
     assert seen[0][1]["duration"] == 5
+    assert seen[0][1]["quality"] == "720p"
     assert seen[0][1]["aspect_ratio"] == "16:9"
+    assert seen[0][1]["generate_audio_switch"] is True
 
 
 def test_submit_image_to_video_requires_http_url(monkeypatch):
@@ -89,10 +108,34 @@ def test_submit_image_to_video_payload(monkeypatch):
         image_url="https://cdn.example.com/in.jpg",
         duration=5,
         quality="720p",
+        generate_audio_switch=True,
         client=client,
     )
     assert seen[0][0] == "/wand/pixverse/image-to-video"
     assert seen[0][1]["img_id"] == "https://cdn.example.com/in.jpg"
+    assert seen[0][1]["quality"] == "720p"
+    assert seen[0][1]["generate_audio_switch"] is True
+
+
+def test_generate_video_pixverse_defaults_ignore_hunyuan_resolution(monkeypatch):
+    monkeypatch.setenv("TOKENHUB_API_KEY", "test-key")
+    client = TokenHubClient(api_key="test-key", base_url="https://tokenhub.test/v1")
+    seen: list[dict] = []
+
+    def fake_post(path: str, payload: dict, **_kwargs):
+        seen.append(payload)
+        return {"ErrCode": 0, "Resp": {"video_id": "pv-def", "status": "completed", "url": "https://cdn.example.com/d.mp4"}}
+
+    client.post = fake_post  # type: ignore[method-assign]
+    result = generate_video(
+        "默认档",
+        model=PIXVERSE_DEFAULT_MODEL,
+        client=client,
+    )
+    assert seen[0]["quality"] == "360p"
+    assert seen[0]["generate_audio_switch"] is False
+    assert result["quality"] == "360p"
+    assert result["generate_audio_switch"] is False
 
 
 def test_generate_pixverse_t2v_poll_download(monkeypatch, tmp_path: Path):

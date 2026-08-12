@@ -55,8 +55,13 @@ def main() -> int:
     )
     parser.add_argument("--prompt", default="")
     parser.add_argument("--duration", type=int, default=5)
-    parser.add_argument("--quality", default="720p")
+    parser.add_argument("--quality", default="360p")
     parser.add_argument("--aspect-ratio", default="16:9")
+    parser.add_argument(
+        "--audio",
+        action="store_true",
+        help="request Pixverse native audio (default is silent)",
+    )
     parser.add_argument("--model", default=PIXVERSE_DEFAULT_MODEL)
     parser.add_argument(
         "--force",
@@ -121,6 +126,7 @@ def main() -> int:
         "duration": args.duration,
         "quality": args.quality,
         "aspect_ratio": args.aspect_ratio,
+        "generate_audio_switch": args.audio,
     }
     if args.mode == "i2v":
         if args.image_url:

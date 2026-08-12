@@ -48,7 +48,11 @@ from tools._tokenhub.models import (
 
 from tools._tokenhub.pixverse import (
 
+    PIXVERSE_DEFAULT_GENERATE_AUDIO,
+
     PIXVERSE_DEFAULT_MODEL,
+
+    PIXVERSE_DEFAULT_QUALITY,
 
     generate_pixverse_video,
 
@@ -88,7 +92,11 @@ __all__ = [
 
     "EXTRA_MODELS",
 
+    "PIXVERSE_DEFAULT_GENERATE_AUDIO",
+
     "PIXVERSE_DEFAULT_MODEL",
+
+    "PIXVERSE_DEFAULT_QUALITY",
 
     "TokenHubClient",
 

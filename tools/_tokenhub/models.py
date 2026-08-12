@@ -39,7 +39,7 @@ _VIDEO_MODELS: tuple[TokenHubModel, ...] = (
         "pixverse-video-v6.0",
         "video",
         "configured",
-        "Pixverse v6（T2V/I2V）；/wand/pixverse/*；可设 duration/quality；I2V 需公网图 URL（本地图可选 OSS 临时签名）",
+        "Pixverse v6（T2V/I2V）；/wand/pixverse/*；默认 5s/360p/无声；可设 duration/quality/generate_audio_switch；I2V 需公网图 URL（本地图可选 OSS 临时签名）",
     ),
     TokenHubModel("yt-video-2.0", "video", "planned", "多图图生视频通道"),
     TokenHubModel("yt-video-fx", "video", "planned", "视频特效模型"),

@@ -28,9 +28,12 @@ from tools.media.public_image import (
 )
 
 PIXVERSE_DEFAULT_MODEL = "pixverse-video-v6.0"
+PIXVERSE_DEFAULT_QUALITY = "360p"
+PIXVERSE_DEFAULT_GENERATE_AUDIO = False
 _DEFAULT_DURATION = 5
-_DEFAULT_QUALITY = "720p"
+_DEFAULT_QUALITY = PIXVERSE_DEFAULT_QUALITY
 _DEFAULT_ASPECT = "16:9"
+_DEFAULT_GENERATE_AUDIO = PIXVERSE_DEFAULT_GENERATE_AUDIO
 
 # Do NOT treat numeric status alone as terminal — Pixverse may set status=5
 # before the CDN URL is actually downloadable.
@@ -199,6 +202,7 @@ def submit_text_to_video(
     duration: int = _DEFAULT_DURATION,
     quality: str = _DEFAULT_QUALITY,
     aspect_ratio: str = _DEFAULT_ASPECT,
+    generate_audio_switch: bool = _DEFAULT_GENERATE_AUDIO,
     client: TokenHubClient | None = None,
 ) -> dict[str, Any]:
     """POST /wand/pixverse/text-to-video."""
@@ -212,6 +216,7 @@ def submit_text_to_video(
         "duration": int(duration),
         "quality": quality,
         "aspect_ratio": aspect_ratio,
+        "generate_audio_switch": bool(generate_audio_switch),
     }
     api = client or TokenHubClient()
     return api.post("/wand/pixverse/text-to-video", payload)
@@ -224,6 +229,7 @@ def submit_image_to_video(
     model: str = PIXVERSE_DEFAULT_MODEL,
     duration: int = _DEFAULT_DURATION,
     quality: str = _DEFAULT_QUALITY,
+    generate_audio_switch: bool = _DEFAULT_GENERATE_AUDIO,
     client: TokenHubClient | None = None,
 ) -> dict[str, Any]:
     """POST /wand/pixverse/image-to-video. image_url → img_id (public URL only)."""
@@ -238,6 +244,7 @@ def submit_image_to_video(
         "img_id": img_id,
         "duration": int(duration),
         "quality": quality,
+        "generate_audio_switch": bool(generate_audio_switch),
     }
     api = client or TokenHubClient()
     return api.post("/wand/pixverse/image-to-video", payload)
@@ -340,6 +347,7 @@ def generate_pixverse_video(
     duration: int = _DEFAULT_DURATION,
     quality: str = _DEFAULT_QUALITY,
     aspect_ratio: str = _DEFAULT_ASPECT,
+    generate_audio_switch: bool = _DEFAULT_GENERATE_AUDIO,
     poll_interval_seconds: float = 8.0,
     timeout_seconds: float = 900.0,
     client: TokenHubClient | None = None,
@@ -377,6 +385,7 @@ def generate_pixverse_video(
                 model=model,
                 duration=duration,
                 quality=quality,
+                generate_audio_switch=generate_audio_switch,
                 client=client,
             )
         else:
@@ -386,6 +395,7 @@ def generate_pixverse_video(
                 duration=duration,
                 quality=quality,
                 aspect_ratio=aspect_ratio,
+                generate_audio_switch=generate_audio_switch,
                 client=client,
             )
 
@@ -430,6 +440,7 @@ def generate_pixverse_video(
             "output_path": None,
             "duration": int(duration),
             "quality": quality,
+            "generate_audio_switch": bool(generate_audio_switch),
             "aspect_ratio": aspect_ratio if mode == "t2v" else None,
         }
         if output_path is not None:

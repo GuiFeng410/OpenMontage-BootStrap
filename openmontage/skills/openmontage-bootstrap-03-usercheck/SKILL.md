@@ -440,7 +440,7 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 请确认选择以下点
 1. 视频渠道：Agnes（付费视频渠道，默认推荐）
             / TokenHub·混元（腾讯混元，约720p，无自定义时长）
-            / TokenHub·Pixverse（腾讯 Pixverse，可设时长，默认5s/720p）
+            / TokenHub·Pixverse（腾讯 Pixverse，可设时长，默认5s/360p/无声）
 2. 模型：随上项锁定
    - Agnes → agnes-video-v2.0
    - 混元 → hy-video-1.5
@@ -449,7 +449,7 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 1. Agnes 与 TokenHub 是两条独立付费渠道；TokenHub 下混元与 Pixverse 共用 TOKENHUB_API_KEY，但接口/模型不同，不要混叫。
 2. TokenPlan 是 Agnes 账号的付费/并发档（不是渠道）；有 TokenPlan 档时 Agnes 并发通常更高。
 3. TokenHub·混元：约 720p、默认一次一段、无自定义时长；长片靠多段拼接；本地图可用 base64。
-4. TokenHub·Pixverse：可设每段 duration（默认 5s）、quality（默认 720p）；图生需公网图片 URL，或按 3.3.1 在当前项目明确授权后临时上传项目内本地图。
+4. TokenHub·Pixverse：可设每段 duration（默认 5s）、quality（默认 360p）、`generate_audio_switch`（默认无声 `false`）；图生需公网图片 URL，或按 3.3.1 在当前项目明确授权后临时上传项目内本地图。要有声或更高清须用户明确说。
 5. 禁止静默换渠；若要换渠道须你明确说。
 示例回复：
 1. 我选择 Agnes
@@ -464,10 +464,10 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 |------------|--------------|------|------|
 | Agnes（付费视频渠道） | `agnes` | `agnes-video-v2.0` | 推荐；TokenPlan=档位不是渠道 |
 | TokenHub·混元（腾讯混元，约720p） | `tokenhub` | `hy-video-1.5` | 并发 1；无自定义时长；本地图 OK |
-| TokenHub·Pixverse（可设时长） | `tokenhub` | `pixverse-video-v6.0` | 同 Key；可写 `video_duration_sec`/`video_quality`/`aspect_ratio`；I2V 需公网 URL，或经本项目明确授权后把项目内本地图临时传 OSS |
+| TokenHub·Pixverse（可设时长） | `tokenhub` | `pixverse-video-v6.0` | 同 Key；可写 `video_duration_sec`/`video_quality`/`video_generate_audio`/`aspect_ratio`；默认 5s/360p/无声；I2V 需公网 URL，或经本项目明确授权后把项目内本地图临时传 OSS |
 | eRouter | — | — | ❌ 未实现，勿当可烧 |
 
-写入：`ai_video=enabled`；`video_channel`；`video_model`；选 Pixverse 时可写 `video_duration_sec`（默认 5）、`video_quality`（默认 `720p`）、`aspect_ratio`（如 `16:9` / `9:16`）。  
+写入：`ai_video=enabled`；`video_channel`；`video_model`；选 Pixverse 时可写 `video_duration_sec`（默认 5）、`video_quality`（默认 `360p`）、`video_generate_audio`（默认 `false`）、`aspect_ratio`（如 `16:9` / `9:16`）。  
 非重度：`ai_video=disabled`；渠/模为空。
 
 #### 3.3.1 Pixverse 本地图临时上传（可选阿里云 OSS）
@@ -607,7 +607,8 @@ produce_set_production_profile(
 | `video_channel` | `agnes` / `tokenhub` / …；非重度空 |
 | `video_model` | 模型 id（如 `agnes-video-v2.0` / `hy-video-1.5` / `pixverse-video-v6.0`）；非重度空 |
 | `video_duration_sec` | 可选；Pixverse 每段秒数，默认 `5` |
-| `video_quality` | 可选；Pixverse 画质，默认 `720p` |
+| `video_quality` | 可选；Pixverse 画质，默认 `360p`（`360p` / `540p` / `720p` / `1080p`） |
+| `video_generate_audio` | 可选；Pixverse 原生平音频，默认 `false`（无声）。`true` 才传 `generate_audio_switch=true` |
 | `aspect_ratio` | 可选；如 `16:9` / `9:16`（Pixverse T2V） |
 | `video_plan` | 表 3 分段规划；商品片须含：切段/重点段、`asset_classes`、`path`、`gap_fill`、每段 `ref_image`（见 references） |
 

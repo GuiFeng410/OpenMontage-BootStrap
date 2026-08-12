@@ -166,9 +166,11 @@ metadata:
 | `video_model` | 路径 | 注意 |
 |---------------|------|------|
 | `hy-video-1.5`（默认） | 混元 `/api/video/*` | 约 720p、无自定义时长；本地参考图 `image.base64`；公网图 `image.url`；长片多段 + ffmpeg |
-| `pixverse-video-v6.0` | Pixverse `/wand/pixverse/*` | 传 `duration`（简报 `video_duration_sec`，默认 5）、`quality`（`video_quality`，默认 `720p`）、`aspect_ratio`；I2V 用公网 `image_url`，或在当前项目已明确授权且 OSS 已配置时传项目内 `image_path`；T2V 无图；长片仍多段 + ffmpeg |
+| `pixverse-video-v6.0` | Pixverse `/wand/pixverse/*` | 传 `duration`（简报 `video_duration_sec`，默认 5）、`quality`（`video_quality`，默认 `360p`）、`generate_audio_switch`（`video_generate_audio`，默认 `false` 无声）、`aspect_ratio`；I2V 用公网 `image_url`，或在当前项目已明确授权且 OSS 已配置时传项目内 `image_path`；T2V 无图；长片仍多段 + ffmpeg。未写 `video_quality` 时不要把混元的 `resolution=720p` 传给 Pixverse |
 
-YT 系列仍 planned，禁止当可烧。试片：混元 `python scripts/_run_tokenhub_shop_wear_10s.py`；Pixverse `python scripts/_run_tokenhub_pixverse_smoke.py --mode t2v`（I2V 可加 `--image-url https://...`，或项目内 `--image-path ... --confirm-cloud-upload`）。
+YT 系列仍 planned，禁止当可烧。试片：混元 `python scripts/_run_tokenhub_shop_wear_10s.py`；Pixverse `python scripts/_run_tokenhub_pixverse_smoke.py --mode t2v`（默认 360p 无声；I2V 可加 `--image-url https://...`，或项目内 `--image-path ... --confirm-cloud-upload`；`--audio` 才开原生平音频）。
+
+Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简报读取；缺省 `360p` / `false`）。用户未明确要求时禁止改成 720p/1080p 或有声。
 
 ### 项目计划、Pixverse 与 OSS 预检（强制）
 
