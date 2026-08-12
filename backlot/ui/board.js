@@ -4,6 +4,7 @@ import {
   STAGE_ICONS, el, fmtAgo, fmtClock, fmtDuration, fmtMoney, fmtMoneyCny,
   getJSON, mediaURL, subscribe, thumbURL, waveBars,
 } from "/ui/lib.js";
+import { bindRerender, renderEditTab } from "/ui/board-edit.js";
 
 const rawProjectPath = location.pathname.split("/p/")[1] || "";
 const projectId = decodeURIComponent(rawProjectPath);
@@ -21,6 +22,7 @@ let firstPaint = true;
 let sseStatus = "connecting"; // connecting | live | disconnected
 let replay = null;          // {t0, t1, t, playing} — replay mode when non-null
 let renderPlaybackState = null;
+let editOpen = false;       // 剪辑标签（自绘轻量条带）是否打开
 
 function applyTheme(theme) {
   currentTheme = theme === "light" ? "light" : "dark";
@@ -185,6 +187,11 @@ function renderSlate(s) {
     ),
     ...chips,
     el("div", { class: "spacer" }),
+    el("button", {
+      class: "edit-tab-btn" + (editOpen ? " on" : ""),
+      title: "剪辑标签：对成片做轻量标记（Agent 确认后出片）",
+      onclick: () => { editOpen = !editOpen; render(); },
+    }, "✂ 剪辑"),
     renderThemeToggle(),
     liveEl,
     cost,
@@ -1730,7 +1737,7 @@ function tickReplay() {
 
 function render() {
   if (!state) return;
-  const s = replay ? stateAt(state, replay.t) : state;
+  const s = (replay && !editOpen) ? stateAt(state, replay.t) : state;
   document.title = `Backlot — ${s.title}`;
   document.body.classList.toggle("first", firstPaint);
   firstPaint = false;
@@ -1738,7 +1745,7 @@ function render() {
   app.innerHTML = "";
   app.append(renderSlate(s));
   app.append(renderRail(s));
-  if (!isCommercial(s)) {
+  if (!isCommercial(s) && !editOpen) {
     const replayBar = renderReplayBar(state);
     if (replayBar) app.append(replayBar);
   }
@@ -1748,6 +1755,19 @@ function render() {
   if (awaitingNotice) app.append(awaitingNotice);
   const noState = renderNoState(s);
   if (noState) app.append(noState);
+
+  if (editOpen) {
+    bindRerender(() => render());
+    try {
+      app.append(renderEditTab(s));
+    } catch (err) {
+      app.append(el("pre", {
+        class: "edit-err-detail",
+        style: "white-space:pre-wrap;padding:16px;color:var(--red);border:1px solid var(--red);border-radius:8px",
+      }, `剪辑标签渲染出错，请把这段信息发给 Agent：\n${err && (err.stack || err) || err}`));
+    }
+    return;
+  }
 
   if (isCommercial(s)) {
     app.append(renderCommercialBoard(s));

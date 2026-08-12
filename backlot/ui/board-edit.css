@@ -1,0 +1,206 @@
+/* 剪辑标签 — 自绘轻量片段条带（POC v2）。颜色跟随 board.css 主题变量。 */
+
+.edit-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 18px 22px 36px;
+}
+
+.edit-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.edit-header h2 { margin: 0; font-size: 16px; letter-spacing: .2px; }
+.edit-sub { color: var(--text-2); font-size: 12.5px; }
+
+.edit-ops-hint {
+  font-size: 12.5px;
+  color: var(--text-2);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+
+.edit-player-video {
+  width: 100%;
+  max-height: 320px;
+  background: var(--media-bg);
+  border-radius: 10px;
+}
+.edit-player-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  color: var(--text-2);
+  font-size: 12px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+}
+.edit-player-meta .muted { color: var(--text-3); }
+.edit-player-meta .warn { color: var(--amber); }
+.edit-player-meta .chip-ghost {
+  color: var(--blue);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 10px;
+}
+
+.edit-strip-wrap { overflow-x: auto; padding: 4px 0 8px; }
+.edit-strip { display: flex; gap: 6px; min-height: 78px; }
+
+.edit-clip {
+  position: relative;
+  display: flex;
+  align-items: stretch;
+  min-width: 104px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  user-select: none;
+}
+.edit-clip.active { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }
+.edit-clip.drag { opacity: .5; border-style: dashed; }
+.edit-clip.trimming { border-color: var(--blue); cursor: ew-resize; }
+
+/* 拖拽排序手柄（预先约定的明确手势） */
+.edit-clip-handle-grip {
+  flex: 0 0 16px;
+  width: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-3);
+  font-size: 13px;
+  cursor: grab;
+  border-right: 1px solid var(--border-soft);
+  background:
+    repeating-linear-gradient(180deg, var(--border-soft) 0 1px, transparent 1px 4px);
+}
+.edit-clip-handle-grip:active { cursor: grabbing; }
+
+.edit-clip-handle {
+  width: 10px;
+  flex: 0 0 10px;
+  cursor: ew-resize;
+  touch-action: none;
+  background: transparent;
+}
+.edit-clip-handle.left { border-right: 1px dashed var(--border); }
+.edit-clip-handle.right { border-left: 1px dashed var(--border); }
+
+.edit-clip-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+.edit-clip-no { font-size: 11px; color: var(--text-3); }
+.edit-clip-name {
+  font-size: 12px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 200px;
+}
+.edit-clip-time {
+  font-size: 11px;
+  color: var(--text-2);
+  font-family: var(--mono);
+  white-space: nowrap;
+}
+
+/* 删除按钮：收进片段块内部（避免被容器滚动裁剪） */
+.edit-clip-del {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--red);
+  color: #fff;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.edit-note { display: flex; flex-direction: column; gap: 6px; }
+.edit-note label { font-size: 12px; color: var(--text-2); }
+.edit-note input {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 9px 11px;
+  font-size: 13px;
+}
+.edit-note input::placeholder { color: var(--text-3); }
+
+.edit-summary {
+  font-size: 13px;
+  color: var(--text-2);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+.edit-summary.has-changes { border-color: var(--blue); color: var(--text); }
+.edit-summary-title { font-weight: 500; }
+.edit-summary-list { margin: 0; padding-left: 20px; color: var(--text); }
+.edit-summary-empty { font-size: 12.5px; color: var(--text-3); }
+
+.edit-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.edit-actions .btn {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: 1px solid var(--blue);
+  background: var(--blue);
+  color: #fff;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+}
+.edit-actions .btn.ghost {
+  background: transparent;
+  color: var(--text-2);
+  border-color: var(--border);
+}
+.edit-actions .btn.ghost:hover:not(:disabled) { color: var(--text); border-color: var(--text-3); }
+.edit-actions .btn:disabled { opacity: .45; cursor: default; }
+.edit-actions-hint { font-size: 12px; color: var(--text-3); }
+.edit-feedback { font-size: 13px; color: var(--amber); }
+.edit-feedback.ok { color: var(--green); }
+
+/* 顶栏剪辑入口按钮 */
+.edit-tab-btn {
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  border-radius: 8px;
+  padding: 5px 11px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.edit-tab-btn:hover { color: var(--text); }
+.edit-tab-btn.on {
+  border-color: var(--blue);
+  color: var(--blue);
+}

@@ -14,10 +14,16 @@ from pathlib import Path
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, StreamingResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from backlot.state import PROJECTS_DIR, REPO_ROOT, list_projects, load_board_state, summarize_project
+from lib.edit_intents import (
+    IntentConflictError,
+    IntentError,
+    UnknownProjectError,
+    create_intent,
+)
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
 THUMB_CACHE_DIR = REPO_ROOT / ".backlot" / "thumbs"
@@ -169,6 +175,38 @@ def create_app() -> FastAPI:
     @app.get("/api/projects")
     async def projects() -> list:
         return await asyncio.to_thread(_cached_summaries)
+
+    # Sole write exception to the board's read-only contract (L1-B):
+    # accepts user editing marks and stores them under
+    # projects/<id>/intents/ only. Never touches checkpoint / artifacts.
+    @app.post("/intents")
+    async def create_intent_endpoint(request: Request) -> JSONResponse:
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid JSON body")
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="body must be a JSON object")
+        project_id = payload.get("project_id")
+        if not isinstance(project_id, str):
+            raise HTTPException(status_code=400, detail="missing project_id")
+        try:
+            record = await asyncio.to_thread(create_intent, project_id, payload)
+        except UnknownProjectError:
+            raise HTTPException(status_code=404, detail="unknown project")
+        except IntentConflictError:
+            raise HTTPException(status_code=409, detail="intent_id already exists with different content")
+        except IntentError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+        hub.publish(project_id)
+        return JSONResponse(
+            status_code=200 if record.get("duplicate") else 201,
+            content={
+                "intent_id": record["intent_id"],
+                "status": record["status"],
+                "duplicate": bool(record.get("duplicate", False)),
+            },
+        )
 
     @app.get("/api/project/{project_id}/state")
     async def project_state(project_id: str) -> dict:

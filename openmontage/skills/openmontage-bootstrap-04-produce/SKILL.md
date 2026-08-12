@@ -103,6 +103,7 @@ metadata:
 
 - 不存在某项证据时，写明确的空数组或状态说明；禁止把整个 artifact 省略后声称阶段完成。
 - `sample_reel.path`、各 beat 的片段路径、`full_draft_pro.path`、`final_review.output_path` 必须是项目内可访问相对路径。Backlot 会按当前阶段只显示对应媒体。
+- **片段视频落盘约定**：试片 / 分段 / 动态片段视频一律写入 `projects/<project_id>/assets/video/`（命名如 `seg_<beat>.mp4`、`sample_<n>.mp4`）；`segment_cards` 的 beat 片段路径与 `edit_decisions.cuts.source` 均使用项目内相对路径 `assets/video/<file>`。Backlot 剪辑标签将按 `cuts.source` 预览单段并生成 `edit_intents`（版本漂移检测依赖 cuts 内容摘要）。
 - 旧项目若有 `sample_gate`、`full_production` 等非七阶段 checkpoint，保留用于审计；不要继续写入，也不要把它们当作新的进度节点。
 
 ### 直接出片 / 快速模式 v1.0（执行）

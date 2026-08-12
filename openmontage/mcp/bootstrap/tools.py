@@ -82,6 +82,8 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_write_checkpoint",
             "produce_approve_checkpoint",
             "produce_append_decision",
+            "produce_list_intents",
+            "produce_apply_intent",
             "produce_read_state",
             "produce_get_next_stage",
             "produce_import_project_images",
@@ -1314,6 +1316,33 @@ def produce_approve_checkpoint(
 def produce_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
     """Append one user-visible decision to the project audit trail."""
     return doctor_tools.run_append_decision(project_id, decision_json)
+
+
+def produce_list_intents(project_id: str) -> dict[str, Any]:
+    """List pending edit intents (the Agent's inbox from the edit tab)."""
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from lib.edit_apply import list_pending
+
+    return {"project_id": project_id, "intents": list_pending(project_id)}
+
+
+def produce_apply_intent(project_id: str, intent_id: str) -> dict[str, Any]:
+    """Apply a user edit intent to ``edit_decisions`` (drift-checked, cuts-only).
+
+    On drift the intent is marked ``superseded`` and not applied; on missing
+    cuts the affected actions are skipped (friendly hints returned in
+    ``friendly_zh``). Agent must present the plan in chat before applying.
+    """
+    if str(REPO_ROOT) not in sys.path:
+        sys.path.insert(0, str(REPO_ROOT))
+    from lib.edit_apply import apply_intent
+    from lib.edit_intents import IntentError
+
+    try:
+        return apply_intent(project_id, intent_id)
+    except IntentError as exc:
+        return {"applied": False, "reason": "error", "detail": str(exc)}
 
 
 def produce_read_state(project_id: str) -> dict[str, Any]:

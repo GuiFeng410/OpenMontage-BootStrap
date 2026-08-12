@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openmontage/artifacts/edit_intents",
+  "title": "Edit Intents",
+  "description": "User light-weight editing marks on a rendered version. The Agent consumes a pending intent, confirms the plan in chat, and applies it to edit_decisions (cuts only).",
+  "type": "object",
+  "required": ["version", "intent_id", "project_id", "created_at", "status", "base", "actions"],
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "intent_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "note": { "type": "string", "description": "Intent-level note; an intent may carry only a note (no actions)." },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "planned", "confirmed", "applied", "rejected", "superseded"]
+    },
+    "base": {
+      "type": "object",
+      "required": ["artifact", "cuts_revision"],
+      "properties": {
+        "artifact": { "type": "string", "const": "edit_decisions" },
+        "cuts_revision": { "type": "string", "minLength": 1 },
+        "source_render": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "actions": {
+      "type": "array",
+      "description": "Editing actions; may be empty when the intent carries only a note.",
+      "items": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": ["type", "cut_id", "in_seconds", "out_seconds"],
+            "properties": {
+              "type": { "const": "trim" },
+              "cut_id": { "type": "string", "minLength": 1 },
+              "in_seconds": { "type": "number", "minimum": 0 },
+              "out_seconds": { "type": "number", "minimum": 0 },
+              "note": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "cut_id"],
+            "properties": {
+              "type": { "const": "delete" },
+              "cut_id": { "type": "string", "minLength": 1 },
+              "note": { "type": "string" }
+            },
+            "additionalProperties": false
+          },
+          {
+            "type": "object",
+            "required": ["type", "order"],
+            "properties": {
+              "type": { "const": "reorder" },
+              "order": {
+                "type": "array",
+                "items": { "type": "string", "minLength": 1 },
+                "minItems": 1
+              },
+              "note": { "type": "string" }
+            },
+            "additionalProperties": false
+          }
+        ]
+      }
+    }
+  },
+  "additionalProperties": false
+}
