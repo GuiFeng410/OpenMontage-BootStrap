@@ -95,8 +95,8 @@ metadata:
 |---|---|---|
 | 方案确认 | `brief` / `asset_precheck` / `video_plan` / `segment_cards` | 已确认主题、渠模、素材预检、整体方案与分段规划 |
 | 素材检查 | `asset_ledger` | 已确认素材角色、项目内路径与缺口处理 |
-| 试片确认 | `sample_reel` | `path`、时长、状态与用户确认原话；路径应指向试片，不得指向终稿 |
-| 分段制作 | `segment_cards` / `review_overview` | 每个 beat 的时间段、文案/镜头/提示词、`asset_path` 或 `ref`、实际片段路径；专业模式另写批次评审 |
+| 试片确认 | `sample_reel` | 新写入必须含非空 `beat_ids`，并写 `path`、时长、状态与用户确认原话；路径只指向该试片 |
+| 分段制作 | `segment_cards` / `review_overview` | 每个 Beat 的时间段、文案/镜头/提示词、`asset_path` 或 `ref`；`review_overview.overview[].output_path` 是该 Beat 分段 canonical 视频，专业模式另写批次评审 |
 | 初稿审查 | `full_draft_pro` | 初稿 `path`、`issue_segments`（beat + 时间 + 中文问题）、`modification_list`（有序中文修改项） |
 | 合成终稿 | `final_review` | `output_path`、审查结论、`technical_probe`（时长、分辨率、帧率、音频、问题） |
 | 交付确认 | `final_review` + `cost_log` + `decision_log` | 终稿路径、质量结论、累计费用、`category=delivery_signoff` 的用户原话与签收结果 |
@@ -104,7 +104,48 @@ metadata:
 - 不存在某项证据时，写明确的空数组或状态说明；禁止把整个 artifact 省略后声称阶段完成。
 - `sample_reel.path`、各 beat 的片段路径、`full_draft_pro.path`、`final_review.output_path` 必须是项目内可访问相对路径。Backlot 会按当前阶段只显示对应媒体。
 - **片段视频落盘约定**：试片 / 分段 / 动态片段视频一律写入 `projects/<project_id>/assets/video/`（命名如 `seg_<beat>.mp4`、`sample_<n>.mp4`）；`segment_cards` 的 beat 片段路径与 `edit_decisions.cuts.source` 均使用项目内相对路径 `assets/video/<file>`。Backlot 剪辑标签将按 `cuts.source` 预览单段并生成 `edit_intents`（版本漂移检测依赖 cuts 内容摘要）。
+- **阶段媒体隔离**：试片、Beat 分段、全长初稿、终稿分别只由 `sample_reel`、`review_overview.overview[]`、`full_draft_pro`、`final_review` 的 canonical 路径证明，彼此不得借用或回填同一个媒体来冒充当前阶段证据。
+- **生成原子单元**：每次生成都必须把“媒体真实落盘”与“当前阶段 canonical artifact 的路径/版本更新”作为不可拆分的完成单元。只生成文件但未更新 canonical artifact，或只写 artifact 但文件不存在，都不算证据，不得宣称完成或推进阶段。
 - 旧项目若有 `sample_gate`、`full_production` 等非七阶段 checkpoint，保留用于审计；不要继续写入，也不要把它们当作新的进度节点。
+
+### 剪辑修订闭环（不新增阶段）
+
+剪辑标签不是第八阶段，只是现有七阶段中的修订环。仅在当前活动阶段为 `draft_review` 或 `delivery_signoff` 时开放；`final_compose` 合成过程中保持锁定。
+
+**开放条件必须全部满足：**
+
+1. canonical `full_draft_pro` 存在、结构有效，且其媒体路径真实可读；
+2. 当前阶段的 canonical latest render 有效：`draft_review` 取 `full_draft_pro.path`，`delivery_signoff` 取 `final_review.output_path`；
+3. `edit_decisions.cuts` 非空；
+4. 每个 `cuts[].source` 都是当前项目 `assets/video/` 下真实、非空的视频文件；
+5. 若 `requires_compose=true`，当前 render artifact 的 `cuts_revision` 必须已与现有 cuts 摘要匹配。
+
+任一条件缺失时，网页全操作锁定；`POST /intents` 也以 editing gate 的 `409` 拒绝，Agent 不得绕过 API 直接落 intent。
+
+**Agent 固定闭环：**
+
+```text
+produce_list_intents
+→ 在聊天展示返回的 plan，等待用户明确确认
+→ produce_apply_intent
+   （只更新 edit_decisions.cuts，写 requires_compose=true；此时没有新媒体）
+→ produce_compose_preflight
+→ produce_compose_start
+→ produce_job_status（轮询 compose status）
+→ 媒体落盘，并在同一阶段更新 canonical artifact：
+   draft_review 写 full_draft_pro；delivery_signoff 写 final_review
+   路径/版本均指向新媒体，并写 matching cuts_revision
+→ 重新读取 gate；只有 gate 再次 enabled 才可继续提交剪辑要求
+```
+
+`produce_apply_intent` 的完成话术只能是“cuts 已应用，等待重合成”；禁止说“新版本已生成”、禁止把 apply 当 compose。
+
+**Intent 与并发一致性：**
+
+- 新 intent 的 `base` 必须同时携带 canonical `source_render` 与当前 `cuts_revision`。旧 intent 缺 `source_render` 时仍可列出查看，但必须拒绝应用并提示迁移/重新标记。
+- apply 在项目 checkpoint lock 内重新读取并校验活动阶段、editing gate、canonical render、`source_render` 和 cuts digest；不能只相信提交时的前端状态。
+- cuts digest 已漂移时将 intent 标为 `superseded`，不改 cuts；阶段、render 或 gate 不匹配时拒绝应用，也不得部分写。
+- 校验通过后，新的 `edit_decisions.cuts` / `requires_compose` / `cuts_revision` 与 intent 的 `applied` 状态必须作为跨文件事务一起提交；任一文件提交失败则回滚，禁止出现 cuts 已改但 intent 未改、或反之。
 
 ### 直接出片 / 快速模式 v1.0（执行）
 
@@ -249,7 +290,7 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 2. 一段真实 AI 动态（Agnes 等已锁渠道）；  
 3. 一段 Remotion（或已锁确定性）运镜/转场。
 
-写入 `artifacts/sample_reel.json`（或等价），至少含：路径、时长、`approved`/`pending`、用户确认原文。  
+新写入 `artifacts/sample_reel.json`（或等价）至少含：非空 `beat_ids`、路径、时长、`approved`/`pending`、用户确认原文。`beat_ids` 只列本试片实际覆盖的 Beat。
 **试片未通过 → 禁止**进入完整 60s 批量 Agnes。  
 用户可选反馈：效果可以继续 / 商品不一致 / 动态太少 / 抖动或变形 / 节奏不合适。  
 试片交付消息须含 **§0.3 费用卡**，并用 Grill 确认卡请用户裁定（是否过关 / 是否继续全长）。

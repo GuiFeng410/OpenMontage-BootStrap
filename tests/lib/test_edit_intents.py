@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 import lib.edit_intents as ei
@@ -32,7 +34,52 @@ def _valid_intent(**overrides):
 @pytest.fixture
 def projects(monkeypatch, tmp_path):
     root = tmp_path / "projects"
-    (root / "demo-pro").mkdir(parents=True)
+    project = root / "demo-pro"
+    (project / "artifacts").mkdir(parents=True)
+    (project / "assets" / "video").mkdir(parents=True)
+    (project / "renders").mkdir(parents=True)
+    (project / "project.json").write_text(json.dumps({
+        "version": "1.0",
+        "project_id": "demo-pro",
+        "pipeline_type": "bootstrap-commercial",
+    }), encoding="utf-8")
+    (project / "assets" / "video" / "cut.mp4").write_bytes(b"video")
+    (project / "renders" / "draft_v2.mp4").write_bytes(b"video")
+    (project / "artifacts" / "edit_decisions.json").write_text(json.dumps({
+        "version": "1.0",
+        "render_runtime": "ffmpeg",
+        "cuts": [{
+            "id": "c01",
+            "source": "assets/video/cut.mp4",
+            "in_seconds": 0,
+            "out_seconds": 2,
+        }],
+    }), encoding="utf-8")
+    (project / "artifacts" / "full_draft_pro.json").write_text(json.dumps({
+        "version": "1.0",
+        "path": "renders/draft_v2.mp4",
+        "issue_segments": [],
+        "modification_list": [],
+    }), encoding="utf-8")
+    for index, stage in enumerate((
+        "brief_locked",
+        "assets_gate",
+        "sample_review",
+        "segment_build",
+    )):
+        (project / f"checkpoint_{stage}.json").write_text(json.dumps({
+            "stage": stage,
+            "status": "completed",
+            "timestamp": f"2026-08-12T00:0{index}:00Z",
+            "human_approved": True,
+            "artifacts": {},
+        }), encoding="utf-8")
+    (project / "checkpoint_draft_review.json").write_text(json.dumps({
+        "stage": "draft_review",
+        "status": "in_progress",
+        "timestamp": "2026-08-12T00:04:00Z",
+        "artifacts": {"full_draft_pro": "artifacts/full_draft_pro.json"},
+    }), encoding="utf-8")
     monkeypatch.setattr(ei, "PROJECTS_DIR", root)
     return root
 
@@ -85,6 +132,33 @@ def test_create_and_get(projects):
     assert stored is not None
     assert stored["intent_id"] == "intent-001"
     assert (projects / "demo-pro" / "intents" / "intent-001.json").is_file()
+
+
+@pytest.mark.parametrize("source_render", [None, "", "   "])
+def test_create_rejects_missing_source_render(projects, source_render):
+    data = _valid_intent()
+    if source_render is None:
+        data["base"].pop("source_render")
+    else:
+        data["base"]["source_render"] = source_render
+
+    with pytest.raises(ei.IntentError) as caught:
+        ei.create_intent("demo-pro", data)
+
+    assert getattr(caught.value, "code", None) == "missing_source_render"
+    assert not (
+        projects / "demo-pro" / "intents" / "intent-001.json"
+    ).exists()
+
+
+def test_create_rejects_noncanonical_source_render(projects):
+    data = _valid_intent()
+    data["base"]["source_render"] = "renders/other.mp4"
+
+    with pytest.raises(ei.IntentError) as caught:
+        ei.create_intent("demo-pro", data)
+
+    assert getattr(caught.value, "code", None) == "source_render_mismatch"
 
 
 def test_create_unknown_project_rejected(projects):

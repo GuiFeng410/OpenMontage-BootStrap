@@ -399,6 +399,7 @@ def stage_commercial_task3() -> None:
             "id": "beat_01",
             "status": "可以",
             "asset": "beat_01.mp4",
+            "output_path": "assets/video/beat_01.mp4",
         }],
     })
     _write_json(project / "artifacts" / "asset_ledger.json", {
@@ -425,6 +426,7 @@ def stage_commercial_task3() -> None:
     _write_json(project / "artifacts" / "sample_reel.json", {
         "version": "1.0",
         "path": "renders/task3_sample.mp4",
+        "beat_ids": ["beat_01"],
         "duration_seconds": 2,
         "status": "review",
     })

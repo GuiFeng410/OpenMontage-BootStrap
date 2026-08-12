@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from copy import deepcopy
 from pathlib import Path
 from typing import Any, Optional
 
@@ -328,6 +329,7 @@ def _collect_artifacts(project_dir: Path, checkpoints: dict[str, dict]) -> dict[
         if data is not None:
             artifacts[name] = data
     batch_reviews: dict[str, dict] = {}
+    batch_review_sources: dict[str, str] = {}
     for path in sorted(art_dir.glob("batch*_review.json")):
         data = _read_json(path)
         if data is None:
@@ -336,8 +338,10 @@ def _collect_artifacts(project_dir: Path, checkpoints: dict[str, dict]) -> dict[
         fallback_id = f"batch_{int(match.group(1)):02d}" if match else path.stem
         batch_id = str(data.get("batch_id") or data.get("id") or fallback_id)
         batch_reviews[batch_id] = data
+        batch_review_sources[batch_id] = path.relative_to(project_dir).as_posix()
     if batch_reviews:
         artifacts["batch_reviews"] = batch_reviews
+        artifacts["_batch_review_sources"] = batch_review_sources
     # decision_log historically also lives at project root
     if "decision_log" not in artifacts:
         data = _read_json(project_dir / "decision_log.json")
@@ -646,6 +650,113 @@ def _resolve_commercial_asset(project_dir: Path, raw: str) -> Optional[str]:
     return None
 
 
+def _resolve_commercial_media(
+    project_dir: Path,
+    raw: str,
+    asset_dir: str,
+    allowed_extensions: set[str],
+) -> Optional[str]:
+    """Resolve an allowed media file within the current project's asset dir."""
+    if not raw:
+        return None
+    media_dir = (project_dir / "assets" / asset_dir).resolve()
+    candidate = Path(raw)
+    if ".." in candidate.parts:
+        return None
+    if candidate.is_absolute():
+        path = candidate
+    else:
+        parts = candidate.parts
+        if parts and parts[0] == "projects":
+            if len(parts) < 3 or parts[1] != project_dir.name:
+                return None
+            path = project_dir / Path(*parts[2:])
+        else:
+            path = project_dir / candidate
+    try:
+        resolved = path.resolve()
+        resolved.relative_to(media_dir)
+        if (
+            resolved.is_file()
+            and resolved.suffix.lower() in allowed_extensions
+        ):
+            return _rel(project_dir, resolved)
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _resolve_commercial_image(project_dir: Path, raw: str) -> Optional[str]:
+    """Resolve only allowed image files below ``assets/images``."""
+    return _resolve_commercial_media(
+        project_dir,
+        raw,
+        "images",
+        MEDIA_IMAGE_EXT,
+    )
+
+
+def _resolve_commercial_video(project_dir: Path, raw: str) -> Optional[str]:
+    """Resolve only allowed video files below ``assets/video``."""
+    return _resolve_commercial_media(
+        project_dir,
+        raw,
+        "video",
+        MEDIA_VIDEO_EXT,
+    )
+
+
+def _resolve_commercial_stage_video(project_dir: Path, raw: Any) -> Optional[str]:
+    """Resolve a non-empty, project-relative stage clip below ``assets/video``."""
+    path_text = str(raw or "").strip()
+    if not path_text or re.match(r"^[A-Za-z]:[\\/]", path_text):
+        return None
+    normalized = path_text.replace("\\", "/")
+    candidate = Path(normalized)
+    if candidate.is_absolute() or candidate.parts[:2] != ("assets", "video"):
+        return None
+    resolved = _resolve_commercial_video(project_dir, normalized)
+    if resolved is None:
+        return None
+    try:
+        if (project_dir / resolved).stat().st_size <= 0:
+            return None
+    except OSError:
+        return None
+    return resolved
+
+
+def _brief_image_rows(raw_images: Any) -> list[tuple[str, dict[str, Any]]]:
+    """Normalize legacy brief image maps, direct paths, and path lists."""
+    rows: list[tuple[str, dict[str, Any]]] = []
+
+    def add(raw: Any, fallback_name: str = "") -> None:
+        if isinstance(raw, str):
+            path = raw.strip()
+            if path:
+                rows.append((fallback_name or Path(path).name, {"path": path}))
+        elif isinstance(raw, dict):
+            path = raw.get("path")
+            if isinstance(path, str) and path.strip():
+                rows.append((
+                    fallback_name or Path(path).name,
+                    deepcopy(raw),
+                ))
+
+    if isinstance(raw_images, str):
+        add(raw_images)
+    elif isinstance(raw_images, list):
+        for raw in raw_images:
+            add(raw)
+    elif isinstance(raw_images, dict):
+        if isinstance(raw_images.get("path"), str):
+            add(raw_images)
+        else:
+            for filename, raw in raw_images.items():
+                add(raw, str(filename))
+    return rows
+
+
 def _parse_time_span(raw: str) -> tuple[Optional[float], Optional[float]]:
     """Parse '00:00-00:04' or '0-4' into start/end seconds."""
     if not raw or not isinstance(raw, str):
@@ -737,18 +848,24 @@ def _build_commercial_board(
     show_players = show_preview
 
     images: list[dict[str, Any]] = []
-    for filename, meta in (brief.get("images") or {}).items():
-        if not isinstance(meta, dict):
-            continue
+    brief_images_by_beat: dict[str, str] = {}
+    brief_image_candidates: list[str] = []
+    for filename, meta in _brief_image_rows(brief.get("images")):
         role = meta.get("role") or ""
-        rel = meta.get("path") or f"assets/images/{filename}"
-        resolved = _resolve_asset_path(project_dir, rel)
+        rel = meta.get("path") or ""
+        resolved = _resolve_commercial_image(project_dir, str(rel))
+        beat_id = str(meta.get("beat") or "").strip()
+        if beat_id and resolved:
+            brief_images_by_beat.setdefault(beat_id, resolved)
+        if resolved and resolved not in brief_image_candidates:
+            brief_image_candidates.append(resolved)
         images.append({
             "file": filename,
             "role": role,
             "role_zh": ROLE_LABELS_ZH.get(role, role or "素材"),
-            "path": _rel(project_dir, resolved) if resolved else rel,
+            "path": resolved,
             "exists": resolved is not None,
+            "missing_path": rel if resolved is None else None,
             "hero_only_motion": role == "product_hero",
         })
 
@@ -796,35 +913,159 @@ def _build_commercial_board(
         if not isinstance(entry, dict):
             continue
         beat_id = str(first_present(entry.get("beat"), entry.get("id")) or "").strip()
-        path = entry.get("path") or ""
-        resolved = _resolve_asset_path(project_dir, path) if path else None
+        path = str(entry.get("path") or "")
+        kind = entry.get("kind")
+        if kind == "image" or (
+            kind is None and Path(path).suffix.lower() in MEDIA_IMAGE_EXT
+        ):
+            kind = "image"
+            resolved_rel = _resolve_commercial_image(project_dir, path)
+            resolved_path = project_dir / resolved_rel if resolved_rel else None
+        elif kind == "video":
+            resolved_rel = _resolve_commercial_video(project_dir, path)
+            resolved_path = project_dir / resolved_rel if resolved_rel else None
+        else:
+            resolved_path = None
         item = {
             "label": entry.get("label"),
             "label_zh": entry.get("label_zh") or entry.get("label") or "",
-            "kind": entry.get("kind"),
+            "kind": kind,
+            "origin": entry.get("origin"),
+            "status": entry.get("status"),
             "file": entry.get("file"),
-            "path": _rel(project_dir, resolved) if resolved else path,
-            "exists": resolved is not None if path else False,
+            "path": _rel(project_dir, resolved_path) if resolved_path else None,
+            "missing_path": path if path and resolved_path is None else None,
+            "exists": resolved_path is not None,
             "selected": bool(entry.get("selected")),
             "note_zh": entry.get("note_zh") or "",
         }
         ledger_by_beat.setdefault(beat_id, []).append(item)
 
-    beats: list[dict[str, Any]] = []
-    overview_rows = overview_doc.get("overview") or []
-    if not overview_rows and seg_by_beat:
-        overview_rows = [
-            {"beat": b, "time": seg_by_beat[b].get("time"), "status": seg_by_beat[b].get("status")}
-            for b in seg_by_beat
-        ]
-    for row in overview_rows:
-        if not isinstance(row, dict):
+    planned_by_beat: dict[str, list[dict[str, Any]]] = {}
+    for entry in ledger_doc.get("planned_entries") or []:
+        if not isinstance(entry, dict):
             continue
+        beat_id = str(entry.get("beat") or "").strip()
+        if not beat_id:
+            continue
+        item = deepcopy(entry)
+        status = str(item.get("status") or "")
+        item.pop("path", None)
+        if status == "ready":
+            output_path = str(item.get("output_path") or "")
+            if item.get("kind") == "image":
+                resolved_rel = _resolve_commercial_image(project_dir, output_path)
+                resolved_output = project_dir / resolved_rel if resolved_rel else None
+            elif item.get("kind") == "video":
+                resolved_rel = _resolve_commercial_video(project_dir, output_path)
+                resolved_output = project_dir / resolved_rel if resolved_rel else None
+            else:
+                resolved_output = None
+            if resolved_output is not None:
+                item["path"] = _rel(project_dir, resolved_output)
+                item["exists"] = True
+            else:
+                item["status"] = "failed"
+                item["exists"] = False
+                if output_path:
+                    item["missing_output_path"] = output_path
+                item.setdefault(
+                    "error_zh",
+                    "输出文件不存在" if output_path else "未提供输出文件路径",
+                )
+        planned_by_beat.setdefault(beat_id, []).append(item)
+
+    beats: list[dict[str, Any]] = []
+    overview_rows = [
+        row for row in (overview_doc.get("overview") or [])
+        if isinstance(row, dict)
+    ]
+    segment_evidence: list[dict[str, Any]] = []
+    segment_by_beat: dict[str, dict[str, Any]] = {}
+    seen_segment_paths: set[tuple[str, str]] = set()
+
+    def append_segment_evidence(
+        raw: dict[str, Any],
+        *,
+        batch_id: str = "",
+        source_artifact: str = "artifacts/review_overview.json",
+    ) -> None:
+        output_path = str(raw.get("output_path") or "").strip()
+        resolved = _resolve_commercial_stage_video(project_dir, output_path)
+        if resolved is None:
+            return
+        beat_id = str(first_present(raw.get("beat"), raw.get("id")) or "").strip()
+        identity = batch_id or beat_id
+        if not identity or (identity, resolved) in seen_segment_paths:
+            return
+        seen_segment_paths.add((identity, resolved))
+        item = deepcopy(raw)
+        item["output_path"] = output_path
+        item["path"] = resolved
+        item["exists"] = True
+        item["artifact_path"] = source_artifact
+        if batch_id:
+            item["batch_id"] = batch_id
+        else:
+            item["beat"] = beat_id
+            segment_by_beat[beat_id] = item
+        segment_evidence.append(item)
+
+    for row in overview_rows:
+        append_segment_evidence(row)
+    referenced_batch_ids: set[str] = set()
+    for batch in overview_doc.get("batches") or []:
+        if not isinstance(batch, dict):
+            continue
+        batch_id = str(first_present(batch.get("id"), batch.get("batch_id")) or "").strip()
+        if batch_id:
+            referenced_batch_ids.add(batch_id)
+            append_segment_evidence(batch, batch_id=batch_id)
+    batch_review_sources = artifacts.get("_batch_review_sources") or {}
+    for batch_id, review in (artifacts.get("batch_reviews") or {}).items():
+        if not isinstance(review, dict):
+            continue
+        normalized_batch_id = str(
+            first_present(review.get("batch_id"), review.get("id"), batch_id) or ""
+        ).strip()
+        source_artifact = batch_review_sources.get(batch_id)
+        if normalized_batch_id in referenced_batch_ids and source_artifact:
+            append_segment_evidence(
+                review,
+                batch_id=normalized_batch_id,
+                source_artifact=source_artifact,
+            )
+
+    known_overview_beats = {
+        str(first_present(row.get("beat"), row.get("id")) or "").strip()
+        for row in overview_rows
+    }
+    for beat_id in dict.fromkeys(
+        [*seg_by_beat.keys(), *ledger_by_beat.keys(), *planned_by_beat.keys()]
+    ):
+        if not beat_id or beat_id in known_overview_beats:
+            continue
+        plan = seg_by_beat.get(beat_id) or {}
+        overview_rows.append({
+            "beat": beat_id,
+            "time": plan.get("time"),
+            "status": plan.get("status"),
+        })
+        known_overview_beats.add(beat_id)
+    unambiguous_brief_reference = (
+        brief_image_candidates[0]
+        if len(known_overview_beats) == 1 and len(brief_image_candidates) == 1
+        else None
+    )
+    for row in overview_rows:
         beat_id = str(first_present(row.get("beat"), row.get("id")) or "").strip()
         plan = seg_by_beat.get(beat_id) or {}
         asset = first_present(row.get("asset"), plan.get("asset")) or ""
         asset_alt = first_present(row.get("asset_alt"), plan.get("asset_alt")) or ""
         resolved_asset = _resolve_commercial_asset(project_dir, asset) if asset else None
+        reviewed_segment = segment_by_beat.get(beat_id)
+        if reviewed_segment is not None:
+            resolved_asset = reviewed_segment["path"]
         resolved_asset_alt = (
             _resolve_commercial_asset(project_dir, asset_alt) if asset_alt else None
         )
@@ -832,11 +1073,24 @@ def _build_commercial_board(
         t1 = plan.get("t_end")
         if t0 is None or t1 is None:
             t0, t1 = _parse_time_span(first_present(row.get("time"), plan.get("time")) or "")
-        reference = first_present(
+        explicit_reference = first_present(
             row.get("ref"),
             plan.get("ref"),
             plan.get("ref_image"),
         )
+        reference_path = (
+            _resolve_commercial_image(project_dir, str(explicit_reference or ""))
+            if explicit_reference
+            else None
+        )
+        if explicit_reference:
+            reference = explicit_reference
+        else:
+            reference_path = (
+                brief_images_by_beat.get(beat_id)
+                or unambiguous_brief_reference
+            )
+            reference = reference_path
         beats.append({
             "beat": beat_id,
             "time": first_present(row.get("time"), plan.get("time")),
@@ -854,10 +1108,7 @@ def _build_commercial_board(
             "angle_use": first_present(row.get("angle_use"), plan.get("angle_use")),
             "status": first_present(row.get("status"), plan.get("status")),
             "ref": reference,
-            "reference_path": _resolve_commercial_asset(
-                project_dir,
-                str(reference or ""),
-            ) if reference else None,
+            "reference_path": reference_path,
             "asset_path": resolved_asset,
             "asset_missing_path": asset if asset and not resolved_asset else None,
             "asset_alt_path": resolved_asset_alt,
@@ -873,6 +1124,7 @@ def _build_commercial_board(
                 plan.get("need_detail_zh"),
             ),
             "ledger": ledger_by_beat.get(beat_id) or [],
+            "planned_entries": planned_by_beat.get(beat_id) or [],
         })
 
     duration = (
@@ -956,21 +1208,57 @@ def _build_commercial_board(
             "examples_zh": meta.get("examples_zh"),
         }
 
-    def evidence_media(raw: Any) -> dict[str, Any] | None:
+    def evidence_media(raw: Any) -> dict[str, Any]:
         path = str(raw or "").strip()
-        if not path:
-            return None
-        resolved = _resolve_asset_path(project_dir, path)
+        resolved = _canonical_video_path(project_dir, path)
         if resolved is not None:
-            try:
-                resolved.resolve().relative_to(project_dir.resolve())
-            except (OSError, ValueError):
-                resolved = None
+            return {
+                "path": resolved,
+                "exists": True,
+                "missing_path": None,
+                "reason_code": None,
+                "missing_reason_zh": None,
+                "conflict_with": None,
+            }
+        candidate = _canonical_video_candidate(project_dir, path)
+        is_missing = candidate is not None and not candidate.exists()
         return {
-            "path": _rel(project_dir, resolved) if resolved else None,
-            "exists": resolved is not None,
-            "missing_path": path if resolved is None else None,
+            "path": None,
+            "exists": False,
+            "missing_path": path or None,
+            "reason_code": (
+                "missing_stage_media"
+                if is_missing
+                else ("invalid_stage_media" if path else None)
+            ),
+            "missing_reason_zh": (
+                f"媒体文件不存在：{path}"
+                if is_missing
+                else (
+                    "阶段 canonical 媒体必须是当前项目内存在、非空视频文件。"
+                    if path
+                    else None
+                )
+            ),
+            "conflict_with": None,
         }
+
+    def invalidate_reused_evidence(
+        evidence: dict[str, Any],
+        later_stage: str,
+    ) -> None:
+        reused_path = evidence.get("path")
+        evidence.update({
+            "path": None,
+            "exists": False,
+            "missing_path": reused_path,
+            "reason_code": "canonical_path_conflict",
+            "missing_reason_zh": (
+                f"canonical 路径冲突：前序阶段与后续 {later_stage} "
+                "复用同一视频，前序证据按缺失处理。"
+            ),
+            "conflict_with": later_stage,
+        })
 
     decision_rows = _commercial_decisions_summary(artifacts.get("decision_log") or {})
     delivery_row = next(
@@ -983,6 +1271,45 @@ def _build_commercial_board(
     sample_media = evidence_media(sample_doc.get("path"))
     draft_media = evidence_media(draft_doc.get("path"))
     final_media = evidence_media(final_review.get("output_path"))
+    if final_media.get("path"):
+        for earlier_media in (sample_media, draft_media):
+            if earlier_media.get("path") == final_media["path"]:
+                invalidate_reused_evidence(earlier_media, "compose")
+        for segment_media in segment_evidence:
+            if segment_media.get("path") == final_media["path"]:
+                invalidate_reused_evidence(segment_media, "compose")
+    if (
+        draft_media.get("path")
+        and sample_media.get("path") == draft_media["path"]
+    ):
+        invalidate_reused_evidence(sample_media, "draft")
+    if draft_media.get("path"):
+        for segment_media in segment_evidence:
+            if segment_media.get("path") == draft_media["path"]:
+                invalidate_reused_evidence(segment_media, "draft")
+    if sample_media.get("path"):
+        for segment_media in segment_evidence:
+            if segment_media.get("path") == sample_media["path"]:
+                invalidate_reused_evidence(sample_media, "segment")
+                break
+    for beat in beats:
+        segment_media = segment_by_beat.get(str(beat.get("beat") or ""))
+        if (
+            segment_media
+            and segment_media.get("reason_code") == "canonical_path_conflict"
+        ):
+            beat["asset_path"] = None
+            beat["asset_conflict_reason_zh"] = segment_media.get(
+                "missing_reason_zh"
+            )
+    sample_beat_ids: list[str] = []
+    raw_sample_beat_ids = sample_doc.get("beat_ids")
+    if not isinstance(raw_sample_beat_ids, list):
+        raw_sample_beat_ids = []
+    for raw_beat_id in raw_sample_beat_ids:
+        beat_id = str(raw_beat_id).strip() if isinstance(raw_beat_id, str) else ""
+        if beat_id and beat_id not in sample_beat_ids:
+            sample_beat_ids.append(beat_id)
 
     def named_render_candidate(kind: str) -> dict[str, Any] | None:
         """Find explicit legacy sample/draft names without treating them as evidence."""
@@ -1004,9 +1331,8 @@ def _build_commercial_board(
     draft_candidate = None if draft_attached else named_render_candidate("draft")
     stage_evidence = {
         "sample": {
-            "path": None,
-            "exists": False,
-            **(sample_media or {}),
+            **sample_media,
+            "beat_ids": sample_beat_ids,
             "artifact_path": "artifacts/sample_reel.json" if sample_attached else None,
             "evidence_attached": sample_attached,
             "candidate": sample_candidate,
@@ -1018,10 +1344,9 @@ def _build_commercial_board(
                 or sample_doc.get("user_response_text")
             ),
         },
+        "segment": segment_evidence,
         "draft": {
-            "path": None,
-            "exists": False,
-            **(draft_media or {}),
+            **draft_media,
             "artifact_path": "artifacts/full_draft_pro.json" if draft_attached else None,
             "evidence_attached": draft_attached,
             "candidate": draft_candidate,
@@ -1030,13 +1355,13 @@ def _build_commercial_board(
             "modification_list": draft_doc.get("modification_list") or [],
         },
         "compose": {
-            **(final_media or {}),
+            **final_media,
             "status": final_review.get("status"),
             "technical_probe": (final_review.get("checks") or {}).get("technical_probe") or {},
             "issues_found": final_review.get("issues_found") or [],
         },
         "delivery": {
-            **(final_media or {}),
+            **final_media,
             "quality_status": final_review.get("status"),
             "issues_found": final_review.get("issues_found") or [],
             "decision": delivery_row.get("selected") if delivery_row else None,
@@ -1190,6 +1515,203 @@ def _find_poster(project_dir: Path, state: dict) -> Optional[str]:
     return None
 
 
+_EDIT_GATE_MESSAGES_ZH = {
+    "wrong_stage": "初稿审查阶段起才可提交；交付确认阶段仅修订环可继续。",
+    "full_draft_missing": "缺少 full_draft_pro，尚不能进入剪辑修订。",
+    "full_draft_invalid": "full_draft_pro 格式无效，无法确认初稿证据。",
+    "latest_render_missing": "缺少最新成片，或 canonical 成片路径无效。",
+    "cuts_empty": "没有可编辑片段。",
+    "cut_source_outside_assets_video": "片段源文件必须位于当前项目 assets/video 内。",
+    "cut_source_not_video": "片段源文件不是合法视频格式。",
+    "cut_source_missing": "片段源文件不存在。",
+    "cut_source_empty": "片段源文件为空。",
+    "compose_required": "cuts 已应用，需要重合成并更新 canonical 成片版本。",
+}
+
+
+def _canonical_video_candidate(project_dir: Path, raw: Any) -> Optional[Path]:
+    """Resolve a safe in-project video candidate without requiring it to exist."""
+    if not isinstance(raw, str) or not raw.strip():
+        return None
+    normalized = raw.strip().replace("\\", "/")
+    candidate = Path(normalized)
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return None
+    parts = candidate.parts
+    if parts and parts[0] == "projects":
+        if len(parts) < 3 or parts[1] != project_dir.name:
+            return None
+        candidate = Path(*parts[2:])
+    if candidate.suffix.lower() not in MEDIA_VIDEO_EXT:
+        return None
+    try:
+        resolved = (project_dir / candidate).resolve()
+        resolved.relative_to(project_dir.resolve())
+    except (OSError, ValueError):
+        return None
+    return resolved
+
+
+def _canonical_video_path(project_dir: Path, raw: Any) -> Optional[str]:
+    """Resolve one canonical artifact video without scanning for substitutes."""
+    resolved = _canonical_video_candidate(project_dir, raw)
+    if resolved is None:
+        return None
+    try:
+        if not resolved.is_file() or resolved.stat().st_size <= 0:
+            return None
+    except OSError:
+        return None
+    return _rel(project_dir, resolved)
+
+
+def _cut_source_failure(project_dir: Path, raw: Any) -> Optional[str]:
+    """Return a concrete edit-gate failure code for one cuts.source."""
+    if not isinstance(raw, str) or not raw.strip():
+        return "cut_source_outside_assets_video"
+    normalized = raw.strip().replace("\\", "/")
+    candidate = Path(normalized)
+    if (
+        candidate.is_absolute()
+        or ".." in candidate.parts
+        or len(candidate.parts) < 3
+        or candidate.parts[:2] != ("assets", "video")
+    ):
+        return "cut_source_outside_assets_video"
+    if candidate.suffix.lower() not in MEDIA_VIDEO_EXT:
+        return "cut_source_not_video"
+    try:
+        resolved = (project_dir / candidate).resolve()
+        resolved.relative_to((project_dir / "assets" / "video").resolve())
+        if not resolved.is_file():
+            return "cut_source_missing"
+        if resolved.stat().st_size <= 0:
+            return "cut_source_empty"
+    except (OSError, ValueError):
+        return "cut_source_outside_assets_video"
+    return None
+
+
+def _build_editing_gate(
+    project_dir: Path,
+    artifacts: dict[str, dict],
+    stages: list[dict],
+) -> dict[str, Any]:
+    """Derive the single state gate consumed by both UI and POST /intents."""
+    active = next(
+        (
+            stage for stage in stages
+            if stage.get("status") in ("in_progress", "awaiting_human")
+        ),
+        None,
+    )
+    stage_name = active.get("name") if active else None
+    reasons: list[dict[str, str]] = []
+
+    def reject(code: str) -> None:
+        if any(reason["code"] == code for reason in reasons):
+            return
+        reasons.append({"code": code, "friendly_zh": _EDIT_GATE_MESSAGES_ZH[code]})
+
+    if stage_name not in {"draft_review", "delivery_signoff"}:
+        reject("wrong_stage")
+
+    full_draft = artifacts.get("full_draft_pro")
+    if not isinstance(full_draft, dict) or not full_draft:
+        reject("full_draft_missing")
+        full_draft = {}
+    elif (
+        not isinstance(full_draft.get("path"), str)
+        or not full_draft["path"].strip()
+        or not isinstance(full_draft.get("issue_segments"), list)
+        or not isinstance(full_draft.get("modification_list"), list)
+    ):
+        reject("full_draft_invalid")
+    elif _canonical_video_path(project_dir, full_draft.get("path")) is None:
+        reject("full_draft_invalid")
+
+    canonical_raw = full_draft.get("path")
+    if stage_name == "delivery_signoff":
+        final_review = artifacts.get("final_review")
+        canonical_raw = (
+            final_review.get("output_path")
+            if isinstance(final_review, dict)
+            else None
+        )
+    latest_render = _canonical_video_path(project_dir, canonical_raw)
+    if latest_render is None:
+        reject("latest_render_missing")
+
+    edit_decisions = artifacts.get("edit_decisions")
+    cuts = (
+        edit_decisions.get("cuts")
+        if isinstance(edit_decisions, dict)
+        and isinstance(edit_decisions.get("cuts"), list)
+        else []
+    )
+    if not cuts:
+        reject("cuts_empty")
+    else:
+        for cut in cuts:
+            code = _cut_source_failure(
+                project_dir,
+                cut.get("source") if isinstance(cut, dict) else None,
+            )
+            if code:
+                reject(code)
+
+    if (
+        isinstance(edit_decisions, dict)
+        and edit_decisions.get("requires_compose") is True
+        and cuts
+    ):
+        from lib.edit_apply import cuts_digest
+
+        current_revision = cuts_digest(cuts)
+        decisions_revision = edit_decisions.get("cuts_revision")
+        render_artifact = (
+            artifacts.get("final_review")
+            if stage_name == "delivery_signoff"
+            else full_draft
+        )
+        render_revision = (
+            render_artifact.get("cuts_revision")
+            if isinstance(render_artifact, dict)
+            else None
+        )
+        if (
+            decisions_revision != current_revision
+            or render_revision != current_revision
+        ):
+            reject("compose_required")
+
+    reason_codes = [reason["code"] for reason in reasons]
+    enabled = not reasons
+    return {
+        "enabled": enabled,
+        "stage": stage_name,
+        "reason_codes": reason_codes,
+        "reasons": reasons,
+        "friendly_zh": (
+            "剪辑输入已就绪，可提交轻量剪辑要求。"
+            if enabled
+            else "当前不可提交剪辑要求：" + "；".join(
+                reason["friendly_zh"] for reason in reasons
+            )
+        ),
+        "latest_render": {
+            "path": latest_render,
+            "exists": latest_render is not None,
+            "artifact": (
+                "final_review"
+                if stage_name == "delivery_signoff"
+                else "full_draft_pro"
+            ),
+        },
+        "cut_count": len(cuts),
+    }
+
+
 def _last_activity(project_dir: Path) -> float:
     """Most recent mtime among state-bearing files (bounded scan)."""
     latest = 0.0
@@ -1302,6 +1824,9 @@ def load_board_state(project_dir: Path) -> dict[str, Any]:
         state["commercial"] = _build_commercial_board(
             project_dir, marker, artifacts, stages, media, cost, legacy_checkpoints,
         )
+        state["editing_gate"] = _build_editing_gate(project_dir, artifacts, stages)
+        state["commercial"]["editing_gate"] = state["editing_gate"]
+    artifacts.pop("_batch_review_sources", None)
     state["poster"] = _find_poster(project_dir, state)
     return state
 

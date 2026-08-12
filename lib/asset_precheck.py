@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 from collections import Counter
+from copy import deepcopy
 from pathlib import Path
 from typing import Any
 
@@ -28,6 +29,15 @@ _DURATION_BANDS: tuple[tuple[int, int, int, tuple[str, ...]], ...] = (
     (30, 2, 6, ("product_hero", "product_angle", "product_detail", "on_body")),
     (60, 3, 10, ("product_hero", "product_angle", "product_detail", "on_body", "lifestyle")),
 )
+
+_ENTRY_METADATA_FIELDS = {
+    "beat",
+    "kind",
+    "origin",
+    "selected",
+    "label_zh",
+    "note_zh",
+}
 
 
 def _suggested_class(filename: str) -> str:
@@ -182,8 +192,11 @@ def build_asset_ledger(
     gap_fill: str = "none",
     identity_anchor_path: str = "",
     confirmed_at: str = "",
+    entry_metadata: dict[str, dict[str, Any]] | None = None,
+    planned_entries: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Merge scan facts with user-confirmed classes into ``asset_ledger``."""
+    metadata_by_path = entry_metadata if isinstance(entry_metadata, dict) else {}
     entries_out: list[dict[str, Any]] = []
     confirmed: list[str] = []
     for entry in precheck.get("entries") or []:
@@ -203,8 +216,18 @@ def build_asset_ledger(
             identity_anchor_path
             and (path == identity_anchor_path or entry.get("file") == identity_anchor_path)
         )
+        row = deepcopy(entry)
+        metadata = (
+            metadata_by_path.get(path)
+            or metadata_by_path.get(str(entry.get("file") or ""))
+            or {}
+        )
+        if isinstance(metadata, dict):
+            for key in _ENTRY_METADATA_FIELDS:
+                if key in metadata:
+                    row[key] = deepcopy(metadata[key])
         row = {
-            **entry,
+            **row,
             "user_class": user_class,
             "status": "identity_anchor" if is_anchor else "confirmed",
             "is_identity_anchor": is_anchor,
@@ -218,7 +241,7 @@ def build_asset_ledger(
         gap_fill=gap_fill,
         user_confirmed_shortage=gap_fill != "none",
     )
-    return {
+    ledger = {
         "version": "1.0",
         "project_id": project_id,
         "confirmed_at": confirmed_at,
@@ -233,3 +256,10 @@ def build_asset_ledger(
         },
         "asset_requirements": requirements,
     }
+    if planned_entries is not None:
+        ledger["planned_entries"] = [
+            deepcopy(entry)
+            for entry in planned_entries
+            if isinstance(entry, dict)
+        ]
+    return ledger

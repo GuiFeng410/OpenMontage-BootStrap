@@ -18,9 +18,11 @@ Status flow::
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
+from uuid import uuid4
 
 from lib.paths import PROJECTS_DIR
 from schemas.artifacts import validate_artifact
@@ -56,6 +58,14 @@ class IntentConflictError(IntentError):
     """Raised when an intent id already exists with different content."""
 
 
+class CodedIntentError(IntentError):
+    """Intent failure with a stable, safe external error code."""
+
+    def __init__(self, message: str, *, code: str):
+        super().__init__(message)
+        self.code = code
+
+
 def _check_id(what: str, value: str) -> None:
     if not value or value in (".", "..") or _FORBIDDEN_IN_ID.intersection(value):
         raise IntentError(f"invalid {what}: {value!r}")
@@ -74,6 +84,21 @@ def intent_path(project_id: str, intent_id: str) -> Path:
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def _check_semantics(data: dict[str, Any]) -> None:
@@ -103,7 +128,63 @@ def validate_intent(data: dict[str, Any]) -> None:
     _check_semantics(data)
 
 
-def create_intent(project_id: str, data: dict[str, Any]) -> dict:
+def source_render_matches(project_dir: Path, raw: Any, current: str) -> bool:
+    """Return whether a project-relative source points at the canonical render."""
+    if not isinstance(raw, str) or not raw.strip():
+        return False
+    candidate = Path(raw.strip().replace("\\", "/"))
+    if candidate.is_absolute() or ".." in candidate.parts:
+        return False
+    if candidate.parts and candidate.parts[0] == "projects":
+        if len(candidate.parts) < 3 or candidate.parts[1] != project_dir.name:
+            return False
+        candidate = Path(*candidate.parts[2:])
+    try:
+        expected = (project_dir / candidate).resolve()
+        expected.relative_to(project_dir.resolve())
+        actual = (project_dir / current).resolve()
+    except (OSError, ValueError):
+        return False
+    return expected == actual
+
+
+def _validate_new_source_render(
+    project_dir: Path,
+    data: dict[str, Any],
+    canonical_source_render: Optional[str],
+) -> None:
+    source_render = (data.get("base") or {}).get("source_render")
+    if not isinstance(source_render, str) or not source_render.strip():
+        raise CodedIntentError(
+            "missing_source_render",
+            code="missing_source_render",
+        )
+    if canonical_source_render is None:
+        from backlot.state import load_board_state
+
+        gate = load_board_state(project_dir).get("editing_gate") or {}
+        canonical_source_render = (gate.get("latest_render") or {}).get("path")
+    if (
+        not isinstance(canonical_source_render, str)
+        or not canonical_source_render.strip()
+        or not source_render_matches(
+            project_dir,
+            source_render,
+            canonical_source_render,
+        )
+    ):
+        raise CodedIntentError(
+            "source_render_mismatch",
+            code="source_render_mismatch",
+        )
+
+
+def create_intent(
+    project_id: str,
+    data: dict[str, Any],
+    *,
+    canonical_source_render: Optional[str] = None,
+) -> dict:
     """Write a new pending intent. Idempotent on identical ``intent_id``.
 
     Returns the stored record with a ``duplicate`` flag (True when the id
@@ -120,6 +201,7 @@ def create_intent(project_id: str, data: dict[str, Any]) -> dict:
     if data.get("project_id") != project_id:
         raise IntentError("project_id mismatch between path and body")
     validate_intent(data)
+    _validate_new_source_render(project_dir, data, canonical_source_render)
 
     target = intent_path(project_id, data["intent_id"])
     if target.is_file():
@@ -129,7 +211,7 @@ def create_intent(project_id: str, data: dict[str, Any]) -> dict:
         raise IntentConflictError(f"intent already exists with different content: {data['intent_id']}")
 
     target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _atomic_write_json(target, data)
     return {**data, "duplicate": False}
 
 
@@ -156,18 +238,25 @@ def list_intents(project_id: str) -> list[dict]:
     return items
 
 
-def update_status(project_id: str, intent_id: str, new_status: str) -> dict:
-    """Transition an intent's status. Returns the updated record."""
+def transition_status(intent: dict[str, Any], new_status: str) -> dict[str, Any]:
+    """Build a validated status transition without writing it."""
     if new_status not in VALID_STATUSES:
         raise IntentError(f"unknown status: {new_status}")
-    intent = get_intent(project_id, intent_id)
-    if intent is None:
-        raise IntentError(f"intent not found: {intent_id}")
     current = intent.get("status", "pending")
     if new_status not in _TRANSITIONS.get(current, frozenset()):
         raise IntentError(f"illegal transition: {current} -> {new_status}")
-    intent["status"] = new_status
-    intent["updated_at"] = _now_iso()
+    updated = dict(intent)
+    updated["status"] = new_status
+    updated["updated_at"] = _now_iso()
+    return updated
+
+
+def update_status(project_id: str, intent_id: str, new_status: str) -> dict:
+    """Transition an intent's status. Returns the updated record."""
+    intent = get_intent(project_id, intent_id)
+    if intent is None:
+        raise IntentError(f"intent not found: {intent_id}")
+    intent = transition_status(intent, new_status)
     path = intent_path(project_id, intent_id)
-    path.write_text(json.dumps(intent, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _atomic_write_json(path, intent)
     return intent

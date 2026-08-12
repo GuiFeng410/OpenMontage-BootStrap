@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import os
+import threading
 import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
@@ -111,6 +112,7 @@ HISTORY_DIRNAME = "history"
 CHECKPOINT_LOCK_FILENAME = ".checkpoint.lock"
 CHECKPOINT_LOCK_TIMEOUT_SECONDS = 10.0
 CHECKPOINT_LOCK_POLL_SECONDS = 0.02
+_CHECKPOINT_LOCK_FILE_INIT_GUARD = threading.Lock()
 
 
 class CheckpointValidationError(ValueError):
@@ -123,14 +125,24 @@ def _project_checkpoint_lock(pipeline_dir: Path, project_id: str):
     project_dir = pipeline_dir / project_id
     project_dir.mkdir(parents=True, exist_ok=True)
     lock_path = project_dir / CHECKPOINT_LOCK_FILENAME
-    lock_file = open(lock_path, "a+b")
+    # Initialize byte 0 without a buffered file object. On Windows, separate
+    # processes may both observe a newly-created lock file as empty. O_APPEND
+    # makes each stale observer write at the then-current EOF, so a process
+    # cannot flush back onto byte 0 after another process has locked it.
+    with _CHECKPOINT_LOCK_FILE_INIT_GUARD:
+        init_fd = os.open(
+            lock_path,
+            os.O_CREAT | os.O_APPEND | os.O_RDWR,
+        )
+        try:
+            if os.fstat(init_fd).st_size == 0:
+                os.write(init_fd, b"\0")
+        finally:
+            os.close(init_fd)
+    lock_file = open(lock_path, "r+b", buffering=0)
     deadline = time.monotonic() + CHECKPOINT_LOCK_TIMEOUT_SECONDS
     acquired = False
     try:
-        lock_file.seek(0, os.SEEK_END)
-        if lock_file.tell() == 0:
-            lock_file.write(b"\0")
-            lock_file.flush()
         while not acquired:
             lock_file.seek(0)
             try:

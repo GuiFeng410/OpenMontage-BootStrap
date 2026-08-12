@@ -38,7 +38,41 @@
           },
           "is_identity_anchor": { "type": "boolean" },
           "issues": { "type": "array", "items": { "type": "string" } },
-          "duplicate_of": { "type": "string" }
+          "duplicate_of": { "type": "string" },
+          "beat": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "enum": ["image", "video"] },
+          "origin": { "type": "string" },
+          "selected": { "type": "boolean" },
+          "label_zh": { "type": "string" },
+          "note_zh": { "type": "string" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "planned_entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["beat", "kind", "status"],
+        "properties": {
+          "beat": { "type": "string", "minLength": 1 },
+          "kind": { "type": "string", "enum": ["image", "video"] },
+          "status": {
+            "type": "string",
+            "enum": ["planned", "generating", "ready", "failed"]
+          },
+          "source_paths": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "prompt_zh": { "type": "string" },
+          "planned_output_path": { "type": "string" },
+          "output_path": { "type": "string" },
+          "provider": { "type": "string" },
+          "model": { "type": "string" },
+          "error_zh": { "type": "string" },
+          "label_zh": { "type": "string" },
+          "note_zh": { "type": "string" }
         },
         "additionalProperties": true
       }

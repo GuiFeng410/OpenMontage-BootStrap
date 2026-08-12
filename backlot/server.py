@@ -188,10 +188,32 @@ def create_app() -> FastAPI:
         if not isinstance(payload, dict):
             raise HTTPException(status_code=400, detail="body must be a JSON object")
         project_id = payload.get("project_id")
-        if not isinstance(project_id, str):
+        if not isinstance(project_id, str) or not project_id.strip():
             raise HTTPException(status_code=400, detail="missing project_id")
+        project_dir = _safe_project_dir(project_id)
+        board_state = await asyncio.to_thread(load_board_state, project_dir)
+        editing_gate = board_state.get("editing_gate")
+        if not isinstance(editing_gate, dict) or editing_gate.get("enabled") is not True:
+            gate = editing_gate if isinstance(editing_gate, dict) else {
+                "reason_codes": ["editing_gate_unavailable"],
+                "friendly_zh": "当前项目没有可消费的剪辑门禁状态。",
+            }
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "kind": "editing_gate",
+                    "reason_codes": gate.get("reason_codes") or ["editing_gate_locked"],
+                    "friendly_zh": gate.get("friendly_zh") or "当前不可提交剪辑要求。",
+                },
+            )
         try:
-            record = await asyncio.to_thread(create_intent, project_id, payload)
+            latest_render = editing_gate.get("latest_render") or {}
+            record = await asyncio.to_thread(
+                create_intent,
+                project_id,
+                payload,
+                canonical_source_render=latest_render.get("path"),
+            )
         except UnknownProjectError:
             raise HTTPException(status_code=404, detail="unknown project")
         except IntentConflictError:

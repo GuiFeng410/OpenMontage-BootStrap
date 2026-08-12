@@ -7,7 +7,20 @@
   "properties": {
     "version": { "type": "string" },
     "review_mode": { "type": "string", "enum": ["normal", "pro"] },
-    "overview": { "type": "array", "items": { "type": "object" } },
+    "overview": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "output_path": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?![A-Za-z]:[\\\\/])(?![\\\\/])(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+\\.(?:[mM][pP]4|[wW][eE][bB][mM]|[mM][oO][vV])$"
+          }
+        },
+        "additionalProperties": true
+      }
+    },
     "batches": { "type": "array", "items": { "type": "object" } }
   },
   "additionalProperties": true

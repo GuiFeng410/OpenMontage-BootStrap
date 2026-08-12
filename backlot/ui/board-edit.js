@@ -8,6 +8,7 @@
 //   提交 = POST /intents（只写 intents/ 意图层，不碰 checkpoint/artifacts 真相）
 
 import { el, mediaURL } from "/ui/lib.js";
+import { submitErrorMessage } from "/ui/board-edit-errors.js";
 
 const EDIT_INTENTS_URL = "/intents";
 
@@ -22,6 +23,8 @@ let playerSrc = null;    // 当前播放器路径（null = 播放最新成片）
 let selectedCut = null;  // 当前选中的片段 id
 let undoStack = [];      // 操作历史快照（undo 用），最长为 UNDO_LIMIT
 let rerender = () => {};
+let editingEnabled = false;
+let editingGateMessage = "";
 
 const UNDO_LIMIT = 20;
 
@@ -64,8 +67,11 @@ function resetDraft(cuts, latest) {
 
 export function renderEditTab(s) {
   const cuts = ((s.artifacts || {}).edit_decisions || {}).cuts || [];
-  const renders = (s.media || {}).renders || [];
-  const latest = renders[0] || null;
+  const gate = s.editing_gate || null;
+  const latestPath = gate?.latest_render?.path || null;
+  const latest = latestPath ? { path: latestPath } : null;
+  editingEnabled = gate?.enabled === true;
+  editingGateMessage = gate?.friendly_zh || "当前项目没有可消费的剪辑门禁状态。";
   const sig = cutsSig(cuts);
   // 仅当服务端成片版本变化时重置草稿（保留用户未提交的标记）。
   if (baseRender !== (latest ? latest.path : null) || baseSig !== sig) {
@@ -80,9 +86,8 @@ export function renderEditTab(s) {
         ? `基于成片 ${latest.path.split("/").pop()} 标记；Agent 在聊天确认后出片。`
         : "尚无成片可剪辑 — 请先完成出片。")));
 
-  if (!cuts.length || !latest) {
-    root.append(el("div", { class: "hint" },
-      "尚无成片可剪辑。先走完 04-produce 出片，再来这里标记。"));
+  if (!editingEnabled) {
+    root.append(el("div", { class: "hint edit-gate-locked" }, editingGateMessage));
     return root;
   }
 
@@ -144,8 +149,10 @@ function clipEl(cut, i) {
       el("div", { class: "edit-clip-no" }, `第 ${i + 1} 段`),
       el("div", { class: "edit-clip-name" }, (cut.source || cut.cut_id || "").split("/").pop()),
       el("div", { class: "edit-clip-time" }, `${cut.in.toFixed(1)}–${cut.out.toFixed(1)}s · ${dur.toFixed(1)}s`)),
-    el("div", { class: "edit-clip-del", title: "删除此片段",
-      onclick: (e) => { e.stopPropagation(); pushUndo(); strip.splice(i, 1); lastFeedback = null; selectedCut = null; rerender(); } }, "✕"),
+    strip.length > 1
+      ? el("div", { class: "edit-clip-del", title: "删除此片段",
+        onclick: (e) => { e.stopPropagation(); pushUndo(); strip.splice(i, 1); lastFeedback = null; selectedCut = null; rerender(); } }, "✕")
+      : null,
     el("div", { class: "edit-clip-handle right", title: "拖动改结束时间",
       onpointerdown: (e) => startTrim(e, i, "out"), onclick: (e) => e.stopPropagation() }));
 
@@ -317,6 +324,14 @@ function resetDraftUI() {
 }
 
 async function submit(projectId, feedback, btn) {
+  if (!editingEnabled) {
+    feedback.textContent = editingGateMessage || "当前不可提交剪辑要求，请刷新项目状态。";
+    return;
+  }
+  if (!baseRender) {
+    feedback.textContent = "当前 canonical 成片路径无效，请刷新项目状态后重试。";
+    return;
+  }
   const { actions, lines } = collectChanges();
   const note = userNote.trim();
   if (!actions.length && !note) {
@@ -344,8 +359,8 @@ async function submit(projectId, feedback, btn) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(intent),
     });
-    let detail = "";
-    try { detail = (await resp.json()).detail || ""; } catch (_) { /* keep empty */ }
+    let detail = null;
+    try { detail = (await resp.json()).detail ?? null; } catch (_) { /* keep empty */ }
     if (resp.ok) {
       // 提交回执：让用户明确看到"已提交了什么"，避免重复误提交。
       const summary = lines.length
@@ -358,9 +373,7 @@ async function submit(projectId, feedback, btn) {
       rerender();
       return;
     }
-    if (resp.status === 409) feedback.textContent = "这组改动之前已经提交过了，无需重复提交。";
-    else if (resp.status === 404) feedback.textContent = "项目找不到了，请刷新后重试。";
-    else feedback.textContent = `提交失败（${resp.status}）：${detail || "请稍后重试"}`;
+    feedback.textContent = submitErrorMessage(resp.status, detail);
   } catch (err) {
     feedback.textContent = `提交失败：${err}`;
   } finally {

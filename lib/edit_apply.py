@@ -17,11 +17,24 @@ Digest algorithm mirrors the board's JS (djb2 → base36, values rounded to
 
 from __future__ import annotations
 
+import copy
 import json
+import os
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
 
-from lib.edit_intents import IntentError, UnknownProjectError, get_intent, update_status
+from lib.checkpoint import _project_checkpoint_lock
+from lib.edit_intents import (
+    CodedIntentError,
+    IntentError,
+    UnknownProjectError,
+    get_intent,
+    intent_path,
+    source_render_matches,
+    transition_status,
+    update_status,
+)
 from lib.paths import PROJECTS_DIR
 
 EDIT_DECISIONS_RELPATH = "artifacts/edit_decisions.json"
@@ -86,11 +99,123 @@ def load_edit_decisions(project_id: str) -> dict[str, Any]:
 
 def save_edit_decisions(project_id: str, data: dict[str, Any]) -> None:
     path = edit_decisions_path(project_id)
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
+    try:
+        temporary.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        os.replace(temporary, path)
+    finally:
+        try:
+            temporary.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def current_cuts_digest(project_id: str) -> str:
     return cuts_digest(load_edit_decisions(project_id)["cuts"])
+
+
+def _json_bytes(data: dict[str, Any]) -> bytes:
+    return (json.dumps(data, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+
+
+def _cleanup_temporary(path: Path) -> None:
+    try:
+        path.unlink()
+    except (FileNotFoundError, OSError):
+        pass
+
+
+def _commit_json_transaction(
+    entries: list[tuple[Path, dict[str, Any]]],
+) -> None:
+    """Stage and atomically replace multiple JSON files with rollback."""
+    staged: list[tuple[Path, Path]] = []
+    backups: dict[Path, bytes | None] = {}
+    rollback_temporaries: list[Path] = []
+    committed: list[Path] = []
+    try:
+        for target, data in entries:
+            backups[target] = target.read_bytes() if target.exists() else None
+            temporary = target.with_name(
+                f".{target.name}.transaction.{uuid4().hex}.tmp"
+            )
+            temporary.write_bytes(_json_bytes(data))
+            staged.append((temporary, target))
+
+        try:
+            for temporary, target in staged:
+                os.replace(temporary, target)
+                committed.append(target)
+        except Exception as commit_error:
+            recovery_issues: list[str] = []
+            for target in reversed(committed):
+                original = backups[target]
+                if original is None:
+                    try:
+                        target.unlink()
+                    except FileNotFoundError:
+                        pass
+                    except OSError as rollback_error:
+                        recovery_issues.append(str(rollback_error))
+                    continue
+                rollback = target.with_name(
+                    f".{target.name}.rollback.{uuid4().hex}.tmp"
+                )
+                rollback_temporaries.append(rollback)
+                try:
+                    rollback.write_bytes(original)
+                    os.replace(rollback, target)
+                except OSError as rollback_error:
+                    recovery_issues.append(str(rollback_error))
+                    try:
+                        target.write_bytes(original)
+                    except OSError as fallback_error:
+                        recovery_issues.append(str(fallback_error))
+            if recovery_issues:
+                raise CodedIntentError(
+                    "edit intent transaction needs recovery; original bytes "
+                    "were restored with best effort",
+                    code="intent_transaction_recovery_required",
+                ) from commit_error
+            raise CodedIntentError(
+                "edit intent transaction failed; changes rolled back",
+                code="intent_transaction_failed",
+            ) from commit_error
+    except CodedIntentError:
+        raise
+    except Exception as exc:
+        raise CodedIntentError(
+            "edit intent transaction failed before commit",
+            code="intent_transaction_failed",
+        ) from exc
+    finally:
+        for temporary, _target in staged:
+            _cleanup_temporary(temporary)
+        for temporary in rollback_temporaries:
+            _cleanup_temporary(temporary)
+
+
+def _revalidate_editing_gate(
+    project_id: str,
+    intent: dict[str, Any],
+) -> None:
+    from backlot.state import load_board_state
+
+    project_dir = PROJECTS_DIR / project_id
+    gate = load_board_state(project_dir).get("editing_gate") or {}
+    if gate.get("enabled") is not True:
+        codes = ",".join(gate.get("reason_codes") or ["unavailable"])
+        raise IntentError(f"editing gate locked: {codes}")
+    source_render = (intent.get("base") or {}).get("source_render")
+    latest_render = (gate.get("latest_render") or {}).get("path")
+    if (
+        not isinstance(latest_render, str)
+        or not source_render_matches(project_dir, source_render, latest_render)
+    ):
+        raise IntentError("intent source render no longer matches canonical render")
 
 
 # ---- plan text (human-readable, for chat confirmation) --------------------
@@ -156,43 +281,79 @@ def apply_intent(project_id: str, intent_id: str) -> dict[str, Any]:
     Returns a summary dict. Raises ``IntentError`` on invalid state /
     missing intent / malformed edit_decisions.
     """
-    intent = get_intent(project_id, intent_id)
-    if intent is None:
-        raise IntentError(f"intent not found: {intent_id}")
-    if intent.get("status") not in _APPLIABLE:
-        raise IntentError(f"intent not applicable (status={intent.get('status')}): {intent_id}")
+    project_dir = PROJECTS_DIR / project_id
+    if not project_dir.is_dir():
+        raise UnknownProjectError(f"unknown project: {project_id}")
 
-    # Drift: the board's revision must match the cuts on disk right now.
-    expected = (intent.get("base") or {}).get("cuts_revision")
-    actual = current_cuts_digest(project_id)
-    if expected and actual != expected:
-        update_status(project_id, intent_id, "superseded")
-        return {
-            "applied": False,
-            "reason": "drift",
-            "friendly_zh": "你标记的是旧版本，视频已经更新了。请刷新后重新标记，避免改错位置。",
-            "intent_status": "superseded",
-        }
+    with _project_checkpoint_lock(PROJECTS_DIR, project_id):
+        intent = get_intent(project_id, intent_id)
+        if intent is None:
+            raise IntentError(f"intent not found: {intent_id}")
+        if intent.get("status") not in _APPLIABLE:
+            raise IntentError(
+                f"intent not applicable (status={intent.get('status')}): {intent_id}"
+            )
+        source_render = (intent.get("base") or {}).get("source_render")
+        if not isinstance(source_render, str) or not source_render.strip():
+            raise CodedIntentError(
+                "intent migration required: missing canonical source_render",
+                code="missing_source_render",
+            )
 
-    edits = load_edit_decisions(project_id)
-    before = edits.get("cuts") or []
-    after = _apply_actions(list(before), intent)
-    edits["cuts"] = after
-    save_edit_decisions(project_id, edits)
-    update_status(project_id, intent_id, "applied")
+        edits = load_edit_decisions(project_id)
+        before = copy.deepcopy(edits.get("cuts") or [])
+        actual = cuts_digest(before)
+        expected = (intent.get("base") or {}).get("cuts_revision")
+        if expected and actual != expected:
+            update_status(project_id, intent_id, "superseded")
+            return {
+                "applied": False,
+                "reason": "drift",
+                "friendly_zh": "你标记的是旧版本，视频已经更新了。请刷新后重新标记，避免改错位置。",
+                "intent_status": "superseded",
+            }
+
+        _revalidate_editing_gate(project_id, intent)
+        after = _apply_actions(copy.deepcopy(before), intent)
+        if not after:
+            raise CodedIntentError(
+                "edit intent cannot remove the final cut",
+                code="cuts_empty_after_apply",
+            )
+        after_revision = cuts_digest(after)
+        edits["cuts"] = after
+        edits["requires_compose"] = True
+        edits["cuts_revision"] = after_revision
+        updated_intent = transition_status(intent, "applied")
+        _commit_json_transaction([
+            (edit_decisions_path(project_id), edits),
+            (intent_path(project_id, intent_id), updated_intent),
+        ])
 
     has_ops = bool(intent.get("actions"))
-    removed = [c.get("id") for c in before if c not in after]
+    after_ids = {c.get("id") for c in after}
+    removed = [c.get("id") for c in before if c.get("id") not in after_ids]
     return {
         "applied": True,
+        "requires_compose": True,
         "intent_status": "applied",
+        "intent": {"intent_id": intent_id, "status": "applied"},
         "cut_count": {"before": len(before), "after": len(after)},
+        "cuts_revision": {
+            "before": actual,
+            "after": after_revision,
+        },
         "removed_cuts": removed,
         "plan": plan_text(intent),
+        "next_step": {
+            "action": "compose",
+            "required": True,
+            "edit_decisions": EDIT_DECISIONS_RELPATH,
+        },
         "friendly_zh": (
-            "收到，我会按备注处理。"
+            "已按备注处理并记录，等待 Agent 重合成。"
             if not has_ops
-            else "改好了，新版本已生成，去剪辑标签看看效果吧。"
+            else "cuts 已应用，等待 Agent 重合成后才能查看新版本。"
         ),
     }
 

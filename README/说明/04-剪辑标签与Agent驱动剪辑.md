@@ -1,47 +1,89 @@
 # 04-剪辑标签与 Agent 驱动剪辑
 
-> 适用：Backlot 看板 · 剪辑 POC（2026-08-12 完成并真实闭环验证）。  
-> 配套代码：`backlot/ui/board-edit.js` · `lib/edit_intents.py` · `lib/edit_apply.py` · `POST /intents`。
+> 适用：`bootstrap-commercial` 七阶段 Backlot 看板。剪辑标签是初稿与交付前的修订入口，不是独立编辑器，也不新增第八阶段。
 
-## 这是什么
+## 功能边界
 
-Backlot 项目页新增「✂ 剪辑」标签：用户对成片做**轻量标记**，Agent 读取标记、聊天确认后执行并重合成新版本。**Agent 主导剪辑，用户轻量参与**——不是剪映式手工编辑器。
+用户在「✂ 剪辑」标签对 canonical 成片做轻量标记，Agent 读取要求、在聊天展示计划并取得确认，再修改 cuts 和重合成。既有七阶段、聊天审批、费用门禁与 provider/runtime 锁定均保持不变。
 
-## 用户怎么用（操作速查）
+Backlot 仍以 checkpoint 和 `artifacts/*.json` 为真相层，只读展示这些证据。网页唯一写例外是把用户标记写入 `projects/<id>/intents/`；网页不能修改 checkpoint、canonical artifact 或生产决定。
 
-| 手势 | 作用 |
+## 开放条件
+
+剪辑只在当前活动阶段为 `draft_review` 或 `delivery_signoff` 的修订环开放；`final_compose` 合成中锁定。以下条件必须全部满足：
+
+1. `full_draft_pro` 存在、结构有效，且其媒体真实可读；
+2. canonical latest render 有效：`draft_review` 读取 `full_draft_pro.path`，`delivery_signoff` 读取 `final_review.output_path`；
+3. `edit_decisions.cuts` 非空；
+4. 所有 `cuts[].source` 都指向当前项目 `assets/video/` 下真实、非空的视频；
+5. 若 cuts 已应用并标记 `requires_compose=true`，当前 render artifact 已记录 matching `cuts_revision`。
+
+缺任一条件时，播放器编辑、拖拽、删除、备注提交等操作整体锁定，`POST /intents` 也会返回 editing gate `409`。源文件缺失不是“不阻塞”；应先修复 canonical cuts 与媒体证据。
+
+## 用户操作
+
+| 操作 | 作用 |
 |------|------|
-| 点击片段 | 播放器预览该片段（源文件缺失给提示，不阻塞） |
-| 拖片段左右边缘 | 改该段时长（trim） |
+| 点击片段 | 预览该 `cuts[].source` 片段 |
+| 拖片段左右边缘 | 修改入点/出点（trim） |
 | 拖片段左侧 ⠿ 手柄 | 调整顺序（reorder） |
-| 点片段右上角 ✕ | 删除该段（delete） |
-| 备注框 | 可填文字；**无改动时也可仅提交备注** |
-| ↩ 撤销上一步 / ⟲ 重置为服务端版本 | 提交前补救：逐级回退 / 一键放弃所有未提交改动 |
-| 提交剪辑要求 | 落盘 intent，等待 Agent 处理（提交后显示「已提交：…」回执） |
+| 点片段右上角 ✕ | 删除片段（delete） |
+| 备注框 | 填写文字要求；无 cuts 动作时也可只提交备注 |
+| ↩ 撤销 / ⟲ 重置 | 提交前逐步回退，或恢复服务端 cuts |
+| 提交剪辑要求 | 只创建 intent，等待 Agent 在聊天复述和确认 |
 
-## Agent 闭环流程
+## 固定闭环
 
 ```text
-用户标记 → POST /intents → projects/<id>/intents/<intent_id>.json（status=pending）
-→ Agent 读取（produce_list_intents）→ 聊天展示计划（plan_text）
-→ 用户确认 → 应用（produce_apply_intent）：
-   漂移检测（cuts 摘要不一致 → superseded + 提示重标）
-   → 仅更新 edit_decisions.cuts（保留其他字段）
-   → 缺失片段动作跳过 → status=applied
-→ 按新 cuts 重合成新版本 → 回显
+用户提交 → POST /intents（status=pending）
+→ produce_list_intents
+→ Agent 在聊天展示 plan
+→ 用户明确确认
+→ produce_apply_intent
+   只改 edit_decisions.cuts
+   写 requires_compose=true 与新 cuts_revision
+→ produce_compose_preflight
+→ produce_compose_start
+→ produce_job_status（轮询 compose status）
+→ 新媒体真实落盘
+→ 在同一阶段更新 canonical artifact 的新路径、版本与 matching cuts_revision
+   draft_review → full_draft_pro
+   delivery_signoff → final_review
+→ 重新读取 editing gate；enabled 后修订环才重新开放
 ```
 
-## 约定与边界
+`produce_apply_intent` 不生成媒体，也不自动得到新版本。apply 后只能说明“cuts 已应用，等待 Agent 重合成”；只有 compose 完成、媒体落盘且 canonical artifact 同步更新后，才能说“新版本已生成”。
 
-- **意图层与真相层分离**：`intents/` 是意图层（网页唯一写例外）；checkpoint / artifacts 是真相层，网页禁止写。
-- **片段视频路径**：统一落 `projects/<id>/assets/video/`（命名如 `seg_<beat>.mp4`）；`edit_decisions.cuts.source` 用项目内相对路径。
-- **cuts_revision**：cuts 内容摘要（djb2，与前端一致），用于版本漂移检测。
-- **状态机**：`pending → planned → confirmed → applied`；异常分支 `rejected` / `superseded`。
+## Intent 与漂移保护
 
-## MCP 工具
+每个新 intent 的 `base` 必须同时包含：
 
-`produce_list_intents(project_id)` 列 pending 请求；`produce_apply_intent(project_id, intent_id)` 应用（漂移检查 + 仅动 cuts）。
+- `artifact="edit_decisions"`
+- `source_render`：提交时的 canonical latest render
+- `cuts_revision`：提交时 cuts 的内容摘要
 
-## 演示项目
+apply 在项目锁内重新校验活动阶段、editing gate、canonical render、`source_render` 和 cuts digest。cuts 已漂移时 intent 进入 `superseded`，要求刷新后重标；阶段、render 或 gate 不匹配时拒绝应用。任何失败都不得部分修改 cuts。
 
-`projects/edit-demo-jade`（翡翠手镯，真实 ffmpeg 片段）可体验完整闭环。
+校验通过后，更新后的 cuts、`requires_compose`、`cuts_revision` 与 intent 的 `applied` 状态作为跨文件事务提交；任一文件失败会回滚。
+
+旧 intent 若缺 `source_render`，仍可在列表中查看审计内容，但不可应用，必须在当前 canonical 版本重新标记。
+
+## 409 的两种含义
+
+- editing gate `409`：响应包含 `kind="editing_gate"`、`reason_codes` 和中文原因，表示当前阶段或 canonical 证据不满足剪辑条件。
+- 重复/冲突 `409`：同一 `intent_id` 已存在但内容不同，表示重复提交冲突。
+
+两者不能都解释为“之前已经提交过”。前端应优先显示 editing gate 的具体原因。
+
+## 阶段媒体证据
+
+- 新写入的 `sample_reel` 必须带非空 `beat_ids`，只证明该试片覆盖的 Beat。
+- `review_overview.overview[].output_path` 是对应 Beat 的分段 canonical 视频。
+- `sample_reel.path`、Beat 分段路径、`full_draft_pro.path`、`final_review.output_path` 分别证明试片、分段、初稿、终稿，互不借用。
+- 每次生成必须原子完成“媒体落盘 + 当前 canonical artifact 路径/版本更新”。孤立媒体文件不算阶段证据，不得据此宣称完成。
+
+## 路径与状态
+
+- `edit_decisions.cuts.source` 使用项目内相对路径 `assets/video/<file>`。
+- `cuts_revision` 使用与前端一致的 cuts 内容摘要，用于版本漂移检测。
+- Intent 状态主链为 `pending → planned → confirmed → applied`，异常终态为 `rejected` / `superseded`。

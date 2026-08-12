@@ -235,7 +235,7 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 | # | 阶段（Backlot） | Skill | 原「表」落点（对用户可改叫法） | 面板展示 | 聊天 |
 |---|-----------------|-------|--------------------------------|----------|------|
 | 1 | `brief_locked` 方案确认 | **03** | 三点卡 → 主题/档位/时长/预算/评审（旧表1）→ 按档细化（旧表2）→ 比例卡 → **分段规划全文（旧表3）** | 方案摘要、选项、推荐、费用、`video_plan` 文案 | 逐项确认；规划就绪后「确认规划」 |
-| 2 | `assets_gate` 素材检查 | **03** | 素材预检闸（表2后表3前已扫的，在此收口分类/缺口） | **用户原图 + AI 扩展占位**按初步计划落入时间片段卡；预检摘要；**不出入片视频** | 确认分类或缺口策略；进阶段须发「已进入第 2 阶段」 |
+| 2 | `assets_gate` 素材检查 | **03** | 素材预检闸（表2后表3前已扫的，在此收口分类/缺口） | 已存在图片写 `asset_ledger.entries`；未产出的 AI 扩展写 `planned_entries` 状态卡；**不显示视频** | 确认分类或缺口策略；进阶段须发「已进入第 2 阶段」 |
 | 3 | `sample_review` 试片确认 | **04** | — | 试片成片、费用 | 试片是否过关 / 是否全长 |
 | 4 | `segment_build` 分段制作 | **04** | — | Beat 胶片、**镜提示词全文**、候选/抽帧（专业） | 专业：分批审查；普通：少打断 |
 | 5 | `draft_review` 初稿审查 | **04** | — | 初稿、问题片段、修改清单 | 确认修改清单后再改 |
@@ -645,12 +645,17 @@ produce_set_production_profile(
 4. 先将 `asset_precheck` 以内联 artifact 写入 `brief_locked/in_progress`（素材收口时写 `assets_gate/in_progress`）。仅在无素材、分类不明、低分辨率、重复、缺少所需角色，或需要补图/降级时，设置 `metadata.needs_user_decision=true` 并出示当前一个问题。
 5. 用户需决定时，完整证据在 Backlot；聊天只给网址 +「已进入第 N 阶段」+ 当前问题 + 推荐 + 回复示例。用户原话以 `asset_decision` 写入 `decision_log`。禁止静默补图或静默开始 I2I / I2V。
 6. 用户确认分类与缺口处理后，用 `lib.asset_precheck.build_asset_ledger` / `build_asset_requirements`（或等价）写入确认角色、`asset_requirements`、`asset_ledger`，再写入每段 `ref_image` / `gap_fill` 到 `video_plan`。最终 `brief_locked/awaiting_human` 必须同时携带 `brief`、`asset_precheck`、`video_plan`、完整 `segment_cards`（有则带 `asset_ledger`）。
-7. 进入顶层 `assets_gate` 前须落盘 `segment_cards`（时间 + `asset_plan_zh` / 缺口文案）与可展示的 `asset_ledger`（按 beat 挂用户图；AI 扩展用 `kind=image` + `note_zh=AI扩展占位` 或缺口字段）。该阶段面板**只显示图片与安排，不显示入片视频**。
+7. 进入顶层 `assets_gate` 前须落盘 `segment_cards`（时间 + `asset_plan_zh` / 缺口文案）与 canonical `asset_ledger`：
+   - 已实际存在的素材写 `entries`（actual entries）。每项除真实 `path` 外，按展示契约写 `beat`、`kind`、`origin`、`selected`、`label_zh`；商品图片路径必须真实位于当前项目 `assets/images/`。
+   - I2I 等尚未产出的图片只能写 `planned_entries`，状态只用 `planned` / `generating` / `ready` / `failed`。`planned_output_path` 只是计划，禁止创建不存在的文件或把计划路径塞进 `entries.path` 来伪装图片。
+   - 只有生成媒体已真实落入 `assets/images/`、canonical `asset_ledger` 已更新其 `output_path` 与状态为 `ready`，三者同时成立时，面板才可显示缩略图；缺文件的 `ready` 会按失败处理。
+   - 旧项目仅在“单 Beat + 单张图片”无歧义时可回退挂接；多 Beat 或多候选不得猜测归属，必须补齐显式 `beat` 关系。
+   - 素材检查页只显示图片与计划状态，`entries` / `planned_entries` 中的视频均不得在该页展示。
 
 **用户可见边界：**
 
 - 方案确认页：素材预检文字摘要；有风险时才折叠文件明细；时间线卡不出媒体。
-- 「素材检查」：用户原图 + AI 扩展占位按初步计划落入时间片段卡；视频仍从「试片确认」开始。
+- 「素材检查」：已存在图片与 `planned_entries` 计划状态按 Beat 展示；只有 `ready` 且已更新 canonical artifact、真实落盘到 `assets/images/` 的图片才显示缩略图。该页不显示视频，视频证据从「试片确认」开始。
 
 | 目标时长 | 最低可运行图片数 | 建议图片数 | 建议覆盖类型 |
 |----------|------------------|------------|--------------|

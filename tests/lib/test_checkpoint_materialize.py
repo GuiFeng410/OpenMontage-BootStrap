@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import multiprocessing
 import os
 import re
 import subprocess
@@ -79,6 +80,43 @@ def _decision_log(project_id: str, decision_id: str, selected: str) -> dict:
             }
         ],
     }
+
+
+def _spawn_checkpoint_writer(
+    root: str,
+    project_id: str,
+    stage: str,
+    artifact_name: str,
+    start_event,
+    result_queue,
+) -> None:
+    """Write one checkpoint from a spawn-safe independent process."""
+    try:
+        if not start_event.wait(timeout=10):
+            raise TimeoutError("checkpoint writer start barrier timed out")
+        path = write_checkpoint(
+            Path(root),
+            project_id,
+            stage,
+            "in_progress",
+            {artifact_name: {"writer": stage}},
+        )
+        result_queue.put(
+            {
+                "ok": True,
+                "stage": stage,
+                "path": str(path),
+            }
+        )
+    except BaseException as exc:
+        result_queue.put(
+            {
+                "ok": False,
+                "stage": stage,
+                "error_type": type(exc).__name__,
+                "error": str(exc),
+            }
+        )
 
 
 def _seed_decision_logs(project: Path, project_id: str) -> tuple[bytes, bytes]:
@@ -677,6 +715,74 @@ def test_project_lock_preserves_success_against_concurrent_failed_transaction(
     assert decision_ids == {"d-old", "d-success"}
     assert artifact_log == root_log
     assert (project / ".checkpoint.lock").exists()
+
+
+@pytest.mark.skipif(os.name != "nt", reason="Windows byte-lock initialization race")
+def test_two_spawned_processes_can_first_initialize_project_lock_and_write(
+    tmp_path: Path,
+) -> None:
+    project_id = "spawn-first-lock"
+    context = multiprocessing.get_context("spawn")
+    start_event = context.Event()
+    result_queue = context.Queue()
+    writers = [
+        context.Process(
+            target=_spawn_checkpoint_writer,
+            args=(
+                str(tmp_path),
+                project_id,
+                stage,
+                artifact_name,
+                start_event,
+                result_queue,
+            ),
+        )
+        for stage, artifact_name in (
+            ("proposal", "writer_a"),
+            ("script", "writer_b"),
+        )
+    ]
+
+    for writer in writers:
+        writer.start()
+    start_event.set()
+    for writer in writers:
+        writer.join(timeout=15)
+
+    results = [result_queue.get(timeout=5) for _ in writers]
+    for writer in writers:
+        assert not writer.is_alive()
+        assert writer.exitcode == 0
+    assert all(result["ok"] for result in results), results
+    assert {result["stage"] for result in results} == {"proposal", "script"}
+
+    project = tmp_path / project_id
+    for stage, artifact_name in (
+        ("proposal", "writer_a"),
+        ("script", "writer_b"),
+    ):
+        checkpoint = read_checkpoint(tmp_path, project_id, stage)
+        assert checkpoint is not None
+        assert checkpoint["artifacts"][artifact_name]["writer"] == stage
+        materialized = json.loads(
+            (project / "artifacts" / f"{artifact_name}.json").read_text(
+                encoding="utf-8"
+            )
+        )
+        assert materialized["writer"] == stage
+    lock_path = project / ".checkpoint.lock"
+    initialized_size = lock_path.stat().st_size
+    assert initialized_size >= 1
+
+    write_checkpoint(
+        tmp_path,
+        project_id,
+        "research",
+        "in_progress",
+        {"writer_c": {"writer": "research"}},
+    )
+
+    assert lock_path.stat().st_size == initialized_size
 
 
 def test_project_os_lock_is_released_when_holder_process_is_terminated(

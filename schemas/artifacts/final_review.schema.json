@@ -11,6 +11,10 @@
       "type": "string",
       "description": "Path to the rendered output file that was reviewed"
     },
+    "cuts_revision": {
+      "type": "string",
+      "minLength": 1
+    },
     "status": {
       "type": "string",
       "enum": ["pass", "revise", "fail"],

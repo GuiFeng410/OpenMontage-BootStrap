@@ -8,6 +8,7 @@ from mcp.server.fastmcp import FastMCP
 
 from openmontage.mcp.bootstrap import tools as T
 from openmontage.mcp.common.envelope import fail, ok
+from openmontage.mcp.common.errors import DoctorError
 
 mcp = FastMCP(
     "openmontage-bootstrap",
@@ -26,6 +27,21 @@ mcp = FastMCP(
 def _wrap(fn, *args, **kwargs) -> dict[str, Any]:
     try:
         return ok(fn(*args, **kwargs))
+    except Exception as exc:  # noqa: BLE001
+        return fail(exc)
+
+
+def _wrap_apply_intent(project_id: str, intent_id: str) -> dict[str, Any]:
+    try:
+        result = T.produce_apply_intent(project_id, intent_id)
+        if result.get("applied") is False:
+            reason = str(result.get("reason") or "conflict")
+            safe_reason = reason if reason.replace("_", "").isalnum() else "conflict"
+            raise DoctorError(
+                str(result.get("friendly_zh") or "edit intent could not be applied"),
+                code=f"intent_{safe_reason}",
+            )
+        return ok(result)
     except Exception as exc:  # noqa: BLE001
         return fail(exc)
 
@@ -282,6 +298,18 @@ def produce_approve_checkpoint(
 def produce_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
     """Append an approved chat decision to decision_log.json."""
     return _wrap(T.produce_append_decision, project_id, decision_json)
+
+
+@mcp.tool()
+def produce_list_intents(project_id: str) -> dict[str, Any]:
+    """List pending board edit intents for Agent review and chat approval."""
+    return _wrap(T.produce_list_intents, project_id)
+
+
+@mcp.tool()
+def produce_apply_intent(project_id: str, intent_id: str) -> dict[str, Any]:
+    """Apply an approved intent to cuts only; composition remains a separate step."""
+    return _wrap_apply_intent(project_id, intent_id)
 
 
 @mcp.tool()

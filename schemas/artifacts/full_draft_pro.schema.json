@@ -11,6 +11,7 @@
     "duration_probe": { "type": "number", "minimum": 0 },
     "status": { "type": "string" },
     "approved": { "type": "boolean" },
+    "cuts_revision": { "type": "string", "minLength": 1 },
     "issue_segments": {
       "type": "array",
       "description": "User-visible draft-review findings, tied to a beat and time range.",

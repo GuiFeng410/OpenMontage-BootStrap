@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import json
+import threading
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 
 import pytest
 
@@ -25,11 +28,46 @@ def project(monkeypatch, tmp_path):
     p = root / "demo-pro"
     (p / "artifacts").mkdir(parents=True)
     (p / "intents").mkdir(parents=True)
+    (p / "assets" / "video").mkdir(parents=True)
+    (p / "renders").mkdir(parents=True)
+    (p / "project.json").write_text(json.dumps({
+        "version": "1.0",
+        "project_id": "demo-pro",
+        "pipeline_type": "bootstrap-commercial",
+    }), encoding="utf-8")
+    for cut in _sample_cuts():
+        (p / cut["source"]).write_bytes(b"video")
+    (p / "renders" / "draft.mp4").write_bytes(b"video")
     (p / "artifacts" / "edit_decisions.json").write_text(json.dumps({
         "version": "1.0",
         "render_runtime": "ffmpeg",
         "cuts": _sample_cuts(),
     }, ensure_ascii=False, indent=2), encoding="utf-8")
+    (p / "artifacts" / "full_draft_pro.json").write_text(json.dumps({
+        "version": "1.0",
+        "path": "renders/draft.mp4",
+        "issue_segments": [],
+        "modification_list": [],
+    }), encoding="utf-8")
+    for index, stage in enumerate((
+        "brief_locked",
+        "assets_gate",
+        "sample_review",
+        "segment_build",
+    )):
+        (p / f"checkpoint_{stage}.json").write_text(json.dumps({
+            "stage": stage,
+            "status": "completed",
+            "timestamp": f"2026-08-12T00:0{index}:00Z",
+            "human_approved": True,
+            "artifacts": {},
+        }), encoding="utf-8")
+    (p / "checkpoint_draft_review.json").write_text(json.dumps({
+        "stage": "draft_review",
+        "status": "in_progress",
+        "timestamp": "2026-08-12T00:04:00Z",
+        "artifacts": {"full_draft_pro": "artifacts/full_draft_pro.json"},
+    }), encoding="utf-8")
     monkeypatch.setattr(ea, "PROJECTS_DIR", root)
     monkeypatch.setattr(ei, "PROJECTS_DIR", root)
     return p
@@ -42,7 +80,11 @@ def _intent(project_id="demo-pro", **overrides):
         "project_id": project_id,
         "created_at": "2026-08-12T00:00:00+00:00",
         "status": "pending",
-        "base": {"artifact": "edit_decisions", "cuts_revision": ea.cuts_digest(_sample_cuts())},
+        "base": {
+            "artifact": "edit_decisions",
+            "cuts_revision": ea.cuts_digest(_sample_cuts()),
+            "source_render": "renders/draft.mp4",
+        },
         "actions": [{"type": "delete", "cut_id": "c03"}],
     }
     data.update(overrides)
@@ -74,6 +116,69 @@ def test_apply_delete(project):
     assert [c["id"] for c in cuts] == ["c01", "c02", "c04"]
     assert result["removed_cuts"] == ["c03"]
     assert result["friendly_zh"]
+
+
+def test_delete_only_cut_fails_without_mutating_decisions_or_intent(project):
+    only_cut = _sample_cuts()[0]
+    decisions = ea.load_edit_decisions("demo-pro")
+    decisions["cuts"] = [only_cut]
+    ea.save_edit_decisions("demo-pro", decisions)
+    intent = _intent(
+        actions=[{"type": "delete", "cut_id": only_cut["id"]}],
+        base={
+            "artifact": "edit_decisions",
+            "cuts_revision": ea.cuts_digest([only_cut]),
+            "source_render": "renders/draft.mp4",
+        },
+    )
+    ei.create_intent("demo-pro", intent)
+    edits_path = project / "artifacts" / "edit_decisions.json"
+    intent_path = project / "intents" / "intent-t1.json"
+    before_edits = edits_path.read_bytes()
+    before_intent = intent_path.read_bytes()
+
+    with pytest.raises(ei.IntentError) as caught:
+        ea.apply_intent("demo-pro", "intent-t1")
+
+    assert getattr(caught.value, "code", None) == "cuts_empty_after_apply"
+    assert edits_path.read_bytes() == before_edits
+    assert intent_path.read_bytes() == before_intent
+
+
+def test_apply_result_requires_a_follow_up_compose(project):
+    ei.create_intent("demo-pro", _intent(actions=[{"type": "delete", "cut_id": "c03"}]))
+
+    result = ea.apply_intent("demo-pro", "intent-t1")
+
+    assert result["requires_compose"] is True
+    decisions = ea.load_edit_decisions("demo-pro")
+    assert decisions["requires_compose"] is True
+    assert decisions["cuts_revision"] == ea.current_cuts_digest("demo-pro")
+
+
+def test_apply_result_does_not_claim_a_new_render_already_exists(project):
+    ei.create_intent("demo-pro", _intent(actions=[{"type": "delete", "cut_id": "c03"}]))
+
+    result = ea.apply_intent("demo-pro", "intent-t1")
+
+    assert "新版本已生成" not in result["friendly_zh"]
+    assert "重合成" in result["friendly_zh"]
+
+
+def test_apply_result_reports_revision_and_next_compose_inputs(project):
+    before_revision = ea.current_cuts_digest("demo-pro")
+    ei.create_intent("demo-pro", _intent(actions=[{"type": "delete", "cut_id": "c03"}]))
+
+    result = ea.apply_intent("demo-pro", "intent-t1")
+
+    assert result["intent"] == {"intent_id": "intent-t1", "status": "applied"}
+    assert result["cuts_revision"]["before"] == before_revision
+    assert result["cuts_revision"]["after"] == ea.current_cuts_digest("demo-pro")
+    assert result["next_step"] == {
+        "action": "compose",
+        "required": True,
+        "edit_decisions": "artifacts/edit_decisions.json",
+    }
 
 
 def test_apply_trim_writes_reason(project):
@@ -161,6 +266,210 @@ def test_drift_marks_superseded_and_does_not_apply(project):
     assert ei.get_intent("demo-pro", "intent-t1")["status"] == "superseded"
     # cuts untouched
     assert ea.load_edit_decisions("demo-pro")["cuts"][0]["out_seconds"] == 6.0
+
+
+def test_apply_rechecks_stage_without_mutating_intent_or_cuts(project):
+    ei.create_intent("demo-pro", _intent())
+    before = ea.load_edit_decisions("demo-pro")
+    (project / "checkpoint_draft_review.json").write_text(json.dumps({
+        "stage": "draft_review",
+        "status": "completed",
+        "timestamp": "2026-08-12T00:05:00Z",
+        "human_approved": True,
+        "artifacts": {"full_draft_pro": "artifacts/full_draft_pro.json"},
+    }), encoding="utf-8")
+    (project / "checkpoint_final_compose.json").write_text(json.dumps({
+        "stage": "final_compose",
+        "status": "in_progress",
+        "timestamp": "2026-08-12T00:06:00Z",
+        "artifacts": {},
+    }), encoding="utf-8")
+
+    with pytest.raises(ei.IntentError, match="editing gate"):
+        ea.apply_intent("demo-pro", "intent-t1")
+
+    assert ea.load_edit_decisions("demo-pro") == before
+    assert ei.get_intent("demo-pro", "intent-t1")["status"] == "pending"
+
+
+def test_apply_rechecks_source_render_without_mutating_intent_or_cuts(project):
+    ei.create_intent("demo-pro", _intent())
+    before = ea.load_edit_decisions("demo-pro")
+    (project / "renders" / "draft-v2.mp4").write_bytes(b"video-v2")
+    (project / "artifacts" / "full_draft_pro.json").write_text(json.dumps({
+        "version": "1.0",
+        "path": "renders/draft-v2.mp4",
+        "issue_segments": [],
+        "modification_list": [],
+    }), encoding="utf-8")
+
+    with pytest.raises(ei.IntentError, match="source render"):
+        ea.apply_intent("demo-pro", "intent-t1")
+
+    assert ea.load_edit_decisions("demo-pro") == before
+    assert ei.get_intent("demo-pro", "intent-t1")["status"] == "pending"
+
+
+def test_legacy_intent_without_source_render_is_readable_but_not_applicable(project):
+    intent = _intent()
+    intent["base"].pop("source_render")
+    intent_path = project / "intents" / "intent-t1.json"
+    intent_path.write_text(json.dumps(intent), encoding="utf-8")
+    before_edits = (project / "artifacts" / "edit_decisions.json").read_bytes()
+    before_intent = intent_path.read_bytes()
+
+    assert ei.get_intent("demo-pro", "intent-t1")["intent_id"] == "intent-t1"
+    assert [item["intent_id"] for item in ei.list_intents("demo-pro")] == [
+        "intent-t1",
+    ]
+
+    with pytest.raises(ei.IntentError) as caught:
+        ea.apply_intent("demo-pro", "intent-t1")
+
+    assert getattr(caught.value, "code", None) == "missing_source_render"
+    assert (project / "artifacts" / "edit_decisions.json").read_bytes() == before_edits
+    assert intent_path.read_bytes() == before_intent
+
+
+def test_concurrent_same_revision_intents_only_apply_once(project, monkeypatch):
+    first = _intent(intent_id="intent-a", actions=[{"type": "delete", "cut_id": "c03"}])
+    second = _intent(intent_id="intent-b", actions=[{"type": "delete", "cut_id": "c04"}])
+    ei.create_intent("demo-pro", first)
+    ei.create_intent("demo-pro", second)
+    barrier = threading.Barrier(2)
+    original_save = ea.save_edit_decisions
+
+    def racing_save(project_id, data):
+        try:
+            barrier.wait(timeout=0.3)
+        except threading.BrokenBarrierError:
+            pass
+        original_save(project_id, data)
+
+    monkeypatch.setattr(ea, "save_edit_decisions", racing_save)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        results = list(pool.map(
+            lambda intent_id: ea.apply_intent("demo-pro", intent_id),
+            ("intent-a", "intent-b"),
+        ))
+
+    assert sum(result["applied"] is True for result in results) == 1
+    assert sorted(result.get("reason", "applied") for result in results) == [
+        "applied",
+        "drift",
+    ]
+    statuses = {
+        intent_id: ei.get_intent("demo-pro", intent_id)["status"]
+        for intent_id in ("intent-a", "intent-b")
+    }
+    assert sorted(statuses.values()) == ["applied", "superseded"]
+    assert len(ea.load_edit_decisions("demo-pro")["cuts"]) == 3
+
+
+def test_edit_decisions_write_is_atomic_on_replace_failure(project, monkeypatch):
+    before = (project / "artifacts" / "edit_decisions.json").read_bytes()
+    updated = ea.load_edit_decisions("demo-pro")
+    updated["cuts"] = updated["cuts"][:-1]
+
+    def fail_replace(_source, _target):
+        raise OSError("replace failed")
+
+    monkeypatch.setattr(ea.os, "replace", fail_replace)
+
+    with pytest.raises(OSError, match="replace failed"):
+        ea.save_edit_decisions("demo-pro", updated)
+
+    assert (project / "artifacts" / "edit_decisions.json").read_bytes() == before
+    assert list((project / "artifacts").glob("*.tmp")) == []
+
+
+def test_apply_rolls_back_both_files_when_intent_status_replace_fails(
+    project, monkeypatch
+):
+    ei.create_intent("demo-pro", _intent())
+    edits_path = project / "artifacts" / "edit_decisions.json"
+    intent_path = project / "intents" / "intent-t1.json"
+    before_edits = edits_path.read_bytes()
+    before_intent = intent_path.read_bytes()
+    original_replace = ea.os.replace
+
+    def fail_intent_replace(source, target):
+        if Path(target) == intent_path:
+            raise OSError("intent status replace failed")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(ea.os, "replace", fail_intent_replace)
+
+    with pytest.raises(ei.IntentError) as caught:
+        ea.apply_intent("demo-pro", "intent-t1")
+
+    assert getattr(caught.value, "code", None) == "intent_transaction_failed"
+    assert edits_path.read_bytes() == before_edits
+    assert intent_path.read_bytes() == before_intent
+    assert list(project.rglob("*.tmp")) == []
+
+    monkeypatch.setattr(ea.os, "replace", original_replace)
+    result = ea.apply_intent("demo-pro", "intent-t1")
+    assert result["applied"] is True
+    assert ei.get_intent("demo-pro", "intent-t1")["status"] == "applied"
+    assert len(ea.load_edit_decisions("demo-pro")["cuts"]) == 3
+
+
+def test_apply_stages_both_files_before_committing_either(project, monkeypatch):
+    ei.create_intent("demo-pro", _intent())
+    edits_path = project / "artifacts" / "edit_decisions.json"
+    intent_path = project / "intents" / "intent-t1.json"
+    original_replace = ea.os.replace
+    first_replace_checked = False
+
+    def inspect_first_replace(source, target):
+        nonlocal first_replace_checked
+        if not first_replace_checked:
+            first_replace_checked = True
+            staged = list(project.rglob("*.tmp"))
+            assert any(path.parent == edits_path.parent for path in staged)
+            assert any(path.parent == intent_path.parent for path in staged)
+        return original_replace(source, target)
+
+    monkeypatch.setattr(ea.os, "replace", inspect_first_replace)
+
+    result = ea.apply_intent("demo-pro", "intent-t1")
+
+    assert result["applied"] is True
+    assert first_replace_checked is True
+    assert ea.load_edit_decisions("demo-pro")["requires_compose"] is True
+    assert ei.get_intent("demo-pro", "intent-t1")["status"] == "applied"
+    assert list(project.rglob("*.tmp")) == []
+
+
+def test_apply_reports_recovery_error_if_atomic_rollback_replace_also_fails(
+    project, monkeypatch
+):
+    ei.create_intent("demo-pro", _intent())
+    edits_path = project / "artifacts" / "edit_decisions.json"
+    intent_path = project / "intents" / "intent-t1.json"
+    before_edits = edits_path.read_bytes()
+    before_intent = intent_path.read_bytes()
+    original_replace = ea.os.replace
+
+    def fail_commit_and_atomic_rollback(source, target):
+        source_path = Path(source)
+        target_path = Path(target)
+        if target_path == intent_path:
+            raise OSError("intent status replace failed")
+        if target_path == edits_path and ".rollback." in source_path.name:
+            raise OSError("atomic rollback replace failed")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(ea.os, "replace", fail_commit_and_atomic_rollback)
+
+    with pytest.raises(ei.IntentError) as caught:
+        ea.apply_intent("demo-pro", "intent-t1")
+
+    assert getattr(caught.value, "code", None) == "intent_transaction_recovery_required"
+    assert edits_path.read_bytes() == before_edits
+    assert intent_path.read_bytes() == before_intent
+    assert list(project.rglob("*.tmp")) == []
 
 
 # ---- plan text / inbox ----------------------------------------------------

@@ -1337,12 +1337,40 @@ def produce_apply_intent(project_id: str, intent_id: str) -> dict[str, Any]:
     if str(REPO_ROOT) not in sys.path:
         sys.path.insert(0, str(REPO_ROOT))
     from lib.edit_apply import apply_intent
-    from lib.edit_intents import IntentError
+    from lib.edit_intents import IntentError, UnknownProjectError
 
     try:
-        return apply_intent(project_id, intent_id)
+        result = apply_intent(project_id, intent_id)
+    except UnknownProjectError as exc:
+        raise DoctorError("unknown project", code="unknown_project") from exc
     except IntentError as exc:
-        return {"applied": False, "reason": "error", "detail": str(exc)}
+        safe_failures = {
+            "missing_source_render": (
+                "intent migration required: missing canonical source_render"
+            ),
+            "intent_transaction_failed": (
+                "edit intent transaction failed; changes rolled back"
+            ),
+            "intent_transaction_recovery_required": (
+                "edit intent transaction needs recovery; original bytes "
+                "were restored with best effort"
+            ),
+        }
+        code = getattr(exc, "code", None)
+        if code in safe_failures:
+            raise DoctorError(safe_failures[code], code=code) from exc
+        raise DoctorError(
+            "edit intent could not be applied",
+            code="intent_error",
+        ) from exc
+    if result.get("applied") is False:
+        reason = str(result.get("reason") or "conflict")
+        safe_reason = reason if reason.replace("_", "").isalnum() else "conflict"
+        raise DoctorError(
+            str(result.get("friendly_zh") or "edit intent could not be applied"),
+            code=f"intent_{safe_reason}",
+        )
+    return result
 
 
 def produce_read_state(project_id: str) -> dict[str, Any]:

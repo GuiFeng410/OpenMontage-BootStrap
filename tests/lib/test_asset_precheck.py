@@ -92,3 +92,69 @@ def test_build_asset_ledger_merges_user_classes(tmp_path):
     assert ledger["entries"][0]["is_identity_anchor"] is True
     assert ledger["summary"]["status_zh"] == "降级继续"
     assert ledger["asset_requirements"]["available_image_count"] == 1
+
+
+def test_build_asset_ledger_writes_production_metadata_into_real_entries(tmp_path):
+    project_dir = tmp_path / "ledger-production-metadata"
+    images_dir = project_dir / "assets" / "images"
+    image_path = "assets/images/bracelet_hero.png"
+    _image(project_dir / image_path, (900, 900))
+
+    ledger = build_asset_ledger(
+        project_id=project_dir.name,
+        precheck=scan_user_images(project_dir),
+        user_classes={image_path: "product_hero"},
+        entry_metadata={
+            image_path: {
+                "beat": "beat_01",
+                "kind": "image",
+                "origin": "user_upload",
+                "selected": True,
+                "label_zh": "商品身份主图",
+            }
+        },
+    )
+
+    entry = ledger["entries"][0]
+    assert {
+        key: entry[key]
+        for key in ("beat", "kind", "origin", "selected", "label_zh")
+    } == {
+        "beat": "beat_01",
+        "kind": "image",
+        "origin": "user_upload",
+        "selected": True,
+        "label_zh": "商品身份主图",
+    }
+
+
+def test_build_asset_ledger_keeps_top_level_planned_entries(tmp_path):
+    project_dir = tmp_path / "ledger-planned-entries"
+    image_path = "assets/images/bracelet_hero.png"
+    _image(project_dir / image_path, (900, 900))
+    planned_entries = [
+        {
+            "beat": f"beat_{index:02d}",
+            "kind": "video",
+            "status": status,
+            "source_paths": [image_path],
+            "prompt_zh": f"{status} 提示词",
+            "planned_output_path": f"assets/video/beat_{index:02d}.mp4",
+            "output_path": (
+                f"assets/video/beat_{index:02d}.mp4" if status == "ready" else ""
+            ),
+        }
+        for index, status in enumerate(
+            ("planned", "generating", "ready", "failed"),
+            start=1,
+        )
+    ]
+
+    ledger = build_asset_ledger(
+        project_id=project_dir.name,
+        precheck=scan_user_images(project_dir),
+        user_classes={image_path: "product_hero"},
+        planned_entries=planned_entries,
+    )
+
+    assert ledger["planned_entries"] == planned_entries

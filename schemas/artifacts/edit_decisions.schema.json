@@ -199,6 +199,14 @@
       "enum": ["remotion", "hyperframes", "ffmpeg"],
       "description": "Locked at proposal stage — technical runtime that realizes renderer_family. Edit MUST carry this forward unchanged unless a logged render_runtime_selection decision overrides it."
     },
+    "requires_compose": {
+      "type": "boolean",
+      "description": "True after cuts change until a canonical render records the matching cuts_revision."
+    },
+    "cuts_revision": {
+      "type": "string",
+      "minLength": 1
+    },
     "composition_mode": {
       "type": "string",
       "enum": ["templated", "atelier"],
