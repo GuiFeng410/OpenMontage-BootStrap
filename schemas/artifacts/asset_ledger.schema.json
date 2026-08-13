@@ -18,6 +18,51 @@
       "items": {
         "type": "object",
         "required": ["path", "user_class", "status"],
+        "not": { "required": ["beat", "beats"] },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "selected": { "const": false } },
+              "required": ["selected"]
+            },
+            "then": {
+              "anyOf": [
+                {
+                  "properties": { "reason": { "type": "string", "minLength": 1 } },
+                  "required": ["reason"]
+                },
+                {
+                  "properties": { "note_zh": { "type": "string", "minLength": 1 } },
+                  "required": ["note_zh"]
+                }
+              ]
+            }
+          },
+          {
+            "if": {
+              "anyOf": [
+                { "required": ["provider"] },
+                { "required": ["model"] },
+                { "required": ["candidate_paths"] },
+                { "required": ["candidate_output_path"] },
+                { "required": ["output_path"] },
+                { "required": ["planned_output_path"] },
+                { "required": ["review_status"] },
+                { "required": ["decision_id"] },
+                { "required": ["retry_count"] },
+                { "required": ["max_retries"] },
+                { "required": ["retry_of"] }
+              ]
+            },
+            "then": {
+              "anyOf": [
+                { "required": ["origin"] },
+                { "required": ["asset_source"] },
+                { "required": ["gap_fill"] }
+              ]
+            }
+          }
+        ],
         "properties": {
           "file": { "type": "string" },
           "path": { "type": "string", "minLength": 1 },
@@ -32,6 +77,8 @@
             "enum": [
               "pending_user_confirmation",
               "confirmed",
+              "ready",
+              "approved",
               "rejected",
               "identity_anchor"
             ]
@@ -39,10 +86,53 @@
           "is_identity_anchor": { "type": "boolean" },
           "issues": { "type": "array", "items": { "type": "string" } },
           "duplicate_of": { "type": "string" },
-          "beat": { "type": "string", "minLength": 1 },
+          "beat": {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              }
+            ],
+            "description": "Legacy beat assignment; new writers should use beats."
+          },
+          "beats": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
           "kind": { "type": "string", "enum": ["image", "video"] },
           "origin": { "type": "string" },
+          "asset_source": { "type": "string" },
+          "gap_fill": {
+            "type": "string",
+            "enum": ["none", "user_upload", "i2i", "concept_only"]
+          },
+          "provider": { "type": "string" },
+          "model": { "type": "string" },
+          "candidate_paths": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "candidate_output_path": { "type": "string" },
+          "planned_output_path": { "type": "string" },
+          "output_path": { "type": "string" },
+          "review_status": {
+            "type": "string",
+            "enum": ["pending", "review_pending", "approved", "rejected"]
+          },
+          "decision_id": { "type": "string", "minLength": 1 },
+          "retry_count": { "type": "integer", "minimum": 0 },
+          "max_retries": { "type": "integer", "minimum": 0 },
+          "retry_of": { "type": "string" },
           "selected": { "type": "boolean" },
+          "reason": {
+            "type": "string",
+            "description": "Why an actual asset is unused or excluded."
+          },
           "label_zh": { "type": "string" },
           "note_zh": { "type": "string" }
         },
@@ -53,23 +143,118 @@
       "type": "array",
       "items": {
         "type": "object",
-        "required": ["beat", "kind", "status"],
+        "required": ["kind", "status"],
+        "anyOf": [
+          { "required": ["beats"] },
+          { "required": ["beat"] }
+        ],
+        "not": { "required": ["beat", "beats"] },
+        "allOf": [
+          {
+            "if": {
+              "properties": { "kind": { "const": "image" } },
+              "required": ["kind"]
+            },
+            "then": {
+              "anyOf": [
+                {
+                  "properties": {
+                    "origin": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["origin"]
+                },
+                {
+                  "properties": {
+                    "asset_source": { "type": "string", "minLength": 1 }
+                  },
+                  "required": ["asset_source"]
+                },
+                {
+                  "properties": {
+                    "gap_fill": {
+                      "enum": ["user_upload", "i2i", "concept_only"]
+                    }
+                  },
+                  "required": ["gap_fill"]
+                }
+              ]
+            }
+          }
+        ],
         "properties": {
-          "beat": { "type": "string", "minLength": 1 },
+          "beat": {
+            "oneOf": [
+              { "type": "string", "minLength": 1 },
+              {
+                "type": "array",
+                "minItems": 1,
+                "uniqueItems": true,
+                "items": { "type": "string", "minLength": 1 }
+              }
+            ],
+            "description": "Legacy beat assignment; new writers should use beats."
+          },
+          "beats": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 }
+          },
           "kind": { "type": "string", "enum": ["image", "video"] },
           "status": {
             "type": "string",
-            "enum": ["planned", "generating", "ready", "failed"]
+            "enum": [
+              "planned",
+              "generating",
+              "ready",
+              "review_pending",
+              "approved",
+              "rejected",
+              "failed"
+            ]
+          },
+          "review_status": {
+            "type": "string",
+            "enum": ["pending", "review_pending", "approved", "rejected"]
+          },
+          "decision_id": { "type": "string", "minLength": 1 },
+          "origin": { "type": "string" },
+          "asset_source": { "type": "string" },
+          "gap_fill": {
+            "type": "string",
+            "enum": ["none", "user_upload", "i2i", "concept_only"]
           },
           "source_paths": {
             "type": "array",
             "items": { "type": "string", "minLength": 1 }
           },
           "prompt_zh": { "type": "string" },
+          "candidate_id": { "type": "string" },
+          "candidate_index": { "type": "integer", "minimum": 0 },
+          "candidate_paths": {
+            "type": "array",
+            "items": { "type": "string", "minLength": 1 }
+          },
+          "candidate_output_path": { "type": "string" },
+          "retry_count": { "type": "integer", "minimum": 0 },
+          "max_retries": { "type": "integer", "minimum": 0 },
+          "retry_of": { "type": "string" },
           "planned_output_path": { "type": "string" },
+          "planned_output": { "type": "string" },
           "output_path": { "type": "string" },
+          "output": { "type": "string" },
+          "candidates": {
+            "type": "array",
+            "items": {
+              "oneOf": [
+                { "type": "string", "minLength": 1 },
+                { "type": "object" }
+              ]
+            }
+          },
           "provider": { "type": "string" },
           "model": { "type": "string" },
+          "generated_at": { "type": "string" },
           "error_zh": { "type": "string" },
           "label_zh": { "type": "string" },
           "note_zh": { "type": "string" }

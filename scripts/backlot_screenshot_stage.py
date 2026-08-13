@@ -272,8 +272,15 @@ def _commercial_checkpoint(
     stage: str,
     status: str,
     *,
+    artifacts: dict | None = None,
     metadata: dict | None = None,
 ) -> None:
+    human_approval_required = stage in {
+        "brief_locked",
+        "sample_review",
+        "draft_review",
+        "delivery_signoff",
+    }
     _write_json(project / f"checkpoint_{stage}.json", {
         "version": "1.0",
         "project_id": project.name,
@@ -281,8 +288,10 @@ def _commercial_checkpoint(
         "stage": stage,
         "status": status,
         "timestamp": "2026-08-11T08:00:00Z",
+        "checkpoint_policy": "guided",
+        "human_approval_required": human_approval_required,
         "human_approved": status == "completed",
-        "artifacts": {},
+        "artifacts": artifacts or {},
         "metadata": metadata or {},
     })
 
@@ -478,6 +487,281 @@ def stage_commercial_task3() -> None:
     _commercial_checkpoint(polling, "sample_review", "in_progress")
 
 
+def stage_commercial_assignment_closure() -> None:
+    """Commercial fixtures for canonical Beat/image assignment closure."""
+    project = STAGE_DIR / "commercial-assignment-six-beats"
+    (project / "artifacts").mkdir(parents=True)
+    (project / "assets" / "images").mkdir(parents=True)
+    _write_json(project / "project.json", {
+        "project_id": project.name,
+        "title": "六卡素材分配闭环",
+        "pipeline_type": "bootstrap-commercial",
+        "production_profile": {"duration_seconds": 30},
+    })
+    for index in range(1, 6):
+        cinematic_frame(
+            project / "assets" / "images" / f"{index:02d}.png",
+            (18 + index * 3, 12, 24),
+            (44, 20 + index * 4, 18),
+            (240, 168, 60),
+            seed=900 + index,
+            label=f"素材 {index:02d}",
+        )
+    canonical = [
+        {"id": f"S{index}", "t": f"{(index - 1) * 5}-{index * 5}"}
+        for index in range(1, 7)
+    ]
+    image_roles = {
+        "01.png": "product_hero",
+        "02.png": "product_angle",
+        "03.png": "product_detail",
+        "04.png": "on_body",
+        "05.png": "lifestyle",
+    }
+    brief = {
+        "theme": "六卡商品素材分配闭环",
+        "duration_seconds": 30,
+        "identity_anchor": "assets/images/01.png",
+        "identity_notes_zh": "01.png 是商品身份基准，允许按审批跨 Beat 复用。",
+        "images": {
+            filename: {
+                "path": f"assets/images/{filename}",
+                "role": role,
+            }
+            for filename, role in image_roles.items()
+        },
+    }
+    asset_precheck = {
+        "version": "1.0",
+        "source_dir": "assets/images",
+        "entries": [
+            {
+                "file": filename,
+                "path": f"assets/images/{filename}",
+                "width": 960,
+                "height": 540,
+                "suggested_class": role,
+                "issues": [],
+            }
+            for filename, role in image_roles.items()
+        ],
+        "summary": {
+            "total_images": 5,
+            "low_resolution_count": 0,
+            "duplicate_group_count": 0,
+            "counts_by_suggested_class": {
+                "product_hero": 1,
+                "product_angle": 1,
+                "product_detail": 1,
+                "on_body": 1,
+                "lifestyle": 1,
+            },
+            "needs_user_attention": False,
+        },
+    }
+    video_plan = {
+        "version": "1.0",
+        "segments": canonical,
+    }
+    segment_cards = {
+        "version": "1.0",
+        "duration_seconds": 30,
+        "overall_prompt_zh": "六个 Beat 完成商品亮相、角度、细节、佩戴与收束。",
+        "segments": [
+            {
+                "beat": row["id"],
+                "time": row["t"],
+                "copy_plan_zh": f"{row['id']} 商品卖点文案",
+                "shot_plan_zh": f"{row['id']} 五秒稳定运镜",
+                "asset_plan_zh": f"{row['id']} 商品素材安排",
+            }
+            for row in canonical
+        ],
+    }
+    _write_json(project / "artifacts" / "brief.json", brief)
+    _write_json(project / "artifacts" / "asset_precheck.json", asset_precheck)
+    _write_json(project / "artifacts" / "video_plan.json", video_plan)
+    _write_json(project / "artifacts" / "segment_cards.json", segment_cards)
+    _write_json(project / "artifacts" / "asset_ledger.json", {
+        "version": "1.0",
+        "project_id": project.name,
+        "entries": [
+            {
+                "file": "01.png",
+                "path": "assets/images/01.png",
+                "kind": "image",
+                "beat": "S1,S4",
+                "selected": True,
+                "user_class": "product_hero",
+                "status": "identity_anchor",
+            },
+            {
+                "file": "02.png",
+                "path": "assets/images/02.png",
+                "kind": "image",
+                "beat": "S2,S6",
+                "selected": True,
+                "user_class": "product_angle",
+                "status": "confirmed",
+            },
+            {
+                "file": "03.png",
+                "path": "assets/images/03.png",
+                "kind": "image",
+                "beat": "S5",
+                "selected": True,
+                "user_class": "product_detail",
+                "status": "confirmed",
+            },
+            {
+                "file": "04.png",
+                "path": "assets/images/04.png",
+                "kind": "image",
+                "beat": "S3",
+                "selected": True,
+                "user_class": "on_body",
+                "status": "confirmed",
+            },
+            {
+                "file": "05.png",
+                "path": "assets/images/05.png",
+                "kind": "image",
+                "selected": False,
+                "user_class": "lifestyle",
+                "status": "confirmed",
+            },
+        ],
+        "summary": {
+            "available_image_count": 5,
+            "counts_by_class": {
+                "product_hero": 1,
+                "product_angle": 1,
+                "product_detail": 1,
+                "on_body": 1,
+                "lifestyle": 1,
+            },
+            "missing_asset_classes": [],
+            "status_zh": "降级继续",
+            "quality_warning": "六个 Beat 复用五张真实商品图。",
+        },
+    })
+    _commercial_checkpoint(
+        project,
+        "brief_locked",
+        "completed",
+        artifacts={
+            "brief": brief,
+            "asset_precheck": asset_precheck,
+            "video_plan": video_plan,
+            "segment_cards": segment_cards,
+        },
+    )
+    _commercial_checkpoint(project, "assets_gate", "in_progress")
+
+    drift = STAGE_DIR / "commercial-reference-ledger-drift"
+    (drift / "artifacts").mkdir(parents=True)
+    (drift / "assets" / "images").mkdir(parents=True)
+    reference_path = "assets/images/reference.png"
+    cinematic_frame(
+        drift / reference_path,
+        (12, 18, 30),
+        (36, 20, 14),
+        (120, 180, 255),
+        seed=990,
+        label="真实参考图",
+    )
+    _write_json(drift / "project.json", {
+        "project_id": drift.name,
+        "title": "参考图与台账漂移",
+        "pipeline_type": "bootstrap-commercial",
+        "production_profile": {"duration_seconds": 5},
+    })
+    drift_brief = {
+        "theme": "参考图与台账漂移",
+        "duration_seconds": 5,
+        "identity_anchor": reference_path,
+        "images": {
+            "reference.png": {
+                "path": reference_path,
+                "role": "product_hero",
+            },
+        },
+    }
+    drift_precheck = {
+        "version": "1.0",
+        "source_dir": "assets/images",
+        "entries": [{
+            "file": "reference.png",
+            "path": reference_path,
+            "width": 960,
+            "height": 540,
+            "suggested_class": "product_hero",
+            "issues": [],
+        }],
+        "summary": {
+            "total_images": 1,
+            "low_resolution_count": 0,
+            "duplicate_group_count": 0,
+            "counts_by_suggested_class": {"product_hero": 1},
+            "needs_user_attention": False,
+        },
+    }
+    drift_video_plan = {
+        "version": "1.0",
+        "segments": [{"id": "S1", "t": "0-5", "ref": reference_path}],
+    }
+    drift_segment_cards = {
+        "version": "1.0",
+        "duration_seconds": 5,
+        "overall_prompt_zh": "使用真实参考图展示商品身份。",
+        "segments": [{
+            "beat": "S1",
+            "time": "0-5",
+            "copy_plan_zh": "五秒内建立商品身份。",
+            "shot_plan_zh": "从中景缓慢推进至商品主体。",
+            "asset_plan_zh": "使用真实参考图",
+        }],
+    }
+    _write_json(drift / "artifacts" / "brief.json", drift_brief)
+    _write_json(drift / "artifacts" / "asset_precheck.json", drift_precheck)
+    _write_json(drift / "artifacts" / "video_plan.json", drift_video_plan)
+    _write_json(
+        drift / "artifacts" / "segment_cards.json",
+        drift_segment_cards,
+    )
+    _write_json(drift / "artifacts" / "asset_ledger.json", {
+        "version": "1.0",
+        "project_id": drift.name,
+        "entries": [{
+            "file": "reference.png",
+            "path": reference_path,
+            "kind": "image",
+            "selected": True,
+            "user_class": "product_hero",
+            "status": "identity_anchor",
+        }],
+        "summary": {
+            "available_image_count": 1,
+            "counts_by_class": {"product_hero": 1},
+            "missing_asset_classes": [],
+            "status_zh": "降级继续",
+            "quality_warning": "台账尚未补齐 S1 映射。",
+        },
+    })
+    _commercial_checkpoint(
+        drift,
+        "brief_locked",
+        "completed",
+        artifacts={
+            "brief": drift_brief,
+            "asset_precheck": drift_precheck,
+            "video_plan": drift_video_plan,
+            "segment_cards": drift_segment_cards,
+        },
+    )
+    _commercial_checkpoint(drift, "assets_gate", "in_progress")
+
+
 SCENES_LIGHTHOUSE = [
     ("sc1", "Opening — a lighthouse at dusk", 0, 4, "The coast holds its breath."),
     ("sc2", "The beam sweeps the water", 4, 9, "Every night, the same promise."),
@@ -521,6 +805,7 @@ def build_stage() -> None:
     stage_project("paper-boats", "Paper Boats", "paper",
                   SCENES_PAPER, state="early", hero="sc3")
     stage_commercial_task3()
+    stage_commercial_assignment_closure()
     print(f"[stage] built demo projects in {STAGE_DIR}")
 
 

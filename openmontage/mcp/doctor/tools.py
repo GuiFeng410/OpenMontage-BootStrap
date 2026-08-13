@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import platform
@@ -771,8 +772,13 @@ def run_validate_checkpoint(path: str) -> dict[str, Any]:
     if not resolved.exists():
         raise DoctorError(f"Checkpoint not found: {resolved}", code="not_found")
     data = json.loads(resolved.read_text(encoding="utf-8"))
+    project_dir = resolved.parent
+    for candidate in resolved.parents:
+        if (candidate / "project.json").is_file():
+            project_dir = candidate
+            break
     try:
-        validate_checkpoint(data)
+        validate_checkpoint(data, project_dir=project_dir)
         return {"path": str(resolved), "validated": True}
     except Exception as exc:  # noqa: BLE001
         return {"path": str(resolved), "validated": False, "error": str(exc)}
@@ -1137,7 +1143,7 @@ def run_approve_checkpoint(
     from lib.checkpoint import merge_write_checkpoint
 
     root = require_projects_root()
-    project_dir(project_id)
+    project = project_dir(project_id)
     try:
         supplied_artifacts = json.loads(artifacts_json) if artifacts_json else {}
     except json.JSONDecodeError as exc:
@@ -1209,11 +1215,12 @@ def run_approve_checkpoint(
 def run_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
     require_p1_writes()
     _ensure_repo_on_path()
+    from lib.asset_precheck import has_generated_image_source
     from lib.checkpoint import _merge_decision_log
     from schemas.artifacts import validate_artifact
 
     root = require_projects_root()
-    project_dir(project_id)
+    project = project_dir(project_id)
     try:
         decision = json.loads(decision_json)
     except json.JSONDecodeError as exc:
@@ -1227,9 +1234,41 @@ def run_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
         )
     decision.setdefault("version", "1.0")
     decision.setdefault("project_id", project_id)
+    for row in decision.get("decisions") or []:
+        if (
+            not isinstance(row, dict)
+            or row.get("category") != "asset_decision"
+            or str(row.get("selected") or "").strip() != "approved"
+            or not str(row.get("asset_path") or "").strip()
+            or not has_generated_image_source(row)
+        ):
+            continue
+        raw_asset_path = str(row.get("asset_path") or "").strip()
+        candidate = project / raw_asset_path
+        try:
+            candidate = candidate.resolve()
+            candidate.relative_to(project.resolve())
+            if not candidate.is_file():
+                raise OSError("approved asset is not a file")
+            actual_sha256 = hashlib.sha256(candidate.read_bytes()).hexdigest()
+        except (OSError, ValueError) as exc:
+            raise DoctorError(
+                "approved asset_path must be an existing project-local file",
+                code="bad_request",
+            ) from exc
+        supplied_sha256 = str(row.get("asset_sha256") or "").strip().lower()
+        if supplied_sha256 and supplied_sha256 != actual_sha256:
+            raise DoctorError(
+                "asset_sha256 does not match the approved asset content",
+                code="bad_request",
+            )
+        row["asset_sha256"] = actual_sha256
     try:
         validate_artifact("decision_log", decision)
     except Exception as exc:
         raise DoctorError(f"decision_json invalid: {exc}", code="bad_request") from exc
-    _merge_decision_log(root, project_id, decision)
-    return {"project_id": project_id, "appended": len(decision.get("decisions") or [])}
+    try:
+        appended = _merge_decision_log(root, project_id, decision)
+    except Exception as exc:
+        raise DoctorError(str(exc), code="bad_request") from exc
+    return {"project_id": project_id, "appended": appended}

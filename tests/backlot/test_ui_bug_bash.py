@@ -129,6 +129,160 @@ def _write_commercial_checkpoint(
     })
 
 
+def _assignment_review_project() -> str:
+    project_id = "commercial-assignment-review"
+    project = backlot_screenshot_stage.STAGE_DIR / project_id
+    if project.exists():
+        shutil.rmtree(project)
+    (project / "artifacts").mkdir(parents=True)
+    (project / "assets" / "images").mkdir(parents=True)
+    _write_json(project / "project.json", {
+        "project_id": project_id,
+        "title": "素材分配复审",
+        "pipeline_type": "bootstrap-commercial",
+    })
+    image_names = (
+        "user.png",
+        "candidate.png",
+        "conflict-one.png",
+        "conflict-two.png",
+        "unused-upload.png",
+    )
+    for image_name in image_names:
+        (project / "assets" / "images" / image_name).write_bytes(b"image")
+    _write_json(project / "artifacts" / "segment_cards.json", {
+        "segments": [
+            {"beat": "S1", "time": "0-4", "asset_plan_zh": "用户图与候选图并行核对"},
+            {"beat": "S2", "time": "4-8", "asset_plan_zh": "确认唯一素材"},
+        ],
+    })
+    _write_json(project / "artifacts" / "asset_precheck.json", {
+        "entries": [
+            {
+                "file": image_name,
+                "path": f"assets/images/{image_name}",
+                "suggested_class": "product_detail",
+            }
+            for image_name in image_names
+        ],
+        "summary": {
+            "total_images": len(image_names),
+            "needs_user_attention": True,
+        },
+    })
+    _write_json(project / "artifacts" / "asset_ledger.json", {
+        "entries": [
+            {
+                "beat": "S1",
+                "kind": "image",
+                "path": "assets/images/user.png",
+                "status": "confirmed",
+                "origin": "user_upload",
+                "selected": True,
+                "label_zh": "真实用户素材",
+            },
+            {
+                "beat": "S1",
+                "kind": "image",
+                "path": "assets/images/candidate.png",
+                "status": "confirmed",
+                "review_status": "review_pending",
+                "origin": "i2i",
+                "provider": "flux",
+                "model": "flux-pro",
+                "selected": True,
+                "label_zh": "I2I 候选",
+            },
+            {
+                "beat": "S2",
+                "kind": "image",
+                "path": "assets/images/conflict-one.png",
+                "status": "confirmed",
+                "origin": "user_upload",
+                "selected": True,
+                "label_zh": "闭环素材一",
+            },
+            {
+                "beat": "S2",
+                "kind": "image",
+                "path": "assets/images/conflict-two.png",
+                "status": "confirmed",
+                "origin": "user_upload",
+                "selected": True,
+                "label_zh": "闭环素材二",
+            },
+            {
+                "kind": "image",
+                "path": "assets/images/unused-upload.png",
+                "status": "ready",
+                "origin": "user_upload",
+                "selected": False,
+                "label_zh": "未使用用户素材",
+            },
+        ],
+    })
+    _write_commercial_checkpoint(
+        project,
+        "assets_gate",
+        "in_progress",
+        {},
+        1,
+    )
+    return project_id
+
+
+def _same_path_cross_beat_project() -> str:
+    project_id = "commercial-same-path-cross-beat"
+    project = backlot_screenshot_stage.STAGE_DIR / project_id
+    if project.exists():
+        shutil.rmtree(project)
+    (project / "artifacts").mkdir(parents=True)
+    (project / "assets" / "images").mkdir(parents=True)
+    shared_path = "assets/images/shared.png"
+    (project / shared_path).write_bytes(b"image")
+    _write_json(project / "project.json", {
+        "project_id": project_id,
+        "title": "同路径跨 Beat 审批隔离",
+        "pipeline_type": "bootstrap-commercial",
+    })
+    _write_json(project / "artifacts" / "segment_cards.json", {
+        "segments": [
+            {"beat": "S1", "time": "0-4", "asset_plan_zh": "使用真实上传素材"},
+            {"beat": "S2", "time": "4-8", "asset_plan_zh": "审查 I2I 候选"},
+        ],
+    })
+    _write_json(project / "artifacts" / "asset_ledger.json", {
+        "entries": [{
+            "beat": "S1",
+            "kind": "image",
+            "path": shared_path,
+            "status": "confirmed",
+            "origin": "user_upload",
+            "selected": True,
+            "label_zh": "S1 用户素材",
+        }],
+        "planned_entries": [{
+            "beat": "S2",
+            "kind": "image",
+            "output_path": shared_path,
+            "status": "approved",
+            "review_status": "review_pending",
+            "origin": "i2i",
+            "provider": "flux",
+            "model": "flux-pro",
+            "label_zh": "S2 I2I 候选",
+        }],
+    })
+    _write_commercial_checkpoint(
+        project,
+        "assets_gate",
+        "in_progress",
+        {},
+        1,
+    )
+    return project_id
+
+
 def _stage_segment_evidence_project(
     *,
     include_sample_beat_ids: bool = True,
@@ -543,6 +697,117 @@ def test_commercial_missing_ledger_and_planned_output_render_failed_status(
             browser.close()
 
 
+def test_commercial_planned_image_without_source_renders_as_candidate(
+    staged_backlot_server,
+):
+    project_id = "commercial-planned-missing-source"
+    project = backlot_screenshot_stage.STAGE_DIR / project_id
+    if project.exists():
+        shutil.rmtree(project)
+    (project / "artifacts").mkdir(parents=True)
+    _write_json(project / "project.json", {
+        "project_id": project_id,
+        "title": "无来源计划图",
+        "pipeline_type": "bootstrap-commercial",
+    })
+    _write_json(project / "artifacts" / "segment_cards.json", {
+        "segments": [{"beat": "beat_01", "time": "0-4"}],
+    })
+    output_path = "assets/images/planned.png"
+    (project / output_path).parent.mkdir(parents=True, exist_ok=True)
+    (project / output_path).write_bytes(b"candidate")
+    _write_json(project / "artifacts" / "asset_ledger.json", {
+        "planned_entries": [{
+            "beat": "beat_01",
+            "kind": "image",
+            "status": "approved",
+            "review_status": "approved",
+            "output_path": output_path,
+            "label_zh": "无来源计划图",
+        }],
+    })
+    _write_json(project / "checkpoint_assets_gate.json", {
+        "stage": "assets_gate",
+        "status": "in_progress",
+        "timestamp": "2026-08-13T00:00:00Z",
+        "artifacts": {},
+    })
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(".stage").filter(has_text="素材检查").click()
+            card = page.locator('.commercial-beat-card[data-beat="beat_01"]')
+            planned = card.locator(".planned-entry-card")
+            expect(planned).to_have_count(1)
+            expect(planned).to_have_attribute("data-status", "review_pending")
+            assert "候选/待审 · 尚未批准" in planned.inner_text()
+            assert "已批准" not in planned.inner_text()
+        finally:
+            browser.close()
+
+
+def test_commercial_actual_generation_signal_without_source_renders_as_candidate(
+    staged_backlot_server,
+):
+    project_id = "commercial-actual-missing-source"
+    project = backlot_screenshot_stage.STAGE_DIR / project_id
+    if project.exists():
+        shutil.rmtree(project)
+    (project / "artifacts").mkdir(parents=True)
+    _write_json(project / "project.json", {
+        "project_id": project_id,
+        "title": "Actual 来源异常",
+        "pipeline_type": "bootstrap-commercial",
+    })
+    _write_json(project / "artifacts" / "segment_cards.json", {
+        "segments": [{"beat": "beat_01", "time": "0-4"}],
+    })
+    output_path = "assets/images/actual.png"
+    (project / output_path).parent.mkdir(parents=True, exist_ok=True)
+    (project / output_path).write_bytes(b"candidate")
+    _write_json(project / "artifacts" / "asset_ledger.json", {
+        "entries": [{
+            "beat": "beat_01",
+            "kind": "image",
+            "path": output_path,
+            "status": "confirmed",
+            "selected": True,
+            "decision_id": "fake-decision",
+            "label_zh": "来源声明异常素材",
+        }],
+    })
+    _write_json(project / "checkpoint_assets_gate.json", {
+        "stage": "assets_gate",
+        "status": "in_progress",
+        "timestamp": "2026-08-13T00:00:00Z",
+        "artifacts": {},
+    })
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(".stage").filter(has_text="素材检查").click()
+            card = page.locator('.commercial-beat-card[data-beat="beat_01"]')
+            expect(card.locator(".beat-media.image.candidate")).to_have_count(1)
+            assert "候选/待审" in card.locator(
+                ".beat-media.image.candidate .media-cap"
+            ).inner_text()
+            assert "用户素材" not in card.locator(".beat-media-stack").inner_text()
+        finally:
+            browser.close()
+
+
 def test_commercial_asset_lists_are_collapsed_and_thumbnails_stay_compact(
     staged_backlot_server,
 ):
@@ -579,6 +844,243 @@ def test_commercial_asset_lists_are_collapsed_and_thumbnails_stay_compact(
                 ".commercial-assets-details .asset-card img"
             ).first.evaluate("(img) => img.getBoundingClientRect().height")
             assert 0 < mobile_height <= 150
+        finally:
+            browser.close()
+
+
+def test_assignment_fixture_renders_exactly_six_canonical_cards(
+    staged_backlot_server,
+):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        try:
+            page.goto(
+                staged_backlot_server
+                + "/p/commercial-assignment-six-beats?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(".stage").filter(has_text="素材检查").click()
+
+            cards = page.locator(".commercial-beat-card")
+            expect(cards).to_have_count(6)
+            assert cards.evaluate_all(
+                "(nodes) => nodes.map((node) => node.dataset.beat)"
+            ) == ["S1", "S2", "S3", "S4", "S5", "S6"]
+            expect(page.locator(
+                '.commercial-beat-card[data-beat="S1,S4"], '
+                '.commercial-beat-card[data-beat="S2,S6"]'
+            )).to_have_count(0)
+            assert all("null" not in text for text in cards.all_inner_texts())
+        finally:
+            browser.close()
+
+
+def test_assignment_fixture_legacy_reuse_shows_images_on_both_target_cards(
+    staged_backlot_server,
+):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        try:
+            page.goto(
+                staged_backlot_server
+                + "/p/commercial-assignment-six-beats?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(".stage").filter(has_text="素材检查").click()
+
+            for beat_id in ("S1", "S4"):
+                image = page.locator(
+                    f'.commercial-beat-card[data-beat="{beat_id}"] img'
+                )
+                expect(image).to_have_count(1)
+                assert "assets/images/01.png" in (
+                    image.get_attribute("src") or ""
+                )
+            for beat_id in ("S2", "S6"):
+                image = page.locator(
+                    f'.commercial-beat-card[data-beat="{beat_id}"] img'
+                )
+                expect(image).to_have_count(1)
+                assert "assets/images/02.png" in (
+                    image.get_attribute("src") or ""
+                )
+        finally:
+            browser.close()
+
+
+def test_assignment_fixture_exposes_unassigned_real_image(
+    staged_backlot_server,
+):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 1000})
+        try:
+            page.goto(
+                staged_backlot_server
+                + "/p/commercial-assignment-six-beats?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(".stage").filter(has_text="素材检查").click()
+
+            unused = page.locator(
+                '.commercial-unused-assets '
+                '[data-path="assets/images/05.png"]'
+            )
+            expect(unused).to_have_count(1)
+            expect(unused).to_contain_text("05.png")
+        finally:
+            browser.close()
+
+
+def test_user_asset_remains_primary_while_i2i_candidate_stays_separate(
+    staged_backlot_server,
+):
+    project_id = _assignment_review_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + f"/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(".stage").filter(has_text="素材检查").click()
+
+            card = page.locator('.commercial-beat-card[data-beat="S1"]')
+            expect(card).to_have_attribute("data-assignment-status", "user_asset")
+            primary = card.locator(
+                '.beat-media.image:not(.candidate) img[src*="assets/images/user.png"]'
+            )
+            expect(primary).to_have_count(1)
+            candidate = card.locator(
+                '.beat-media.image.candidate img[src*="assets/images/candidate.png"]'
+            )
+            expect(candidate).to_have_count(1)
+            expect(card.locator(".beat-media.image.candidate")).to_contain_text(
+                "候选/待审"
+            )
+        finally:
+            browser.close()
+
+
+def test_multiple_closed_assets_render_non_green_assignment_conflict(
+    staged_backlot_server,
+):
+    project_id = _assignment_review_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + f"/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(".stage").filter(has_text="素材检查").click()
+
+            card = page.locator('.commercial-beat-card[data-beat="S2"]')
+            expect(card).to_have_attribute(
+                "data-assignment-status",
+                "assignment_conflict",
+            )
+            expect(card.locator(".cbc-head .status-chip")).to_contain_text("素材冲突")
+            expect(card.locator(".cbc-head .status-chip")).not_to_have_class(
+                "status-chip ok"
+            )
+            expect(card.locator(".commercial-assignment-warning")).to_contain_text(
+                "多个闭环素材"
+            )
+        finally:
+            browser.close()
+
+
+def test_i2i_candidate_never_appears_in_unused_uploads(
+    staged_backlot_server,
+):
+    project_id = _assignment_review_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + f"/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(".stage").filter(has_text="素材检查").click()
+
+            unused = page.locator(".commercial-unused-assets")
+            expect(unused).to_have_count(1)
+            expect(unused.locator(
+                '[data-path="assets/images/candidate.png"]'
+            )).to_have_count(0)
+            expect(unused.locator(
+                '[data-path="assets/images/unused-upload.png"]'
+            )).to_have_count(1)
+        finally:
+            browser.close()
+
+
+def test_planned_i2i_approval_is_scoped_to_beat_path_pair_and_stays_pending(
+    staged_backlot_server,
+):
+    project_id = _same_path_cross_beat_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + f"/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(".stage").filter(has_text="素材检查").click()
+
+            s1 = page.locator('.commercial-beat-card[data-beat="S1"]')
+            expect(s1).to_have_attribute("data-assignment-status", "user_asset")
+            s2 = page.locator('.commercial-beat-card[data-beat="S2"]')
+            expect(s2).to_have_attribute(
+                "data-assignment-status",
+                "review_pending",
+            )
+            planned = s2.locator(".planned-entry-card")
+            expect(planned).to_have_attribute("data-status", "review_pending")
+            expect(planned.locator(".status-chip")).to_contain_text("候选/待审")
+            expect(planned.locator(".status-chip")).not_to_have_class(
+                "status-chip ok"
+            )
+            expect(planned.locator(".commercial-candidate-label")).to_contain_text(
+                "尚未批准"
+            )
+            expect(s2.locator(".beat-media.image.candidate")).to_have_count(1)
+            expect(s2.locator(".beat-media.image.approved")).to_have_count(0)
+        finally:
+            browser.close()
+
+
+def test_reference_ledger_drift_card_shows_real_reference_and_mapping_warning(
+    staged_backlot_server,
+):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server
+                + "/p/commercial-reference-ledger-drift?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(".stage").filter(has_text="素材检查").click()
+
+            card = page.locator('.commercial-beat-card[data-beat="S1"]')
+            expect(card).to_have_count(1)
+            expect(card.locator("img")).to_have_count(1)
+            assert "assets/images/reference.png" in (
+                card.locator("img").get_attribute("src") or ""
+            )
+            warning = card.locator(".commercial-assignment-warning")
+            expect(warning).to_have_count(1)
+            expect(warning).to_contain_text("账本映射待补齐")
+            expect(card.locator(".beat-media.empty")).to_have_count(0)
         finally:
             browser.close()
 

@@ -8,6 +8,18 @@
 
 Backlot 仍以 checkpoint 和 `artifacts/*.json` 为真相层，只读展示这些证据。网页唯一写例外是把用户标记写入 `projects/<id>/intents/`；网页不能修改 checkpoint、canonical artifact 或生产决定。
 
+## 素材门禁前置
+
+剪辑修订不能补救未闭环的素材分配。商品片进入试片和后续视频阶段前，`assets_gate` 必须已经完成以下检查：
+
+1. Beat 卡片只以 `segment_cards` / `video_plan` 的 canonical 分段为准；素材账本中的多 Beat 复用不会创建额外段卡。
+2. 每个 Beat 都有明确的已批准素材或经确认的降级方案；缺图、孤立 Beat、未批准复用和多素材冲突都会阻止封板。
+3. 生成图片必须记录 provider、model、候选、真实项目内输出与审图决定。所有档位都须用户确认；普通模式可批量确认，专业模式可逐张确认和重生成。
+4. 未审生成图只作为候选预览，不能写成正式 `ref_image`，也不能进入试片或视频生成；快速模式同样不能绕过。
+5. 每张上传图片都应归入已使用、复用待确认或未使用清单，并说明原因。
+
+通过素材门禁后，剪辑闭环只处理已生成视频片段的 cuts 与重合成，不再静默更换图片、复用范围、provider 或模型。
+
 ## 开放条件
 
 剪辑只在当前活动阶段为 `draft_review` 或 `delivery_signoff` 的修订环开放；`final_compose` 合成中锁定。以下条件必须全部满足：

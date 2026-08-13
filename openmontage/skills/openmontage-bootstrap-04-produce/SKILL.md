@@ -108,6 +108,33 @@ metadata:
 - **生成原子单元**：每次生成都必须把“媒体真实落盘”与“当前阶段 canonical artifact 的路径/版本更新”作为不可拆分的完成单元。只生成文件但未更新 canonical artifact，或只写 artifact 但文件不存在，都不算证据，不得宣称完成或推进阶段。
 - 旧项目若有 `sample_gate`、`full_production` 等非七阶段 checkpoint，保留用于审计；不要继续写入，也不要把它们当作新的进度节点。
 
+### unified matrix / `asset_ledger` 执行硬门（强制）
+
+04 启动时，以及**每次付费视频调用前**，必须重新读取当前项目：
+
+1. `checkpoint_assets_gate.json`（或 `produce_read_state` 中同阶段状态）；
+2. `artifacts/segment_cards.json`；
+3. `artifacts/video_plan.json`；
+4. canonical `artifacts/asset_ledger.json`；
+5. 当前项目 `decision_log.json`。
+
+用 `lib.asset_precheck.validate_beat_assignment_matrix` 或等价实现重算 unified matrix；不得信任聊天摘要、旧 checkpoint 副本或仅看图片总数。
+
+**通过条件：**
+
+- `assets_gate=completed`，且严格前序状态未被重开；
+- canonical Beat 来源一致，每个仍要求素材的 Beat 恰有一个闭环路径；
+- 只读取 approved 素材：
+  - 用户图：`entries[].status="confirmed"`、`selected=true`、真实项目内文件；
+  - 复用图：除用户图条件外，另有当前 `project_id`、`stage=assets_gate`、精确 `asset_path + beat_ids`、用户原话的 scoped reuse decision；
+  - 生成图：`generated` / `t2i` / `text_to_image` / `i2i` / `image_to_image` / `ai_generated` 均执行同一强校验；actual 与 approved planned 都须 provider/model、`review_status="approved"`、非空 `candidate_paths` 与项目内真实 path/output，且批准输出必须属于 `candidate_paths`。审图 `decision_id` 必须命中当前 `decision_log` 的唯一真实项，并同时满足当前 project、`assets_gate`、`asset_decision`、`selected="approved"`、用户明确批准及原话非空、`asset_path` / `subject` 精确等于输出、`beat_ids` 与 entry beats 精确一致；planned 另须 `status="approved"`，`ready` 不能代审。未 approved planned 的计划 decision_id 不得冒充审图批准。
+- 每个 planned image 必须声明唯一来源；出现计划/输出/候选/provider/model 字段或生成链状态时，即使来源被省略也按生成图强校验。`video_plan.ref` / `ref_image` 若存在，必须等于矩阵中该 Beat 的唯一批准路径；Backlot 回填也只能取该 Beat + path。
+- `assets_gate=completed` 还须把 `assets/images/` 所有真实图片与 ledger 的 actual/planned/source/candidate/output 路径对账，拒绝未登记文件；`selected=false` 的实际素材必须有原因。decision log 存在时其 `project_id` 必须与当前项目身份一致；无决定需求且文件不存在才可省略。
+
+任一开放或漂移状态均失败。统一错误名：`missing`、`orphan`、`reuse_pending`、`review_pending`、`provider_missing`、`file_missing`；同样拦截 Beat/来源冲突、候选未唯一选定和 `video_plan` 漂移。失败时立即退回 03 的同一 `assets_gate` 修复，**不得自动复用、自动降级、自动补图或继续生成视频**。配置 Key 若是用户选定修复动作，可由 03 再交接 06；修复后必须重算矩阵并重新得到 `assets_gate=completed`。
+
+矩阵通过只批准素材输入，不替代开烧确认、provider 在线预检、费用闸、试片关或每次付费确认。
+
 ### 剪辑修订闭环（不新增阶段）
 
 剪辑标签不是第八阶段，只是现有七阶段中的修订环。仅在当前活动阶段为 `draft_review` 或 `delivery_signoff` 时开放；`final_compose` 合成过程中保持锁定。
@@ -151,7 +178,7 @@ produce_list_intents
 
 用户只说“直接出片”时，禁止把它当审批证据；若尚无合法决定，退回 03 展示 `commercial-video-15s-review.md` §0.5 的单问题授权卡。启用前必须从最新 `decision_log` 读到 schema 合法的 `approval_policy`：固定 `subject="Commercial fast-track production"`、`selected="fast_track_v1"`、`user_approved=true` 与包含完整授权语义的用户原话。
 
-1. `brief_locked` 完成后，可在 canonical `asset_ledger` 与素材媒体路径已物化、且前序完成的前提下自动完成 `assets_gate`，再进入 `sample_review`。
+1. `brief_locked` 完成后，先按本 Skill 的 unified matrix 硬门进入 `assets_gate`。若没有生成图且矩阵已完全闭环，可写 `assets_gate=completed`；只要存在 I2I 候选，必须先用普通模式的一次批量审图卡等待用户确认，快速授权不能代替审图。未经 approved 的候选不得自动完成本阶段。
 2. `sample_review` **必须停下**等待用户明确批准试片；快速模式授权原话不能替代试片裁定。
 3. 试片通过后，逐项比对授权时已披露的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标、分辨率与实际候选/审查结果。全部无实质变化且无“需修改”，才可自动推进 `segment_build` 和 `draft_review`。
 4. 正常在已披露预算基线与总成本区间内累计消费不算变化；但预估单价、总成本区间或预算基线改变，即使尚未越限也必须暂停。质量目标或分辨率变化、候选结果低于承诺、审查发现需修改，同样暂停。
@@ -160,7 +187,7 @@ produce_list_intents
 7. provider/model/runtime 变化或第 4 条任一费用/质量变化发生时，立即暂停并一次只问一个问题；变更决定须按原 `category + subject` 追加，不得静默替换。
 8. `delivery_signoff` 永远写 `awaiting_human` 并停下等待签收。
 
-快速模式只减少中间打断，不得跳过证据物化、试片、项目 preflight、provider registry/MCP availability、费用闸、付费调用确认或最终签收。网页继续只读。
+快速模式只减少中间打断，不得跳过证据物化、生成图审查、unified matrix、`assets_gate=completed`、试片、项目 preflight、provider registry/MCP availability、费用闸、付费调用确认或最终签收。网页继续只读。
 
 ### 付费 AI 镜提示词：Skill 引用与面板递进（强制）
 
@@ -198,7 +225,7 @@ produce_list_intents
 | `medium_source`（中度） | `stock` 才走 Stock 下载；`user_assets` 只用项目内素材；无 Stock Key 禁止走 stock |
 | `ai_video=disabled` 或不存在 | **禁止**调用付费 AI 视频生成 |
 | `ai_video=enabled` + `video_channel` / `video_model` | **只使用**该渠道与模型；禁止改用其它视频供应商 |
-| `video_plan`（表 3） | 按已确认分段的画面/文案要点生成与拼接；不得擅自改段数或重写规划而不再问用户。商品片：若 `gap_fill=i2i` 且补图未完成 → **先补图再 I2V**；某段无 `ref_image` 或缺口未关闭 → **不烧该段**，回 usercheck。重点段优先重试与打磨（见 `03-usercheck/references/product-prompt-template.md`） |
+| `video_plan`（表 3） | 按已确认分段的画面/文案要点生成与拼接；不得擅自改段数或重写规划。表 3 的 I2I 缺图 Beat 可先写 `gap_fill="i2i"`、`assignment_status="i2i_planned"`、`planned_output_path`、provider/model 并省略 `ref_image`；但 04 不得消费该开放状态。审图 approved 后，03 才把真实批准路径回填 `ref_image` / actual ledger 并关闭矩阵。04 只读取 approved 用户图/精确复用/生成图；任何缺口开放、批准后仍无 `ref_image`、账本/计划漂移均让整个付费视频调用停止并退回 03 |
 | `motion_mix` | 按推荐目标**大概**安排整片 AI 生成总秒数（±约 15%）；不按段数硬凑。审查中用户改 beat 方式后更新计划，**允许终稿偏离**；偏离只告知，不否决交付 |
 | `budget_cny` | 实验 API 上限（¥1/3/5/8/12）。单笔 beat 计划费用 ≥¥5 → **提示即可**（不论累计）。触顶停烧仍走 B6 |
 
@@ -215,10 +242,11 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 
 ### 项目计划、Pixverse 与 OSS 预检（强制）
 
-在最终锁定/恢复视频渠道前，以及**每次付费调用前**，调用只读 `produce_provider_preflight(project_id)`；它只读取已落盘的 `project.json`、`artifacts/brief.json`、`artifacts/video_plan.json` 与 `decision_log`，检查项目计划、Pixverse 模式/图源、OSS 配置和项目上传授权证据，不上传、不生成、不扣费。
+在最终锁定/恢复视频渠道前，以及**每次付费调用前**，先通过本 Skill 的 unified matrix / `asset_ledger` 硬门，再调用只读 `produce_provider_preflight(project_id)`；它只读取已落盘的 `project.json`、`artifacts/brief.json`、`artifacts/video_plan.json` 与 `decision_log`，检查项目计划、Pixverse 模式/图源、OSS 配置和项目上传授权证据，不上传、不生成、不扣费。
 
 - **边界：** 该工具不检查 `TOKENHUB_API_KEY` / `AGNES_API_KEY`，也不探测 provider 在线可用性。付费前仍须另查 provider registry / 对应 MCP availability、所需 Key 与费用闸。
-- `ready=false`：停在当前 checkpoint 阶段，按项目证据 `blockers` / `missing_config_fields` / `next_action_zh` 修复；禁止开烧或静默换渠。
+- unified matrix 不通过：先退回 03 修复 `assets_gate`；不得用 provider preflight 的 `ready=true` 覆盖素材失败。
+- `ready=false`：停在当前 checkpoint 阶段，按项目证据 `blockers` / `missing_config_fields` / `next_action_zh` 修复；若锁定 provider 缺失或计划需变更，退回 03 重新确认，禁止开烧或静默换渠。
 - `ready=true`：只表示项目计划/Pixverse/OSS/授权证据通过，不代表 Key 有效、provider 在线、费用获准、上传获准或人审闸已通过。
 - Pixverse 只承担 **T2V/I2V**。T2I/I2I 商品补图改走 Agnes / Flux / DashScope / OpenAI / Kling / Google / Grok 等已配置 image provider；若该本地成图随后用于 Pixverse I2V，才进入 OSS 暂存链。
 - Pixverse T2V、Pixverse 公网图 I2V、Agnes 均不需要 OSS；只有 Pixverse **当前项目本地图 I2V** 同时要求 OSS 配置和项目上传授权。
@@ -264,11 +292,11 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 
 进入本 Skill 时：
 
-1. 若无 03 锁定 → 交接 03。  
-2. 若有锁定 → **一句复查**，必须点出：档位 / 渠模（重度）/ **实验 API 预算（¥1|3|5|8|12，非售价）** / **画面比例 motion_mix** / 段数 / **评审模式（普通|专业）** / 候选模式（自适应|稳定双候选）。例如：  
+1. 若无 03 锁定，或商品片没有 `assets_gate=completed` → 交接 03。禁止在 04 补写 completed。
+2. 若有锁定 → 先执行 unified matrix / `asset_ledger` 硬门，再用**一句复查**点出：档位 / 渠模（重度）/ **实验 API 预算（¥1|3|5|8|12，非售价）** / **画面比例 motion_mix** / 段数 / **评审模式（普通|专业）** / 候选模式（自适应|稳定双候选）。例如：
    `当前锁定：重度 / Agnes / 实验预算¥8（非售价）/ 比例1:1（推荐）/ 普通评审 / 自适应候选 / 6 段 video_plan，确认开始出片？`  
 3. **不要**再完整展示轻/中/重选型大表。  
-4. 用户未确认「开始」前：**禁止**任何付费 API。
+4. 用户未确认「开始」前：**禁止**任何付费 API；确认开始也不能替代每次付费视频调用前的矩阵、provider、费用与确认复核。
 
 ### 改档回流（强制）
 
@@ -283,6 +311,8 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 适用：商品宣传，或重度付费视频。轻/中非商品可跳过试片硬闸，但仍遵守费用闸（若已写预算）。
 
 ### B1 试片关（强制）
+
+试片也是 video generation。开始前必须确认 `assets_gate=completed` 并重算 unified matrix；只允许 approved 用户图/复用图/I2I 图作为 `ref_image`。任何开放状态都退回 03。
 
 付费批量生成全长 **之前**，先完成 **10–15s 试片**，须同时包含：
 
@@ -358,8 +388,8 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 
 ### 0–1. 简报与项目
 
-0. 无已确认简报 → **先交接 03**（表 1→2→3）。  
-1. 锁定复查（见上）；`approval_text` 用用户原话。  
+0. 无已确认简报，或商品片 `assets_gate` 不为 `completed` → **先交接 03**（表 1→2→3→素材闭环）。
+1. 重算 unified matrix 后做锁定复查（见上）；`approval_text` 用用户原话。
 2. 复用 03 返回的项目与网址，禁止重新初始化。商品片固定 `pipeline_type=bootstrap-commercial`。若简报阶段未建项目，先交回 03 以 `mode=create_new` 或经用户明确确认后的 `mode=resume` 初始化。
 3. 核对 / 写入 `production_profile`（简报已写则可跳过或核对）：
 
@@ -386,7 +416,7 @@ produce_set_production_profile(
 
 也可用 `produce_write_checkpoint` 的 `artifacts_json` 带同名字段。  
 用 `produce_read_state` → 顶层 `production_profile` 读取。  
-付费前先调用 `produce_provider_preflight(project_id)` 核对项目/Pixverse/OSS/授权证据，再检查 provider registry / 对应 MCP availability 与所需 Key，最后调用 `produce_budget_cny_snapshot` 做费用闸；任一不允许时停止。
+每次付费视频调用前固定顺序：重读 `assets_gate` + unified matrix/`asset_ledger` → `produce_provider_preflight(project_id)` → provider registry / 对应 MCP availability 与所需 Key → `produce_budget_cny_snapshot` → 当前调用确认。任一不允许时停止；素材/计划/provider 选择问题退回 03，不得自动替代。
 
 ### 2. 脚本等人审关卡（共用）
 
@@ -441,11 +471,12 @@ produce_set_production_profile(
 执行顺序（商品/重度）：
 
 ```text
-开烧确认 → 试片关(B1) →（通过后）按 beat 自适应候选生成(B2)
+assets_gate=completed + unified matrix 复核 → 开烧确认 → 试片关(B1)
+→（通过后）每次付费视频调用前再次复核 → 按 beat 自适应候选生成(B2)
 → 抽帧预审(B3) → 费用闸贯穿(B6) → 初稿合成(B5) → 最终裁定(B7)
 ```
 
-普通评审不强制用户确认每一个 beat；专业模式才启用完整分批逐段卡（见 `commercial-video-15s-review.md` §0）。
+普通评审不强制用户确认每一个**视频 Beat**；专业模式才启用完整分批逐段视频卡（见 `commercial-video-15s-review.md` §0）。这不豁免 03 `assets_gate` 的生成图审查：普通模式的图片候选已一次批量确认，专业模式已逐张确认。
 
 ### 5–7. 字幕、BGM 与合成
 
@@ -480,16 +511,16 @@ produce_set_production_profile(
 
 ## 商品片执行前素材复查
 
-进入商品片执行前，读取 `asset_requirements`、`asset_ledger`（若有）和 `video_plan`，并逐段核对：
+进入商品片执行前，不以“图片数达标”作为通过依据。严格执行前文 unified matrix / `asset_ledger` 硬门，逐 Beat 核对所需画面、唯一 approved 路径、来源、真实文件与决定范围：
 
-1. 是否存在商品主图（`product_hero`）；
-2. 当前图片数是否达到该时长的最低数量；
-3. 是否已列出缺少的图片类型；
-4. 每个重点段是否有参考图片（`ref_image`）；
-5. 缺图处理（`gap_fill`）为图生图时，是否已由配置可用的 image provider 完成并经过检查（Pixverse 只做 T2V/I2V）；
-6. 素材状态是否为“就绪”，或用户已经确认风险的“降级继续”。
+1. `checkpoint_assets_gate` 必须为 `completed`；
+2. `segment_cards`、`video_plan`、`asset_ledger` 的 canonical Beat 集必须一致；
+3. 每个重点段只能读取 approved 用户图、scoped reuse 或 approved I2I；
+4. I2I 的 provider/model、候选、重试次数、审图 decision 和 `output_path` 必须完整；Pixverse 只做 T2V/I2V；
+5. 每张上传图必须能解释为已使用、已批准复用或明确 unused；不得有孤儿分配；
+6. 任一 `missing` / `orphan` / `reuse_pending` / `review_pending` / `provider_missing` / `file_missing` 都退回 03。
 
-若缺少已确认的 `asset_precheck` / 用户分类确认（商品片），**退回** `03-usercheck` 走 `references/asset-preprocess-gate.md`，禁止在本 Skill 内猜类或静默补图。
+若缺少已确认的 `asset_precheck`、覆盖矩阵、用户分类/复用/审图决定或 `assets_gate=completed`，**退回** `03-usercheck` 走 `references/asset-preprocess-gate.md`。禁止在本 Skill 内猜类、静默补图、静默复用、静默降级或用未批准图开烧。
 
 写付费 AI 动态段提示词时，**必须先读** `openmontage-seedance-prompt`，全文写入面板证据，聊天只摘要确认（见 04「付费 AI 镜提示词」节）。再读：
 
@@ -502,10 +533,12 @@ Remotion / HyperFrames 纯本地运镜段可不读 seedance Skill。渠模以 03
 执行顺序必须是：
 
 ```text
-素材复查 → 用户已确认的缺图补充 → 检查补充图片 → 试片关 → I2V/T2V（自适应候选）→ 初稿合成 → 裁定
+assets_gate=completed → unified matrix 复查 → 开烧确认
+→ 试片关 → 每次付费视频调用前复查 → I2V/T2V（自适应候选）
+→ 初稿合成 → 裁定
 ```
 
-没有商品主图、状态为“等待用户选择”、或用户尚未确认降级风险时，**禁止**在本 Skill 内自行猜测商品、静默改成概念片或直接烧视频；应退回 `openmontage-bootstrap-03-usercheck`。
+没有商品主图、状态为“等待用户选择”、用户尚未确认降级风险或统一矩阵再次打开时，**禁止**在本 Skill 内自行猜测商品、静默改成概念片或直接烧视频；应退回 `openmontage-bootstrap-03-usercheck`。
 
 `asset_classes`、`ref_image`、`gap_fill` 在执行层继续作为机器字段读取，面向用户的素材类型、参考图片、缺图处理和状态说明统一使用中文。
 

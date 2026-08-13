@@ -34,6 +34,69 @@ def _write(p: Path, data: dict) -> None:
     p.write_text(json.dumps(data), encoding="utf-8")
 
 
+def _make_six_beat_legacy_assignment_project(root: Path) -> Path:
+    p = _make_project(root, "commercial-six-beat-legacy-assignment")
+    _write(p / "project.json", {
+        "project_id": p.name,
+        "pipeline_type": "bootstrap-commercial",
+        "production_profile": {"duration_seconds": 30},
+    })
+    for index in range(1, 6):
+        (p / "assets" / "images" / f"{index:02d}.png").write_bytes(b"image")
+    _write(p / "artifacts" / "video_plan.json", {
+        "segments": [
+            {"id": f"S{index}", "t": f"{(index - 1) * 5}-{index * 5}"}
+            for index in range(1, 7)
+        ],
+    })
+    _write(p / "artifacts" / "segment_cards.json", {
+        "duration_seconds": 30,
+        "segments": [
+            {"beat": f"S{index}", "time": f"{(index - 1) * 5}-{index * 5}"}
+            for index in range(1, 7)
+        ],
+    })
+    _write(p / "artifacts" / "asset_ledger.json", {
+        "entries": [
+            {
+                "file": "01.png",
+                "path": "assets/images/01.png",
+                "kind": "image",
+                "beat": "S1,S4",
+                "selected": True,
+            },
+            {
+                "file": "02.png",
+                "path": "assets/images/02.png",
+                "kind": "image",
+                "beat": "S2,S6",
+                "selected": True,
+            },
+            {
+                "file": "03.png",
+                "path": "assets/images/03.png",
+                "kind": "image",
+                "beat": "S5",
+                "selected": True,
+            },
+            {
+                "file": "04.png",
+                "path": "assets/images/04.png",
+                "kind": "image",
+                "beat": "S3",
+                "selected": True,
+            },
+            {
+                "file": "05.png",
+                "path": "assets/images/05.png",
+                "kind": "image",
+                "selected": False,
+            },
+        ],
+    })
+    return p
+
+
 SCENE_PLAN = {
     "version": "1.0",
     "scenes": [
@@ -568,6 +631,747 @@ class TestBoardState:
         beat = load_board_state(p)["commercial"]["beats"][0]
 
         assert beat["planned_entries"] == [planned]
+
+    def test_commercial_legacy_multi_beat_assignment_keeps_only_canonical_six_cards(
+        self, projects_root
+    ):
+        p = _make_six_beat_legacy_assignment_project(projects_root)
+
+        beats = load_board_state(p)["commercial"]["beats"]
+
+        assert [beat["beat"] for beat in beats] == [
+            "S1", "S2", "S3", "S4", "S5", "S6",
+        ]
+
+    def test_commercial_legacy_multi_beat_assignment_reuses_each_real_image(
+        self, projects_root
+    ):
+        p = _make_six_beat_legacy_assignment_project(projects_root)
+
+        beats = {
+            beat["beat"]: beat
+            for beat in load_board_state(p)["commercial"]["beats"]
+        }
+
+        assert [item["path"] for item in beats["S1"]["ledger"]] == [
+            "assets/images/01.png",
+        ]
+        assert [item["path"] for item in beats["S4"]["ledger"]] == [
+            "assets/images/01.png",
+        ]
+        assert [item["path"] for item in beats["S2"]["ledger"]] == [
+            "assets/images/02.png",
+        ]
+        assert [item["path"] for item in beats["S6"]["ledger"]] == [
+            "assets/images/02.png",
+        ]
+
+    def test_commercial_unassigned_real_image_is_reported_as_unused_asset(
+        self, projects_root
+    ):
+        p = _make_six_beat_legacy_assignment_project(projects_root)
+
+        unused = load_board_state(p)["commercial"]["unused_assets"]
+
+        assert [item["path"] for item in unused] == ["assets/images/05.png"]
+
+    def test_commercial_reused_plan_reference_without_ledger_mapping_is_explicit(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-jade-reference-drift")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+            "production_profile": {"duration_seconds": 30},
+        })
+        for index in range(1, 6):
+            (p / "assets" / "images" / f"{index:02d}.png").write_bytes(b"image")
+        _write(p / "artifacts" / "video_plan.json", {
+            "segments": [
+                {
+                    "id": f"beat_{index:02d}",
+                    "t": f"{(index - 1) * 5}-{index * 5}",
+                    "ref": (
+                        "assets/images/01.png"
+                        if index == 6
+                        else f"assets/images/{index:02d}.png"
+                    ),
+                }
+                for index in range(1, 7)
+            ],
+        })
+        _write(p / "artifacts" / "segment_cards.json", {
+            "duration_seconds": 30,
+            "segments": [
+                {
+                    "beat": f"beat_{index:02d}",
+                    "time": f"{(index - 1) * 5}-{index * 5}",
+                }
+                for index in range(1, 7)
+            ],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [
+                {
+                    "file": f"{index:02d}.png",
+                    "path": f"assets/images/{index:02d}.png",
+                    "kind": "image",
+                    "beat": f"beat_{index:02d}",
+                    "selected": True,
+                }
+                for index in range(1, 6)
+            ],
+        })
+
+        beats = load_board_state(p)["commercial"]["beats"]
+        beat_06 = next(beat for beat in beats if beat["beat"] == "beat_06")
+
+        assert len(beats) == 6
+        assert beat_06["reference_path"] == "assets/images/01.png"
+        assert beat_06["ledger"] == []
+        assert beat_06["assignment_status"] == "missing"
+        assert beat_06["need_count"] == 1
+        assert beat_06["have_count"] == 0
+        assert beat_06["assignment_warnings"]
+
+    def test_commercial_legacy_ready_user_upload_stays_user_asset(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-ready-user-upload")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        image_path = "assets/images/hero.png"
+        (p / image_path).write_bytes(b"image")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-5"}],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [{
+                "path": image_path,
+                "kind": "image",
+                "beat": "S1",
+                "origin": "user_upload",
+                "status": "ready",
+                "selected": True,
+            }],
+        })
+
+        beat = load_board_state(p)["commercial"]["beats"][0]
+
+        assert beat["assignment_status"] == "user_asset"
+        assert beat["candidate_previews"] == []
+        assert [item["path"] for item in beat["ledger"]] == [image_path]
+
+    def test_commercial_board_uses_longer_root_decision_log_over_stale_artifact(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-stale-artifact-decisions")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        output_path = "assets/images/generated.png"
+        (p / output_path).write_bytes(b"image")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-5"}],
+        })
+        approved = {
+            "decision_id": "d-approved",
+            "stage": "assets_gate",
+            "category": "asset_decision",
+            "subject": output_path,
+            "asset_path": output_path,
+            "beat_ids": ["S1"],
+            "options_considered": [{
+                "option_id": "approved",
+                "label": "批准",
+                "score": 1.0,
+                "reason": "批准候选图。",
+            }],
+            "selected": "approved",
+            "reason": "批准候选图。",
+            "user_approved": True,
+            "user_response_text": "批准。",
+        }
+        rejected = {
+            **approved,
+            "decision_id": "d-rejected",
+            "options_considered": [{
+                "option_id": "rejected",
+                "label": "撤回",
+                "score": 1.0,
+                "reason": "撤回候选图。",
+            }],
+            "selected": "rejected",
+            "reason": "撤回候选图。",
+            "user_response_text": "撤回。",
+        }
+        stale_log = {
+            "version": "1.0",
+            "project_id": p.name,
+            "decisions": [approved],
+        }
+        _write(p / "artifacts" / "decision_log.json", stale_log)
+        _write(p / "decision_log.json", {
+            **stale_log,
+            "decisions": [approved, rejected],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [],
+            "planned_entries": [{
+                "beat": "S1",
+                "kind": "image",
+                "origin": "i2i",
+                "status": "approved",
+                "review_status": "approved",
+                "decision_id": "d-approved",
+                "provider": "provider",
+                "model": "model",
+                "candidate_paths": [output_path],
+                "output_path": output_path,
+            }],
+        })
+
+        commercial = load_board_state(p)["commercial"]
+
+        assert commercial["decisions"][0]["selected"] == "rejected"
+        assert commercial["beats"][0]["assignment_status"] != "approved"
+
+    def test_commercial_board_rejects_cross_project_decision_log(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-cross-project-decisions")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        _write(p / "artifacts" / "decision_log.json", {
+            "version": "1.0",
+            "project_id": "other-project",
+            "decisions": [{
+                "decision_id": "d-other",
+                "stage": "assets_gate",
+                "category": "asset_decision",
+                "subject": "assets/images/other.png",
+                "options_considered": [{
+                    "option_id": "approved",
+                    "label": "批准",
+                    "score": 1.0,
+                    "reason": "其它项目决定。",
+                }],
+                "selected": "approved",
+                "reason": "其它项目决定。",
+            }],
+        })
+
+        commercial = load_board_state(p)["commercial"]
+
+        assert commercial["decisions"] == []
+
+    def test_commercial_board_rejects_cross_project_checkpoint_decision_log(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-cross-project-checkpoint-log")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        _write(p / "checkpoint_assets_gate.json", {
+            "version": "1.0",
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+            "stage": "assets_gate",
+            "status": "in_progress",
+            "timestamp": "2026-08-13T00:00:00+00:00",
+            "artifacts": {
+                "decision_log": {
+                    "version": "1.0",
+                    "project_id": "other-project",
+                    "decisions": [{
+                        "decision_id": "d-other-checkpoint",
+                        "stage": "assets_gate",
+                        "category": "asset_decision",
+                        "subject": "assets/images/other.png",
+                        "options_considered": [{
+                            "option_id": "approved",
+                            "label": "批准",
+                            "score": 1.0,
+                            "reason": "其它项目决定。",
+                        }],
+                        "selected": "approved",
+                        "reason": "其它项目决定。",
+                    }],
+                },
+            },
+        })
+
+        commercial = load_board_state(p)["commercial"]
+
+        assert commercial["decisions"] == []
+
+    def test_commercial_empty_segments_fall_back_to_video_plan_beats(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-empty-segments-beats-fallback")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [],
+        })
+        _write(p / "artifacts" / "video_plan.json", {
+            "segments": [],
+            "beats": [
+                {"id": "S1", "t": "0-4"},
+                {"id": "S2", "t": "4-8"},
+            ],
+        })
+
+        beats = load_board_state(p)["commercial"]["beats"]
+
+        assert [beat["beat"] for beat in beats] == ["S1", "S2"]
+        assert [beat["time"] for beat in beats] == ["0-4", "4-8"]
+
+    @pytest.mark.parametrize(
+        ("review_status", "provider", "expected_status"),
+        [
+            ("", "flux", "review_pending"),
+            ("approved", "", "failed"),
+        ],
+    )
+    def test_commercial_i2i_status_approved_requires_review_and_strong_closure(
+        self,
+        projects_root,
+        review_status,
+        provider,
+        expected_status,
+    ):
+        p = _make_project(
+            projects_root,
+            f"commercial-i2i-approved-{review_status or 'missing'}-{provider or 'missing'}",
+        )
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        candidate_path = "assets/images/candidate.png"
+        (p / candidate_path).write_bytes(b"image")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-4"}],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [{
+                "beat": "S1",
+                "kind": "image",
+                "path": candidate_path,
+                "status": "approved",
+                "review_status": review_status,
+                "origin": "i2i",
+                "provider": provider,
+                "model": "flux-pro",
+                "selected": True,
+            }],
+        })
+
+        beat = load_board_state(p)["commercial"]["beats"][0]
+
+        assert beat["assignment_status"] == expected_status
+        assert beat["assignment_status"] != "approved"
+        assert beat["available_count"] == 0
+        assert [item["path"] for item in beat["candidate_previews"]] == [
+            candidate_path,
+        ]
+
+    @pytest.mark.parametrize(
+        "source_alias",
+        [
+            "generated",
+            "t2i",
+            "text_to_image",
+            "i2i",
+            "image_to_image",
+            "ai_generated",
+        ],
+    )
+    @pytest.mark.parametrize("container", ["entries", "planned_entries"])
+    def test_commercial_generated_aliases_use_matrix_beat_path_review_for_preview(
+        self,
+        projects_root,
+        source_alias,
+        container,
+    ):
+        p = _make_project(
+            projects_root,
+            f"commercial-{container}-{source_alias}",
+        )
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        candidate_path = "assets/images/candidate.png"
+        (p / candidate_path).write_bytes(b"candidate")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-4"}],
+        })
+        entry = {
+            "beat": "S1",
+            "kind": "image",
+            "status": "approved",
+            "review_status": "approved",
+            "origin": source_alias,
+            "provider": "provider",
+            "model": "model",
+        }
+        if container == "entries":
+            entry.update({"path": candidate_path, "selected": True})
+        else:
+            entry["output_path"] = candidate_path
+        _write(p / "artifacts" / "asset_ledger.json", {
+            container: [entry],
+        })
+
+        beat = load_board_state(p)["commercial"]["beats"][0]
+        preview = beat["ledger" if container == "entries" else "planned_entries"][0]
+
+        assert preview["preview_kind"] == "candidate"
+        assert beat["assignment_status"] != "approved"
+        assert beat["available_count"] == 0
+        assert [item["path"] for item in beat["candidate_previews"]] == [
+            candidate_path,
+        ]
+
+    @pytest.mark.parametrize(
+        "source_patch",
+        [
+            {"decision_id": "fake-decision"},
+            {
+                "provider": "provider",
+                "origin": "user_upload",
+                "asset_source": "reuse",
+            },
+        ],
+    )
+    def test_commercial_actual_generation_signal_source_issue_is_not_user_asset(
+        self,
+        projects_root,
+        source_patch,
+    ):
+        p = _make_project(projects_root, "commercial-actual-source-issue")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        candidate_path = "assets/images/actual.png"
+        (p / candidate_path).write_bytes(b"candidate")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-4"}],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [{
+                "beat": "S1",
+                "kind": "image",
+                "path": candidate_path,
+                "status": "confirmed",
+                "selected": True,
+                "label_zh": "来源声明异常素材",
+                **source_patch,
+            }],
+        })
+
+        beat = load_board_state(p)["commercial"]["beats"][0]
+        preview = beat["ledger"][0]
+
+        assert preview["preview_kind"] == "candidate"
+        assert beat["assignment_status"] != "user_asset"
+        assert beat["available_count"] == 0
+        assert [item["path"] for item in beat["candidate_previews"]] == [
+            candidate_path,
+        ]
+
+    def test_commercial_planned_image_without_source_cannot_preview_as_approved(
+        self,
+        projects_root,
+    ):
+        p = _make_project(projects_root, "commercial-planned-missing-source")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        candidate_path = "assets/images/planned.png"
+        (p / candidate_path).write_bytes(b"candidate")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-4"}],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "planned_entries": [{
+                "beat": "S1",
+                "kind": "image",
+                "status": "approved",
+                "review_status": "approved",
+                "output_path": candidate_path,
+                "label_zh": "无来源计划图",
+            }],
+        })
+
+        beat = load_board_state(p)["commercial"]["beats"][0]
+        preview = beat["planned_entries"][0]
+
+        assert preview["preview_kind"] == "candidate"
+        assert beat["assignment_status"] != "approved"
+        assert beat["available_count"] == 0
+        assert [item["path"] for item in beat["candidate_previews"]] == [
+            candidate_path,
+        ]
+
+    def test_commercial_closed_plan_backfills_reference_from_unique_matrix_path(
+        self,
+        projects_root,
+    ):
+        p = _make_project(projects_root, "commercial-reference-backfill")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        approved_path = "assets/images/approved.png"
+        (p / approved_path).write_bytes(b"approved")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-4"}],
+        })
+        _write(p / "artifacts" / "video_plan.json", {
+            "segments": [{
+                "id": "S1",
+                "assignment_status": "approved",
+                "asset_source": "user_upload",
+            }],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [{
+                "beat": "S1",
+                "kind": "image",
+                "path": approved_path,
+                "status": "confirmed",
+                "origin": "user_upload",
+                "selected": True,
+            }],
+        })
+
+        beat = load_board_state(p)["commercial"]["beats"][0]
+
+        assert beat["reference_path"] == approved_path
+        assert beat["ref"] == approved_path
+
+    def test_commercial_matrix_approval_is_scoped_to_exact_beat_and_path(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-beat-path-pair-approval")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        shared_path = "assets/images/shared.png"
+        (p / shared_path).write_bytes(b"image")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [
+                {"beat": "S1", "time": "0-4"},
+                {"beat": "S2", "time": "4-8"},
+            ],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [{
+                "beat": "S1",
+                "kind": "image",
+                "path": shared_path,
+                "status": "confirmed",
+                "origin": "user_upload",
+                "selected": True,
+            }],
+            "planned_entries": [{
+                "beat": "S2",
+                "kind": "image",
+                "output_path": shared_path,
+                "status": "approved",
+                "review_status": "review_pending",
+                "origin": "i2i",
+                "provider": "flux",
+                "model": "flux-pro",
+            }],
+        })
+
+        beats = {
+            beat["beat"]: beat
+            for beat in load_board_state(p)["commercial"]["beats"]
+        }
+
+        assert beats["S1"]["assignment_status"] == "user_asset"
+        assert beats["S2"]["assignment_status"] == "review_pending"
+        assert beats["S2"]["available_count"] == 0
+        assert beats["S2"]["planned_entries"][0]["preview_kind"] == "candidate"
+        assert [item["path"] for item in beats["S2"]["candidate_previews"]] == [
+            shared_path,
+        ]
+
+    def test_commercial_user_asset_stays_primary_with_pending_i2i_candidate(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-user-primary-with-i2i-candidate")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        user_path = "assets/images/user.png"
+        candidate_path = "assets/images/candidate.png"
+        (p / user_path).write_bytes(b"user")
+        (p / candidate_path).write_bytes(b"candidate")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-4"}],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [{
+                "beat": "S1",
+                "kind": "image",
+                "path": user_path,
+                "status": "confirmed",
+                "origin": "user_upload",
+                "selected": True,
+            }],
+            "planned_entries": [{
+                "beat": "S1",
+                "kind": "image",
+                "status": "ready",
+                "review_status": "review_pending",
+                "origin": "i2i",
+                "provider": "flux",
+                "model": "flux-pro",
+                "output_path": candidate_path,
+            }],
+        })
+
+        beat = load_board_state(p)["commercial"]["beats"][0]
+
+        assert beat["assignment_status"] == "user_asset"
+        assert beat["available_count"] == 1
+        assert [item["path"] for item in beat["ledger"]] == [user_path]
+        assert [item["path"] for item in beat["candidate_previews"]] == [
+            candidate_path,
+        ]
+
+    def test_commercial_multiple_closed_assets_are_assignment_conflict(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-assignment-conflict")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        paths = ["assets/images/one.png", "assets/images/two.png"]
+        for path in paths:
+            (p / path).write_bytes(b"image")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-4"}],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [
+                {
+                    "beat": "S1",
+                    "kind": "image",
+                    "path": path,
+                    "status": "confirmed",
+                    "origin": "user_upload",
+                    "selected": True,
+                }
+                for path in paths
+            ],
+        })
+
+        beat = load_board_state(p)["commercial"]["beats"][0]
+
+        assert beat["assignment_status"] == "assignment_conflict"
+        assert beat["available_count"] == 2
+        assert "冲突" in beat["assignment_reason"]
+        assert any("多个闭环素材" in warning for warning in beat["assignment_warnings"])
+
+    def test_commercial_i2i_candidate_is_not_reported_as_unused_upload(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-i2i-candidate-not-unused")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        candidate_path = "assets/images/candidate.png"
+        unused_path = "assets/images/unused-upload.png"
+        (p / candidate_path).write_bytes(b"candidate")
+        (p / unused_path).write_bytes(b"unused")
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-4"}],
+        })
+        _write(p / "artifacts" / "asset_precheck.json", {
+            "entries": [
+                {"file": "candidate.png", "path": candidate_path},
+                {"file": "unused-upload.png", "path": unused_path},
+            ],
+            "summary": {"total_images": 2},
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [{
+                "beat": "S1",
+                "kind": "image",
+                "path": candidate_path,
+                "status": "ready",
+                "review_status": "review_pending",
+                "origin": "i2i",
+                "provider": "flux",
+                "model": "flux-pro",
+                "selected": True,
+            }],
+        })
+
+        commercial = load_board_state(p)["commercial"]
+
+        assert [item["path"] for item in commercial["beats"][0]["candidate_previews"]] == [
+            candidate_path,
+        ]
+        assert [item["path"] for item in commercial["unused_assets"]] == [
+            unused_path,
+        ]
+
+    def test_commercial_plan_reference_survives_missing_ledger_mapping_with_warning(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-reference-ledger-drift")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        reference_path = "assets/images/reference.png"
+        (p / reference_path).write_bytes(b"image")
+        _write(p / "artifacts" / "video_plan.json", {
+            "segments": [{
+                "id": "S1",
+                "t": "0-5",
+                "ref": reference_path,
+            }],
+        })
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "S1", "time": "0-5"}],
+        })
+        _write(p / "artifacts" / "asset_ledger.json", {
+            "entries": [{
+                "file": "reference.png",
+                "path": reference_path,
+                "kind": "image",
+                "selected": True,
+            }],
+        })
+
+        beat = load_board_state(p)["commercial"]["beats"][0]
+
+        assert beat["reference_path"] == reference_path
+        assert beat["assignment_status"] == "missing"
+        assert beat["assignment_warnings"]
 
     def test_commercial_beat_reference_uses_video_plan_then_brief_legacy_fallback(
         self, projects_root
@@ -1214,6 +2018,9 @@ class TestBoardState:
                 "output_path": shared_path,
             }],
         })
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "beat_01", "time": "0-4"}],
+        })
         payload = {later_field: shared_path}
         if later_artifact == "sample_reel":
             payload["beat_ids"] = ["beat_01"]
@@ -1298,6 +2105,12 @@ class TestBoardState:
                     "output_path": "assets/video/beat_02.mp4",
                 },
             ]
+        })
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [
+                {"beat": "beat_01", "time": "0-4"},
+                {"beat": "beat_02", "time": "4-8"},
+            ],
         })
 
         beats = load_board_state(p)["commercial"]["beats"]

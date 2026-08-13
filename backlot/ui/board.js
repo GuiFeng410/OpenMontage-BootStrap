@@ -932,6 +932,26 @@ function renderCommercialAssets(s) {
     body);
 }
 
+function renderCommercialUnusedAssets(s) {
+  const assets = Array.isArray(s.commercial?.unused_assets)
+    ? s.commercial.unused_assets
+    : [];
+  if (!assets.length) return null;
+  return el("details", { class: "panel commercial-unused-assets" },
+    el("summary", {},
+      `未使用素材（${assets.length}）`,
+      el("span", { class: "meta" }, " · 展开核对")),
+    el("div", { class: "panel-body commercial-unused-assets-list" },
+      assets.map((item) => el("div", {
+        class: "commercial-unused-asset",
+        "data-path": item.path || "",
+      },
+      el("b", {}, item.file || (item.path || "").split("/").pop() || "未命名素材"),
+      el("span", {}, item.reason || "未分配到任何 canonical Beat"),
+      el("code", {}, item.path || "项目内路径待补齐"),
+      el("span", { class: "status-chip" }, item.status || "unassigned")))));
+}
+
 function renderCommercialAssetPrecheck(s) {
   const view = commercialContentView(s);
   if (view !== "plan" && view !== "assets") return null;
@@ -1069,10 +1089,48 @@ function commercialContentView(s) {
   return STAGE_CONTENT_VIEW[stage] || "plan";
 }
 
+const COMMERCIAL_ASSIGNMENT_STATUS_ZH = {
+  user_asset: "用户素材",
+  reuse_pending: "复用待确认",
+  reuse_approved: "复用已确认",
+  missing: "缺少素材",
+  i2i_planned: "I2I 待生成",
+  generating: "I2I 生成中",
+  review_pending: "I2I 待审",
+  approved: "I2I 已批准",
+  failed: "I2I 失败",
+  assignment_conflict: "素材冲突",
+};
+
+function commercialAssignmentStatusZh(beat) {
+  return beat.assignment_status_zh
+    || COMMERCIAL_ASSIGNMENT_STATUS_ZH[beat.assignment_status]
+    || "缺少素材";
+}
+
+function commercialAssignmentReason(beat) {
+  return beat.assignment_reason
+    || "没有可核对的闭环素材，请补齐账本分配或生成计划。";
+}
+
 function renderCommercialMediaStack(s, beat, view) {
   const stack = el("div", { class: "beat-media-stack" });
   const ledger = beat.ledger || [];
-  const images = ledger.filter((x) => x.kind === "image" && x.path && x.exists === true);
+  const images = ledger.filter((x) =>
+    x.kind === "image"
+    && x.path
+    && x.exists === true
+    && x.preview_kind !== "candidate");
+  const candidatePreviews = Array.isArray(beat.candidate_previews)
+    ? beat.candidate_previews.filter((item) => item?.path)
+    : [];
+  const approvedPlanned = Array.isArray(beat.planned_entries)
+    ? beat.planned_entries.filter((item) =>
+        item?.kind === "image"
+        && item?.path
+        && item?.exists === true
+        && item?.preview_kind === "approved")
+    : [];
   const videos = ledger.filter((x) => x.kind === "video" && x.path && x.exists === true);
   const selectedVideo = videos.find((v) => v.selected) || videos[0];
   const segmentItem = (s.commercial?.stage_evidence?.segment || []).find((item) =>
@@ -1089,24 +1147,60 @@ function renderCommercialMediaStack(s, beat, view) {
   }
 
   if (view === "assets") {
-    if (!images.length) {
-      stack.append(el("div", { class: "beat-media empty" }, "用户素材确认后将显示图片"));
-    } else {
-      for (const img of images) {
-        const isExpand = /扩展|i2i|AI/i.test(`${img.label_zh || ""}${img.note_zh || ""}`);
-        stack.append(el("div", { class: `beat-media image${img.selected ? " selected" : ""}${isExpand ? " expand" : ""}` },
-          el("img", {
-            src: thumbURL(s.project_id, img.path, 480),
-            loading: "lazy",
-            alt: img.file || "",
-          }),
-          el("span", { class: "media-cap" }, img.label_zh || (isExpand ? "AI扩展" : "用户素材"))));
-      }
+    for (const img of images) {
+      const isExpand = /扩展|i2i|AI/i.test(`${img.label_zh || ""}${img.note_zh || ""}`);
+      stack.append(el("div", { class: `beat-media image${img.selected ? " selected" : ""}${isExpand ? " expand" : ""}` },
+        el("img", {
+          src: thumbURL(s.project_id, img.path, 480),
+          loading: "lazy",
+          alt: img.file || "",
+        }),
+        el("span", { class: "media-cap" }, img.label_zh || (isExpand ? "AI扩展 · 已批准" : "用户素材"))));
     }
-    const pendingExpand = (beat.need_detail_zh || beat.gap_status === "不足");
+    for (const img of approvedPlanned) {
+      stack.append(el("div", { class: "beat-media image selected approved" },
+        el("img", {
+          src: thumbURL(s.project_id, img.path, 480),
+          loading: "lazy",
+          alt: img.file || img.label_zh || "",
+        }),
+        el("span", { class: "media-cap" }, img.label_zh || "I2I 已批准")));
+    }
+    for (const img of candidatePreviews) {
+      stack.append(el("div", {
+        class: "beat-media image candidate",
+        "data-candidate-status": img.status || "review_pending",
+      },
+      el("img", {
+        src: thumbURL(s.project_id, img.path, 480),
+        loading: "lazy",
+        alt: img.file || img.label_zh || "I2I 候选",
+      }),
+      el("span", { class: "media-cap" },
+        `${img.label_zh || "I2I 候选"} · 候选/待审`)));
+    }
+    if (!images.length && !approvedPlanned.length && !candidatePreviews.length && beat.reference_path) {
+      stack.append(el("div", { class: "beat-media image reference-unmapped" },
+        el("img", {
+          src: thumbURL(s.project_id, beat.reference_path, 480),
+          loading: "lazy",
+          alt: beat.ref || "参考素材",
+        }),
+        el("span", { class: "media-cap" }, "参考素材 · 未闭环")));
+    }
+    if (!stack.childNodes.length) {
+      stack.append(el("div", { class: "beat-media empty" },
+        commercialAssignmentReason(beat)));
+    }
+    const pendingExpand = (
+      beat.assignment_status === "i2i_planned"
+      || beat.assignment_status === "generating"
+    );
     if (pendingExpand) {
       stack.append(el("div", { class: "beat-media empty expand-slot" },
-        beat.need_detail_zh || "AI 扩展占位（待补图/确认）"));
+        beat.assignment_status === "generating"
+          ? "I2I 生成中"
+          : (beat.need_detail_zh || "I2I 待生成")));
     }
     return stack;
   }
@@ -1202,11 +1296,12 @@ function renderCommercialLedgerStrip(beat, view) {
   for (const item of items) {
     const cls = `asset-label${item.selected ? " selected" : ""}${item.exists === false ? " missing" : ""}`;
     const title = [item.note_zh, item.path || item.missing_path].filter(Boolean).join(" · ");
+    const label = item.label_zh || item.label || (item.kind === "image" ? "用户素材" : "素材");
     const missingHint = item.exists === false && item.missing_path
       ? ` · 文件不存在：${item.missing_path}`
       : "";
     strip.append(el("span", { class: cls, title: title || item.file },
-      `${item.label_zh || item.label}${item.selected ? " · 已选" : ""}`,
+      `${label}${item.selected ? " · 已选" : ""}`,
       item.file ? el("i", {}, ` · ${item.file}`) : null,
       missingHint ? el("i", {}, missingHint) : null));
   }
@@ -1220,9 +1315,15 @@ function renderCommercialPlannedEntries(s, beat, view) {
   if (!entries.length || view !== "assets") return null;
   const statusLabels = {
     planned: "待生成",
+    i2i_planned: "待生成",
     generating: "生成中",
-    ready: "已就绪",
+    generated: "候选/待审",
+    review_pending: "候选/待审",
+    i2i_review_pending: "候选/待审",
+    ready: "候选/待审",
+    approved: "已批准",
     failed: "生成失败",
+    rejected: "生成失败",
   };
   const group = el("div", {
     class: "asset-label-strip planned-entry-strip",
@@ -1231,10 +1332,14 @@ function renderCommercialPlannedEntries(s, beat, view) {
   for (const item of entries) {
     const reportedStatus = item.status || "planned";
     const unavailableReady = (
-      reportedStatus === "ready"
+      ["ready", "approved", "review_pending", "generated"].includes(reportedStatus)
       && (!item.path || item.exists === false)
     );
-    const status = unavailableReady ? "failed" : reportedStatus;
+    const status = unavailableReady
+      ? "failed"
+      : item.preview_kind === "candidate"
+      ? "review_pending"
+      : reportedStatus;
     const card = el("div", {
       class: `beat-field planned-entry-card status-${status}`,
       "data-status": status,
@@ -1245,15 +1350,18 @@ function renderCommercialPlannedEntries(s, beat, view) {
     },
       el("b", {}, item.label_zh || (item.kind === "video" ? "计划视频" : "计划图片")),
       el("span", {
-        class: `status-chip ${status === "ready" ? "ok" : status === "failed" ? "warn" : ""}`,
+        class: `status-chip ${status === "approved" ? "ok" : ["failed", "review_pending"].includes(status) ? "warn" : ""}`,
       }, statusLabels[status] || status)));
-    if (status === "ready" && item.path && item.exists !== false) {
+    if (["review_pending", "generated", "approved"].includes(status) && item.path && item.exists !== false) {
       card.append(el("img", {
         src: thumbURL(s.project_id, item.path, 480),
         loading: "lazy",
         alt: item.label_zh || item.prompt_zh || "",
         style: "width:100%;max-height:160px;object-fit:contain;border-radius:6px;background:var(--media-bg)",
       }));
+      if (status !== "approved") {
+        card.append(el("span", { class: "commercial-candidate-label" }, "候选/待审 · 尚未批准"));
+      }
     }
     if (item.prompt_zh) card.append(el("div", {}, item.prompt_zh));
     const engine = [item.provider, item.model].filter(Boolean).join(" / ");
@@ -1275,18 +1383,32 @@ function renderCommercialPlannedEntries(s, beat, view) {
 
 function renderCommercialBeatCard(s, beat, index = 0) {
   const view = commercialContentView(s);
+  const assignmentStatus = beat.assignment_status || "missing";
+  const assignmentLabel = commercialAssignmentStatusZh(beat);
+  const statusClass = ["user_asset", "reuse_approved", "approved"].includes(assignmentStatus)
+    ? "ok"
+    : [
+        "missing",
+        "reuse_pending",
+        "failed",
+        "review_pending",
+        "assignment_conflict",
+      ].includes(assignmentStatus)
+    ? "warn"
+    : "";
   const wrap = el("div", {
     class: `commercial-beat-card mode-${view}`,
     "data-beat": beat.beat || "",
+    "data-assignment-status": assignmentStatus,
   });
 
   wrap.append(el("div", { class: "cbc-head" },
     el("div", { class: "cbc-title" }, beatOrdinalZh(beat.beat, index)),
     el("span", {
-      class: `status-chip ${(beat.status === "可以" || beat.gap_status === "足够") ? "ok" : beat.gap_status === "不足" ? "warn" : ""}`,
-    }, view === "assets" ? (beat.gap_status || beat.status || "") : (beat.status || "—"))));
+      class: `status-chip ${statusClass}`,
+    }, assignmentLabel)));
 
-  wrap.append(el("div", { class: "cbc-time" }, `时间段：${beat.time || "—"}`));
+  wrap.append(el("div", { class: "cbc-time" }, `时间段：${beat.time || "未填写"}`));
 
   const media = renderCommercialMediaStack(s, beat, view);
   if (media) wrap.append(media);
@@ -1294,20 +1416,39 @@ function renderCommercialBeatCard(s, beat, index = 0) {
   if (plannedEntries) wrap.append(plannedEntries);
 
   const body = el("div", { class: "cbc-body" });
+  body.append(el("div", { class: "commercial-assignment-summary" },
+    el("div", { class: "beat-field" },
+      el("b", {}, "素材安排"),
+      el("div", {}, beat.asset_plan_zh || "尚未写入具体素材安排")),
+    el("div", { class: "beat-field assignment-counts" },
+      el("b", {}, "所需 / 现有"),
+      el("div", {},
+        `${beat.required_count ?? beat.need_count ?? 1} 张 / ${beat.available_count ?? beat.have_count ?? 0} 张`)),
+    el("div", { class: "beat-field" },
+      el("b", {}, "状态"),
+      el("div", {}, assignmentLabel)),
+    el("div", { class: "beat-field assignment-reason" },
+      el("b", {}, "原因"),
+      el("div", {}, commercialAssignmentReason(beat)))));
+  const warnings = Array.isArray(beat.assignment_warnings)
+    ? beat.assignment_warnings.filter(Boolean)
+    : [];
+  if (beat.assignment_warning && !warnings.includes(beat.assignment_warning)) {
+    warnings.unshift(beat.assignment_warning);
+  }
+  for (const warning of warnings) {
+    body.append(el("div", { class: "commercial-assignment-warning" }, warning));
+  }
   if (view === "plan") {
     body.append(
       el("div", { class: "beat-field" }, el("b", {}, "文案规划"), el("div", {}, beat.copy_plan_zh || "—")),
-      el("div", { class: "beat-field" }, el("b", {}, "镜头规划"), el("div", {}, beat.shot_plan_zh || "—")),
-      el("div", { class: "beat-field" }, el("b", {}, "素材初步规划"), el("div", {}, beat.asset_plan_zh || "—")));
+      el("div", { class: "beat-field" }, el("b", {}, "镜头规划"), el("div", {}, beat.shot_plan_zh || "—")));
   } else if (view === "assets") {
-    body.append(
-      el("div", { class: "beat-field" }, el("b", {}, "素材安排"), el("div", {}, beat.asset_plan_zh || "—")),
-      el("div", { class: "beat-field" }, el("b", {}, "所需素材"), el("div", {}, beat.need_count != null ? `${beat.need_count} 张` : "—")),
-      el("div", { class: "beat-field" }, el("b", {}, "现有"), el("div", {}, beat.have_count != null ? `${beat.have_count} 张` : "—")),
-      el("div", { class: "beat-field" }, el("b", {}, "状况"), el("div", {}, beat.gap_status || "—")),
-      beat.need_detail_zh
-        ? el("div", { class: "beat-field warn-text" }, el("b", {}, "AI扩展/缺口"), el("div", {}, beat.need_detail_zh))
-        : null);
+    if (beat.need_detail_zh) {
+      body.append(el("div", { class: "beat-field warn-text" },
+        el("b", {}, "I2I 扩展/缺口"),
+        el("div", {}, beat.need_detail_zh)));
+    }
     if (beat.copy_plan_zh || beat.shot_plan_zh) {
       body.append(el("details", { class: "beat-plan-fold" },
         el("summary", {}, "回顾：该段文案/镜头（方案确认）"),
@@ -1637,11 +1778,13 @@ function renderCommercialBoard(s) {
   const view = commercialContentView(s);
   const precheck = renderCommercialAssetPrecheck(s);
   const assetPool = view === "assets" ? renderCommercialAssets(s) : null;
+  const unusedAssets = view === "assets" ? renderCommercialUnusedAssets(s) : null;
   const beats = renderCommercialBeats(s);
   const players = renderCommercialPlayers(s);
   const stageEvidence = renderCommercialStageEvidence(s);
   if (precheck) main.append(precheck);
   if (assetPool) main.append(assetPool);
+  if (unusedAssets) main.append(unusedAssets);
   if (beats) main.append(beats);
   if (stageEvidence) main.append(stageEvidence);
   if (players) main.append(players);

@@ -13,13 +13,22 @@ from copy import deepcopy
 from pathlib import Path
 from typing import Any, Optional
 
+from lib.asset_precheck import (
+    has_generated_image_source,
+    has_generation_chain_signal,
+    normalize_beat_ids,
+    validate_beat_assignment_matrix,
+)
+from lib.checkpoint import _merge_project_decision_logs
 from lib.events import read_events
 from lib.paths import PROJECTS_DIR, REPO_ROOT  # single source of truth (env-overridable)
 
-MEDIA_IMAGE_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".svg"}
+MEDIA_IMAGE_EXT = {
+    ".png", ".jpg", ".jpeg", ".webp", ".gif",
+    ".bmp", ".tif", ".tiff", ".svg",
+}
 MEDIA_VIDEO_EXT = {".mp4", ".webm", ".mov"}
 MEDIA_AUDIO_EXT = {".mp3", ".wav", ".m4a", ".ogg"}
-
 # Directories inside a project we never scan for media (build noise).
 SCAN_EXCLUDE = {"node_modules", ".git", "__pycache__", "history", ".cache"}
 
@@ -54,6 +63,45 @@ _DECISION_CATEGORY_ZH = {
     "delivery_signoff": "交付确认",
     "approval_policy": "审批策略",
 }
+
+
+def _is_generated_image_entry(entry: dict[str, Any]) -> bool:
+    path = str(
+        entry.get("path")
+        or entry.get("output_path")
+        or entry.get("candidate_output_path")
+        or ""
+    ).replace("\\", "/")
+    is_image = (
+        str(entry.get("kind") or "").strip().lower() == "image"
+        or Path(path).suffix.lower() in MEDIA_IMAGE_EXT
+    )
+    status = str(entry.get("status") or "").strip().lower()
+    has_explicit_source = any(
+        str(entry.get(field) or "").strip().lower() not in {"", "none"}
+        for field in ("origin", "asset_source", "gap_fill")
+    )
+    return (
+        has_generated_image_source(entry)
+        or (
+            is_image
+            and (
+                has_generation_chain_signal(
+                    entry,
+                    status,
+                    include_status=False,
+                )
+                or (
+                    not has_explicit_source
+                    and has_generation_chain_signal(
+                        entry,
+                        status,
+                        include_status=entry.get("selected") is not False,
+                    )
+                )
+            )
+        )
+    )
 
 
 def _commercial_decisions_summary(decision_log: dict[str, Any]) -> list[dict[str, Any]]:
@@ -342,11 +390,32 @@ def _collect_artifacts(project_dir: Path, checkpoints: dict[str, dict]) -> dict[
     if batch_reviews:
         artifacts["batch_reviews"] = batch_reviews
         artifacts["_batch_review_sources"] = batch_review_sources
-    # decision_log historically also lives at project root
-    if "decision_log" not in artifacts:
-        data = _read_json(project_dir / "decision_log.json")
-        if data is not None:
-            artifacts["decision_log"] = data
+    # decision_log historically lives in both artifacts/ and the project root.
+    # Merge prefix-compatible append-only copies so the board never renders a
+    # stale approval after the root log records a later withdrawal.
+    decision_logs = []
+    for payload in (
+        artifacts.get("decision_log"),
+        _read_json(project_dir / "decision_log.json"),
+    ):
+        if not isinstance(payload, dict):
+            continue
+        normalized = deepcopy(payload)
+        if not str(normalized.get("project_id") or "").strip():
+            normalized["project_id"] = project_dir.name
+        decision_logs.append(normalized)
+    if decision_logs:
+        try:
+            artifacts["decision_log"] = _merge_project_decision_logs(
+                decision_logs,
+                project_dir.name,
+            )
+        except Exception:  # noqa: BLE001 - board state must degrade, never crash
+            artifacts["decision_log"] = {
+                "version": "1.0",
+                "project_id": project_dir.name,
+                "decisions": [],
+            }
     # Backfill from checkpoint-embedded artifacts.
     for cp in checkpoints.values():
         for name, value in (cp.get("artifacts") or {}).items():
@@ -354,6 +423,24 @@ def _collect_artifacts(project_dir: Path, checkpoints: dict[str, dict]) -> dict[
                 resolved = _resolve_artifact(project_dir, value)
                 if resolved is not None:
                     artifacts[name] = resolved
+    # A legacy checkpoint may be the only decision-log source. Re-run the same
+    # project-bound merge after backfill so embedded cross-project approvals
+    # cannot bypass the validation above.
+    if isinstance(artifacts.get("decision_log"), dict):
+        normalized = deepcopy(artifacts["decision_log"])
+        if not str(normalized.get("project_id") or "").strip():
+            normalized["project_id"] = project_dir.name
+        try:
+            artifacts["decision_log"] = _merge_project_decision_logs(
+                [normalized],
+                project_dir.name,
+            )
+        except Exception:  # noqa: BLE001 - board state must degrade, never crash
+            artifacts["decision_log"] = {
+                "version": "1.0",
+                "project_id": project_dir.name,
+                "decisions": [],
+            }
     return artifacts
 
 
@@ -848,28 +935,42 @@ def _build_commercial_board(
     show_players = show_preview
 
     images: list[dict[str, Any]] = []
+    image_paths_seen: set[str] = set()
     brief_images_by_beat: dict[str, str] = {}
     brief_image_candidates: list[str] = []
-    for filename, meta in _brief_image_rows(brief.get("images")):
-        role = meta.get("role") or ""
-        rel = meta.get("path") or ""
-        resolved = _resolve_commercial_image(project_dir, str(rel))
-        beat_id = str(meta.get("beat") or "").strip()
-        if beat_id and resolved:
-            brief_images_by_beat.setdefault(beat_id, resolved)
+
+    def append_uploaded_image(filename: str, meta: dict[str, Any]) -> None:
+        role = meta.get("role") or meta.get("user_class") or meta.get(
+            "suggested_class"
+        ) or ""
+        rel = str(meta.get("path") or "")
+        resolved = _resolve_commercial_image(project_dir, rel)
+        identity = resolved or rel
+        if not identity or identity in image_paths_seen:
+            return
+        image_paths_seen.add(identity)
+        for beat_id in normalize_beat_ids(
+            meta.get("beats") if "beats" in meta else meta.get("beat")
+        ):
+            if resolved:
+                brief_images_by_beat.setdefault(beat_id, resolved)
         if resolved and resolved not in brief_image_candidates:
             brief_image_candidates.append(resolved)
         images.append({
-            "file": filename,
+            "file": filename or Path(rel).name,
             "role": role,
             "role_zh": ROLE_LABELS_ZH.get(role, role or "素材"),
             "path": resolved,
             "exists": resolved is not None,
-            "missing_path": rel if resolved is None else None,
+            "missing_path": rel if rel and resolved is None else None,
             "hero_only_motion": role == "product_hero",
         })
 
-    seg_by_beat: dict[str, dict] = {}
+    for filename, meta in _brief_image_rows(brief.get("images")):
+        append_uploaded_image(filename, meta)
+    for raw in precheck_doc.get("entries") or []:
+        if isinstance(raw, dict):
+            append_uploaded_image(str(raw.get("file") or ""), raw)
 
     def present(value: Any) -> bool:
         return value is not None and value != ""
@@ -877,44 +978,185 @@ def _build_commercial_board(
     def first_present(*values: Any) -> Any:
         return next((value for value in values if present(value)), None)
 
+    plan_doc = (
+        video_plan.get("video_plan")
+        if isinstance(video_plan.get("video_plan"), dict)
+        else video_plan
+    )
+    plan_segment_rows = (
+        plan_doc.get("segments")
+        if isinstance(plan_doc.get("segments"), list)
+        else []
+    )
+    plan_beat_rows = (
+        plan_doc.get("beats")
+        if isinstance(plan_doc.get("beats"), list)
+        else []
+    )
+    plan_rows = plan_segment_rows or plan_beat_rows
+    segment_rows = (
+        segment_doc.get("segments")
+        if isinstance(segment_doc.get("segments"), list)
+        else []
+    )
+
+    # Segment cards are the commercial card authority.  Older projects that
+    # predate segment_cards fall back to video_plan, but ledger/planned rows
+    # never create cards by themselves.
+    canonical_rows = segment_rows or plan_rows
+    canonical_beat_ids: list[str] = []
+    for row in canonical_rows:
+        if not isinstance(row, dict):
+            continue
+        raw_id = row.get("beat") if "beat" in row else row.get("id")
+        for beat_id in normalize_beat_ids(raw_id):
+            if beat_id not in canonical_beat_ids:
+                canonical_beat_ids.append(beat_id)
+    canonical_beat_set = set(canonical_beat_ids)
+
+    seg_by_beat: dict[str, dict] = {}
+
     # A real commercial run may split the same beat across video_plan
     # (method/provider/model/timing) and segment_cards (copy/shot/prompt).
     # Merge both documents by beat instead of letting one document hide the
     # other. Later segment_cards values win only when they are non-empty.
-    for source_rows in (
-        video_plan.get("segments") or [],
-        segment_doc.get("segments") or [],
-    ):
+    for source_rows in (plan_rows, segment_rows):
         for row in source_rows:
             if not isinstance(row, dict):
                 continue
-            beat_id = str(first_present(row.get("beat"), row.get("id")) or "").strip()
-            if not beat_id:
-                continue
-            normalized = dict(row)
-            normalized["beat"] = beat_id
-            normalized["time"] = first_present(normalized.get("time"), normalized.get("t"))
-            normalized["asset_plan_zh"] = first_present(
-                normalized.get("asset_plan_zh"),
-                normalized.get("purpose"),
-            )
-            normalized["generation_prompt_zh"] = first_present(
-                normalized.get("generation_prompt_zh"),
-                normalized.get("prompt_zh"),
-                normalized.get("video_prompt_zh"),
-            )
-            merged = dict(seg_by_beat.get(beat_id) or {})
-            for key, value in normalized.items():
-                if present(value) or key not in merged:
-                    merged[key] = value
-            seg_by_beat[beat_id] = merged
+            raw_id = row.get("beat") if "beat" in row else row.get("id")
+            for beat_id in normalize_beat_ids(raw_id):
+                normalized = dict(row)
+                normalized["beat"] = beat_id
+                normalized["time"] = first_present(
+                    normalized.get("time"),
+                    normalized.get("t"),
+                )
+                normalized["asset_plan_zh"] = first_present(
+                    normalized.get("asset_plan_zh"),
+                    normalized.get("purpose"),
+                )
+                normalized["generation_prompt_zh"] = first_present(
+                    normalized.get("generation_prompt_zh"),
+                    normalized.get("prompt_zh"),
+                    normalized.get("video_prompt_zh"),
+                )
+                merged = dict(seg_by_beat.get(beat_id) or {})
+                for key, value in normalized.items():
+                    if present(value) or key not in merged:
+                        merged[key] = value
+                seg_by_beat[beat_id] = merged
+    raw_ledger_entries = [
+        entry for entry in (ledger_doc.get("entries") or [])
+        if isinstance(entry, dict)
+    ]
+    raw_planned_entries = [
+        entry for entry in (ledger_doc.get("planned_entries") or [])
+        if isinstance(entry, dict)
+    ]
+
+    def normalize_matrix_media_path(raw: Any, kind: Any) -> Optional[str]:
+        raw_path = str(raw or "").strip()
+        if not raw_path:
+            return None
+        return (
+            _resolve_commercial_video(project_dir, raw_path)
+            if str(kind or "").lower() == "video"
+            else _resolve_commercial_image(project_dir, raw_path)
+        )
+
+    matrix_ledger_entries: list[dict[str, Any]] = []
+    for entry in raw_ledger_entries:
+        normalized = deepcopy(entry)
+        resolved = normalize_matrix_media_path(
+            entry.get("path") or entry.get("output_path"),
+            entry.get("kind"),
+        )
+        if resolved:
+            if entry.get("path"):
+                normalized["path"] = resolved
+            else:
+                normalized["output_path"] = resolved
+        matrix_ledger_entries.append(normalized)
+    matrix_planned_entries: list[dict[str, Any]] = []
+    for entry in raw_planned_entries:
+        normalized = deepcopy(entry)
+        for field in ("output_path", "candidate_output_path"):
+            resolved = normalize_matrix_media_path(entry.get(field), entry.get("kind"))
+            if resolved:
+                normalized[field] = resolved
+        if isinstance(entry.get("candidate_paths"), list):
+            normalized["candidate_paths"] = [
+                normalize_matrix_media_path(path, entry.get("kind")) or path
+                for path in entry["candidate_paths"]
+            ]
+        matrix_planned_entries.append(normalized)
+    assignment_matrix = validate_beat_assignment_matrix(
+        project_id=str(marker.get("project_id") or project_dir.name),
+        segment_cards=segment_doc,
+        video_plan=video_plan,
+        ledger_entries=matrix_ledger_entries,
+        planned_entries=matrix_planned_entries,
+        decision_log=artifacts.get("decision_log") or {},
+        project_dir=project_dir,
+    )
+    matrix_assigned_pairs = {
+        (beat_id, path)
+        for beat_id, paths in (assignment_matrix.get("assigned") or {}).items()
+        for path in paths
+    }
+
+    assignment_warnings: list[dict[str, Any]] = []
+    orphan_assignments: list[dict[str, Any]] = []
+    unused_assets_by_path: dict[str, dict[str, Any]] = {}
+    i2i_asset_paths: set[str] = set()
+
+    def safe_path_hint(raw: Any, *, kind: str = "image") -> Optional[str]:
+        raw_path = str(raw or "").strip().replace("\\", "/")
+        if not raw_path:
+            return None
+        resolved = (
+            _resolve_commercial_image(project_dir, raw_path)
+            if kind == "image"
+            else _resolve_commercial_video(project_dir, raw_path)
+        )
+        if resolved:
+            return resolved
+        candidate = Path(raw_path)
+        expected = ("assets", "images") if kind == "image" else ("assets", "video")
+        allowed = MEDIA_IMAGE_EXT if kind == "image" else MEDIA_VIDEO_EXT
+        if (
+            candidate.is_absolute()
+            or ".." in candidate.parts
+            or candidate.parts[:2] != expected
+            or candidate.suffix.lower() not in allowed
+        ):
+            return None
+        return candidate.as_posix()
+
+    def add_assignment_warning(
+        reason: str,
+        *,
+        source: str,
+        beat_ids: list[str] | None = None,
+        path: Optional[str] = None,
+    ) -> None:
+        warning = {
+            "source": source,
+            "reason": reason,
+            "beat_ids": beat_ids or [],
+            "path": path,
+        }
+        if warning not in assignment_warnings:
+            assignment_warnings.append(warning)
+
     ledger_by_beat: dict[str, list[dict]] = {}
-    for entry in ledger_doc.get("entries") or []:
+    for index, entry in enumerate(raw_ledger_entries):
         if not isinstance(entry, dict):
             continue
-        beat_id = str(first_present(entry.get("beat"), entry.get("id")) or "").strip()
         path = str(entry.get("path") or "")
         kind = entry.get("kind")
+        resolved_rel = None
         if kind == "image" or (
             kind is None and Path(path).suffix.lower() in MEDIA_IMAGE_EXT
         ):
@@ -926,33 +1168,107 @@ def _build_commercial_board(
             resolved_path = project_dir / resolved_rel if resolved_rel else None
         else:
             resolved_path = None
+        is_i2i = _is_generated_image_entry(entry)
         item = {
             "label": entry.get("label"),
             "label_zh": entry.get("label_zh") or entry.get("label") or "",
             "kind": kind,
             "origin": entry.get("origin"),
+            "asset_source": entry.get("asset_source"),
+            "gap_fill": entry.get("gap_fill"),
             "status": entry.get("status"),
+            "review_status": entry.get("review_status"),
+            "provider": entry.get("provider"),
+            "model": entry.get("model"),
             "file": entry.get("file"),
             "path": _rel(project_dir, resolved_path) if resolved_path else None,
             "missing_path": path if path and resolved_path is None else None,
             "exists": resolved_path is not None,
             "selected": bool(entry.get("selected")),
             "note_zh": entry.get("note_zh") or "",
+            "is_i2i": is_i2i,
+            "preview_kind": (
+                "candidate" if is_i2i else "user_asset"
+            ),
         }
-        ledger_by_beat.setdefault(beat_id, []).append(item)
+        beat_ids = normalize_beat_ids(
+            entry.get("beats") if "beats" in entry else entry.get("beat")
+        )
+        valid_ids = [beat_id for beat_id in beat_ids if beat_id in canonical_beat_set]
+        orphan_ids = [beat_id for beat_id in beat_ids if beat_id not in canonical_beat_set]
+        safe_path = safe_path_hint(path, kind=kind if kind in {"image", "video"} else "image")
+        if is_i2i and safe_path:
+            i2i_asset_paths.add(safe_path)
+        if orphan_ids:
+            orphan = {
+                "source": f"asset_ledger.entries[{index}]",
+                "beat_ids": orphan_ids,
+                "path": safe_path,
+                "file": entry.get("file") or (Path(safe_path).name if safe_path else None),
+                "reason": "分配目标不是 canonical Beat",
+            }
+            orphan_assignments.append(orphan)
+            add_assignment_warning(
+                orphan["reason"],
+                source=orphan["source"],
+                beat_ids=orphan_ids,
+                path=safe_path,
+            )
+        if entry.get("selected") is not False:
+            for beat_id in valid_ids:
+                beat_item = deepcopy(item)
+                if (
+                    is_i2i
+                    and resolved_rel
+                    and (beat_id, resolved_rel) in matrix_assigned_pairs
+                ):
+                    beat_item["preview_kind"] = "approved"
+                ledger_by_beat.setdefault(beat_id, []).append(beat_item)
+        if kind == "image":
+            append_uploaded_image(
+                str(entry.get("file") or Path(path).name),
+                {
+                    **entry,
+                    "role": entry.get("user_class") or entry.get("role"),
+                },
+            )
+            if (
+                safe_path
+                and not is_i2i
+                and (entry.get("selected") is False or not valid_ids)
+            ):
+                reason = (
+                    "未选用且未分配到 canonical Beat"
+                    if entry.get("selected") is False
+                    else "仅分配到非 canonical Beat"
+                    if orphan_ids
+                    else "未分配到任何 canonical Beat"
+                )
+                unused_assets_by_path[safe_path] = {
+                    "path": safe_path,
+                    "file": entry.get("file") or Path(safe_path).name,
+                    "reason": reason,
+                    "status": entry.get("status") or "unassigned",
+                }
 
     planned_by_beat: dict[str, list[dict[str, Any]]] = {}
-    for entry in ledger_doc.get("planned_entries") or []:
-        if not isinstance(entry, dict):
-            continue
-        beat_id = str(entry.get("beat") or "").strip()
-        if not beat_id:
-            continue
+    for index, entry in enumerate(raw_planned_entries):
+        beat_ids = normalize_beat_ids(
+            entry.get("beats") if "beats" in entry else entry.get("beat")
+        )
+        valid_ids = [beat_id for beat_id in beat_ids if beat_id in canonical_beat_set]
+        orphan_ids = [beat_id for beat_id in beat_ids if beat_id not in canonical_beat_set]
         item = deepcopy(entry)
-        status = str(item.get("status") or "")
+        status = str(item.get("status") or "").strip().lower()
+        review_status = str(item.get("review_status") or "").strip().lower()
+        is_i2i = _is_generated_image_entry(item)
         item.pop("path", None)
-        if status == "ready":
-            output_path = str(item.get("output_path") or "")
+        output_path = str(
+            item.get("output_path")
+            or item.get("candidate_output_path")
+            or ""
+        )
+        if status in {"ready", "approved", "review_pending", "generated"}:
             if item.get("kind") == "image":
                 resolved_rel = _resolve_commercial_image(project_dir, output_path)
                 resolved_output = project_dir / resolved_rel if resolved_rel else None
@@ -964,16 +1280,70 @@ def _build_commercial_board(
             if resolved_output is not None:
                 item["path"] = _rel(project_dir, resolved_output)
                 item["exists"] = True
+                item["preview_kind"] = (
+                    "candidate"
+                    if item.get("kind") == "image"
+                    else "approved"
+                    if (
+                        status == "approved"
+                        or (status == "ready" and review_status == "approved")
+                    )
+                    else "candidate"
+                )
             else:
                 item["status"] = "failed"
                 item["exists"] = False
-                if output_path:
-                    item["missing_output_path"] = output_path
+                safe_output = safe_path_hint(
+                    output_path,
+                    kind=str(item.get("kind") or "image"),
+                )
+                if not safe_output:
+                    output_candidate = Path(output_path.replace("\\", "/"))
+                    if (
+                        output_path
+                        and not output_candidate.is_absolute()
+                        and ".." not in output_candidate.parts
+                    ):
+                        safe_output = output_candidate.as_posix()
+                if safe_output:
+                    item["missing_output_path"] = safe_output
                 item.setdefault(
                     "error_zh",
                     "输出文件不存在" if output_path else "未提供输出文件路径",
                 )
-        planned_by_beat.setdefault(beat_id, []).append(item)
+        safe_output = safe_path_hint(
+            output_path,
+            kind=str(item.get("kind") or "image"),
+        )
+        if is_i2i and safe_output:
+            i2i_asset_paths.add(safe_output)
+        if orphan_ids:
+            orphan = {
+                "source": f"asset_ledger.planned_entries[{index}]",
+                "beat_ids": orphan_ids,
+                "path": safe_output,
+                "file": (
+                    item.get("file")
+                    or (Path(safe_output).name if safe_output else None)
+                ),
+                "reason": "计划素材目标不是 canonical Beat",
+            }
+            orphan_assignments.append(orphan)
+            add_assignment_warning(
+                orphan["reason"],
+                source=orphan["source"],
+                beat_ids=orphan_ids,
+                path=safe_output,
+            )
+        for beat_id in valid_ids:
+            beat_item = deepcopy(item)
+            if (
+                beat_item.get("kind") == "image"
+                and beat_item.get("path")
+                and (beat_id, beat_item["path"]) in matrix_assigned_pairs
+            ):
+                beat_item["preview_kind"] = "approved"
+            planned_by_beat.setdefault(beat_id, []).append(beat_item)
 
     beats: list[dict[str, Any]] = []
     overview_rows = [
@@ -1036,29 +1406,82 @@ def _build_commercial_board(
                 source_artifact=source_artifact,
             )
 
-    known_overview_beats = {
-        str(first_present(row.get("beat"), row.get("id")) or "").strip()
-        for row in overview_rows
-    }
-    for beat_id in dict.fromkeys(
-        [*seg_by_beat.keys(), *ledger_by_beat.keys(), *planned_by_beat.keys()]
-    ):
-        if not beat_id or beat_id in known_overview_beats:
-            continue
-        plan = seg_by_beat.get(beat_id) or {}
-        overview_rows.append({
-            "beat": beat_id,
-            "time": plan.get("time"),
-            "status": plan.get("status"),
-        })
-        known_overview_beats.add(beat_id)
+    overview_by_beat: dict[str, dict[str, Any]] = {}
+    for row in overview_rows:
+        raw_id = row.get("beat") if "beat" in row else row.get("id")
+        for beat_id in normalize_beat_ids(raw_id):
+            if beat_id in canonical_beat_set:
+                overview_by_beat.setdefault(beat_id, row)
     unambiguous_brief_reference = (
         brief_image_candidates[0]
-        if len(known_overview_beats) == 1 and len(brief_image_candidates) == 1
+        if len(canonical_beat_ids) == 1 and len(brief_image_candidates) == 1
         else None
     )
-    for row in overview_rows:
-        beat_id = str(first_present(row.get("beat"), row.get("id")) or "").strip()
+
+    reuse_groups = assignment_matrix.get("reuse_groups") or []
+    reuse_pending_groups = assignment_matrix.get("reuse_pending") or []
+
+    def group_has_beat(groups: list[dict[str, Any]], beat_id: str) -> bool:
+        return any(
+            beat_id in normalize_beat_ids(group.get("beat_ids"))
+            for group in groups
+            if isinstance(group, dict)
+        )
+
+    def is_i2i_entry(item: dict[str, Any]) -> bool:
+        return _is_generated_image_entry(item)
+
+    def i2i_assignment_state(item: dict[str, Any]) -> str:
+        status = str(item.get("status") or "").strip().lower()
+        review = str(item.get("review_status") or "").strip().lower()
+        if status in {"failed", "rejected"} or review == "rejected":
+            return "failed"
+        if item.get("preview_kind") == "approved":
+            return "approved"
+        if status in {"generating", "in_progress"}:
+            return "generating"
+        if review == "approved":
+            return "failed"
+        if (
+            status in {
+                "ready",
+                "approved",
+                "generated",
+                "review_pending",
+                "i2i_review_pending",
+            }
+            or review in {"pending", "review_pending"}
+        ):
+            return "review_pending"
+        return "i2i_planned"
+
+    assignment_status_zh = {
+        "user_asset": "用户素材",
+        "reuse_pending": "复用待确认",
+        "reuse_approved": "复用已确认",
+        "missing": "缺少素材",
+        "i2i_planned": "I2I 待生成",
+        "generating": "I2I 生成中",
+        "review_pending": "I2I 待审",
+        "approved": "I2I 已批准",
+        "failed": "I2I 失败",
+        "assignment_conflict": "素材冲突",
+    }
+    assignment_reasons = {
+        "user_asset": "已由该 Beat 专用的用户上传素材覆盖。",
+        "reuse_pending": "同一真实素材分配到多个 Beat，等待精确复用确认。",
+        "reuse_approved": "同一真实素材的跨 Beat 复用已按范围确认。",
+        "missing": "没有账本闭环素材；参考图仅供核对，不计为已分配。",
+        "i2i_planned": "已规划 I2I 补图，尚未开始生成。",
+        "generating": "I2I 补图正在生成，尚不可作为批准素材。",
+        "review_pending": "I2I 已生成候选，等待审查批准。",
+        "approved": "I2I 输出已审查并批准用于该 Beat。",
+        "failed": "I2I 生成或审查失败，需要重试或改用其它素材。",
+        "assignment_conflict": "素材冲突：同一 Beat 存在多个不同的闭环素材，必须确认唯一选用项。",
+    }
+
+    for beat_id in canonical_beat_ids:
+        row = overview_by_beat.get(beat_id) or {}
         plan = seg_by_beat.get(beat_id) or {}
         asset = first_present(row.get("asset"), plan.get("asset")) or ""
         asset_alt = first_present(row.get("asset_alt"), plan.get("asset_alt")) or ""
@@ -1091,6 +1514,100 @@ def _build_commercial_board(
                 or unambiguous_brief_reference
             )
             reference = reference_path
+        beat_ledger = ledger_by_beat.get(beat_id) or []
+        beat_planned = planned_by_beat.get(beat_id) or []
+        assigned_paths = list(
+            dict.fromkeys((assignment_matrix.get("assigned") or {}).get(beat_id) or [])
+        )
+        i2i_rows = [
+            item for item in [*beat_ledger, *beat_planned]
+            if is_i2i_entry(item)
+        ]
+        has_assignment_conflict = any(
+            conflict.get("beat_id") == beat_id
+            for conflict in assignment_matrix.get("assignment_conflicts") or []
+            if isinstance(conflict, dict)
+        )
+        closed_user_paths = {
+            item.get("path")
+            for item in beat_ledger
+            if (
+                item.get("preview_kind") == "user_asset"
+                and item.get("path") in assigned_paths
+            )
+        }
+        closed_i2i_paths = {
+            item.get("path")
+            for item in [*beat_ledger, *beat_planned]
+            if (
+                is_i2i_entry(item)
+                and item.get("preview_kind") == "approved"
+                and item.get("path") in assigned_paths
+            )
+        }
+        if has_assignment_conflict:
+            assignment_status = "assignment_conflict"
+        elif closed_user_paths and group_has_beat(reuse_groups, beat_id):
+            assignment_status = (
+                "reuse_pending"
+                if group_has_beat(reuse_pending_groups, beat_id)
+                else "reuse_approved"
+            )
+        elif closed_user_paths:
+            assignment_status = "user_asset"
+        elif closed_i2i_paths:
+            assignment_status = "approved"
+        elif i2i_rows:
+            assignment_status = i2i_assignment_state(i2i_rows[-1])
+        elif (assignment_matrix.get("assigned") or {}).get(beat_id):
+            assignment_status = "user_asset"
+        else:
+            assignment_status = "missing"
+        reuse_status = (
+            assignment_status
+            if assignment_status in {"reuse_pending", "reuse_approved"}
+            else None
+        )
+        required_raw = first_present(row.get("need_count"), plan.get("need_count"), 1)
+        try:
+            required_count = max(0, int(required_raw))
+        except (TypeError, ValueError):
+            required_count = 1
+        available_count = len(assigned_paths)
+        card_warnings: list[str] = []
+        assignment_warning = None
+        if (
+            explicit_reference
+            and reference_path
+            and reference_path not in assigned_paths
+        ):
+            assignment_warning = "账本映射待补齐"
+            card_warnings.append(assignment_warning)
+            add_assignment_warning(
+                assignment_warning,
+                source="video_plan",
+                beat_ids=[beat_id],
+                path=reference_path,
+            )
+        if has_assignment_conflict:
+            card_warnings.append("同一 Beat 存在多个闭环素材，需确认唯一选用项")
+        candidate_previews: list[dict[str, Any]] = []
+        for item in [*beat_ledger, *beat_planned]:
+            if (
+                item.get("kind") == "image"
+                and item.get("path")
+                and item.get("exists") is True
+                and item.get("preview_kind") == "candidate"
+            ):
+                candidate_previews.append({
+                    "path": item["path"],
+                    "file": item.get("file") or Path(item["path"]).name,
+                    "label_zh": item.get("label_zh") or "生成图候选",
+                    "status": i2i_assignment_state(item),
+                    "review_status": item.get("review_status"),
+                    "provider": item.get("provider"),
+                    "model": item.get("model"),
+                })
         beats.append({
             "beat": beat_id,
             "time": first_present(row.get("time"), plan.get("time")),
@@ -1116,16 +1633,75 @@ def _build_commercial_board(
             "asset_plan_zh": first_present(row.get("asset_plan_zh"), plan.get("asset_plan_zh")),
             "copy_plan_zh": first_present(row.get("copy_plan_zh"), plan.get("copy_plan_zh")),
             "shot_plan_zh": first_present(row.get("shot_plan_zh"), plan.get("shot_plan_zh")),
-            "need_count": first_present(row.get("need_count"), plan.get("need_count")),
-            "have_count": first_present(row.get("have_count"), plan.get("have_count")),
             "gap_status": first_present(row.get("gap_status"), plan.get("gap_status")),
             "need_detail_zh": first_present(
                 row.get("need_detail_zh"),
                 plan.get("need_detail_zh"),
             ),
-            "ledger": ledger_by_beat.get(beat_id) or [],
-            "planned_entries": planned_by_beat.get(beat_id) or [],
+            "assignment_status": assignment_status,
+            "assignment_status_zh": assignment_status_zh[assignment_status],
+            "assignment_reason": assignment_reasons[assignment_status],
+            "assignment_warning": assignment_warning,
+            "assignment_warnings": card_warnings,
+            "required_count": required_count,
+            "available_count": available_count,
+            "reuse_status": reuse_status,
+            # Keep legacy names stable while exposing the unified counters.
+            "need_count": first_present(
+                row.get("need_count"),
+                plan.get("need_count"),
+                required_count,
+            ),
+            "have_count": first_present(
+                row.get("have_count"),
+                plan.get("have_count"),
+                available_count,
+            ),
+            "ledger": beat_ledger,
+            "ledger_preview": beat_ledger,
+            "planned_entries": beat_planned,
+            "planned_preview": beat_planned,
+            "candidate_previews": candidate_previews,
         })
+
+    assigned_upload_paths = {
+        path
+        for paths in (assignment_matrix.get("assigned") or {}).values()
+        for path in paths
+    }
+    for image in images:
+        path = image.get("path")
+        if (
+            path
+            and path not in assigned_upload_paths
+            and path not in i2i_asset_paths
+        ):
+            unused_assets_by_path.setdefault(path, {
+                "path": path,
+                "file": image.get("file") or Path(path).name,
+                "reason": "未分配到任何 canonical Beat",
+                "status": "unassigned",
+            })
+    for field, reason in (
+        ("canonical_source_conflicts", "canonical Beat 来源存在冲突"),
+        ("beat_reference_conflicts", "beat 与 beats 字段存在冲突"),
+        ("source_conflicts", "素材来源声明存在冲突"),
+        ("assignment_conflicts", "同一 Beat 存在多个闭环素材"),
+        ("open_ledger_entries", "账本素材状态尚未闭环"),
+        ("open_planned_entries", "计划素材状态尚未闭环"),
+        ("planned_source_issues", "计划图片缺少明确来源"),
+        ("planned_output_issues", "计划输出缺失或不安全"),
+        ("candidate_selection_conflicts", "候选素材尚未唯一选定"),
+        ("i2i_issues", "I2I 素材尚未完成批准闭环"),
+        ("video_plan_conflicts", "video_plan 与素材矩阵不一致"),
+        ("decision_log_issues", "decision_log 项目标识不一致"),
+    ):
+        rows = assignment_matrix.get(field) or []
+        if rows:
+            add_assignment_warning(
+                reason,
+                source=f"assignment_matrix.{field}",
+            )
 
     duration = (
         segment_doc.get("duration_seconds")
@@ -1446,6 +2022,9 @@ def _build_commercial_board(
         },
         "asset_vision": artifacts.get("asset_vision") or {},
         "beats": beats,
+        "unused_assets": list(unused_assets_by_path.values()),
+        "orphan_assignments": orphan_assignments,
+        "assignment_warnings": assignment_warnings,
         "timeline": {
             "duration_seconds": duration,
             "beat_marks": beat_marks,

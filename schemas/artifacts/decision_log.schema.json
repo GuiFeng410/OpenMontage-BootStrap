@@ -7,7 +7,11 @@
   "required": ["version", "project_id", "decisions"],
   "properties": {
     "version": { "type": "string", "const": "1.0" },
-    "project_id": { "type": "string" },
+    "project_id": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Owning project identity. When this artifact exists, runtime validation requires an exact match with project.json and the project directory."
+    },
     "decisions": {
       "type": "array",
       "items": {
@@ -72,7 +76,12 @@
                   "description": "Normalized score 0-1 (1 is best)"
                 },
                 "reason": { "type": "string", "description": "Why this option scored this way" },
-                "rejected_because": { "type": "string", "description": "If rejected, why" }
+                "rejected_because": { "type": "string", "description": "If rejected, why" },
+                "action": {
+                  "type": "string",
+                  "enum": ["reuse", "do_not_reuse"],
+                  "description": "Explicit action for scoped asset reuse decisions."
+                }
               },
               "additionalProperties": false
             },
@@ -86,6 +95,27 @@
           "reason": {
             "type": "string",
             "description": "Why this option was selected over alternatives"
+          },
+          "asset_path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Exact project-local asset path for an asset reuse decision."
+          },
+          "asset_sha256": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{64}$",
+            "description": "SHA-256 of the exact generated image content approved by the user."
+          },
+          "asset_source": {
+            "type": "string",
+            "description": "Declared source for an approved asset, e.g. generated or i2i."
+          },
+          "beat_ids": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1 },
+            "description": "Exact Beat set covered by an asset reuse decision."
           },
           "user_visible": {
             "type": "boolean",

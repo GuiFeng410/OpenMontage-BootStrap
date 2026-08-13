@@ -284,6 +284,54 @@ class TestSchemas:
     def test_video_analysis_brief_validates(self):
         validate_artifact("video_analysis_brief", sample_artifact("video_analysis_brief"))
 
+    def test_asset_ledger_accepts_one_beat_field_and_rejects_both(self):
+        def ledger(entry):
+            return {
+                "version": "1.0",
+                "entries": [{
+                    "path": "assets/images/a.png",
+                    "user_class": "product_hero",
+                    "status": "confirmed",
+                    **entry,
+                }],
+                "summary": {
+                    "available_image_count": 1,
+                    "counts_by_class": {"product_hero": 1},
+                    "status_zh": "就绪",
+                },
+            }
+
+        validate_artifact("asset_ledger", ledger({"beat": "S1"}))
+        validate_artifact("asset_ledger", ledger({"beats": ["S1"]}))
+        with pytest.raises(Exception):
+            validate_artifact(
+                "asset_ledger",
+                ledger({"beat": "S1", "beats": ["S1"]}),
+            )
+
+    def test_decision_log_accepts_explicit_asset_reuse_scope(self):
+        validate_artifact("decision_log", {
+            "version": "1.0",
+            "project_id": "schema-reuse",
+            "decisions": [{
+                "decision_id": "reuse-01",
+                "stage": "assets_gate",
+                "category": "asset_decision",
+                "subject": "assets/images/a.png",
+                "asset_path": "assets/images/a.png",
+                "beat_ids": ["S1", "S2"],
+                "options_considered": [{
+                    "option_id": "reuse",
+                    "label": "复用",
+                    "score": 1.0,
+                    "reason": "用户批准精确复用。",
+                    "action": "reuse",
+                }],
+                "selected": "reuse",
+                "reason": "用户批准。",
+            }],
+        })
+
 
 # ---- Checkpoint ----
 

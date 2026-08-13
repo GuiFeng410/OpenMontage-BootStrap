@@ -1140,6 +1140,15 @@ body:not(.first) .lib-card, body:not(.first) .drawer { animation: none; }
   background: var(--badge-bg); color: #fff; padding: 2px 6px; border-radius: 3px;
 }
 .beat-media.selected { outline: 2px solid var(--green); outline-offset: -2px; }
+.beat-media.candidate {
+  border-color: var(--amber);
+  outline: 1px dashed var(--amber);
+  outline-offset: -3px;
+}
+.beat-media.candidate .media-cap,
+.beat-media.reference-unmapped .media-cap {
+  background: color-mix(in srgb, var(--amber) 78%, #17120a);
+}
 .beat-media.empty {
   display: grid; place-items: center; color: var(--text-3);
   font-size: calc(11px * var(--fs-scale)); aspect-ratio: 16 / 7;
@@ -1166,6 +1175,31 @@ body:not(.first) .lib-card, body:not(.first) .drawer { animation: none; }
 .cbc-body { font-size: calc(11.5px * var(--fs-scale)); color: var(--text-2); }
 .cbc-method { color: var(--text); font-weight: 600; margin-bottom: 4px; line-height: 1.4; }
 .cbc-sub { margin-bottom: 2px; line-height: 1.4; }
+.commercial-assignment-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 10px;
+  padding: 0 0 10px;
+  border-bottom: 1px dashed var(--border-soft);
+}
+.commercial-assignment-summary .assignment-reason {
+  grid-column: 1 / -1;
+  line-height: 1.45;
+}
+.commercial-assignment-warning {
+  margin-top: 8px;
+  border: 1px solid var(--amber);
+  border-radius: 6px;
+  background: var(--amber-dim);
+  color: var(--amber);
+  padding: 7px 8px;
+  font-size: calc(10.5px * var(--fs-scale));
+  line-height: 1.4;
+}
+.commercial-candidate-label {
+  color: var(--amber);
+  font-size: calc(10px * var(--fs-scale));
+}
 .commercial-beat-card .beat-field { margin: 8px 0 0; }
 .commercial-beat-card .beat-field b {
   display: block; color: var(--text-3); font-size: calc(10px * var(--fs-scale));
@@ -1204,6 +1238,38 @@ body:not(.first) .lib-card, body:not(.first) .drawer { animation: none; }
   color: var(--text); border-color: var(--green); background: var(--green-dim); font-weight: 600;
 }
 .asset-label.missing { border-color: var(--red); color: var(--red); }
+.commercial-unused-assets {
+  margin-bottom: 14px;
+}
+.commercial-unused-assets > summary {
+  cursor: pointer;
+  padding: 12px 14px;
+  color: var(--text);
+  font-weight: 650;
+}
+.commercial-unused-assets-list {
+  display: grid;
+  gap: 8px;
+  padding-top: 0;
+}
+.commercial-unused-asset {
+  display: grid;
+  grid-template-columns: minmax(100px, auto) minmax(140px, 1fr) auto;
+  gap: 6px 12px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: var(--surface-2);
+  color: var(--text-2);
+  font-size: calc(10.5px * var(--fs-scale));
+}
+.commercial-unused-asset b { color: var(--text); }
+.commercial-unused-asset code {
+  grid-column: 1 / -1;
+  color: var(--text-3);
+  overflow-wrap: anywhere;
+}
 .commercial-beat-card.mode-assets .beat-media {
   max-height: min(180px, 24vh);
 }
@@ -1214,6 +1280,8 @@ body:not(.first) .lib-card, body:not(.first) .drawer { animation: none; }
 }
 @media (max-width: 640px) {
   .beat-card-grid { grid-template-columns: 1fr; }
+  .commercial-unused-asset { grid-template-columns: 1fr; }
+  .commercial-unused-asset code { grid-column: 1; }
   .asset-card img {
     height: 112px;
     max-height: min(150px, 20vh);

@@ -3,7 +3,10 @@
   "$id": "openmontage/artifacts/video_plan",
   "title": "Commercial Video Plan",
   "type": "object",
-  "required": ["segments"],
+  "anyOf": [
+    { "required": ["segments"] },
+    { "required": ["beats"] }
+  ],
   "properties": {
     "version": { "type": "string" },
     "segments": {
@@ -11,18 +14,57 @@
       "minItems": 1,
       "items": {
         "type": "object",
-        "required": ["id"],
+        "anyOf": [
+          { "required": ["id"] },
+          { "required": ["beat"] }
+        ],
         "properties": {
           "id": { "type": "string", "minLength": 1 },
+          "beat": { "type": "string", "minLength": 1 },
           "t": { "type": "string" },
           "method": { "type": "string" },
-          "ref": { "type": "string" },
+          "ref": {
+            "type": "string",
+            "description": "Legacy project-local reference path. When present on a closed assignment it must equal the unified matrix's unique approved path for this Beat."
+          },
+          "ref_image": {
+            "type": "string",
+            "description": "Project-local primary reference image. It may be omitted while I2I review is open; when present on a closed assignment it must equal the unified matrix's unique approved path for this Beat."
+          },
+          "gap_fill": {
+            "type": "string",
+            "enum": ["none", "user_upload", "i2i", "concept_only"]
+          },
+          "asset_source": {
+            "type": "string",
+            "description": "Assignment provenance such as user_upload, i2i, generated, or stock."
+          },
+          "assignment_status": {
+            "type": "string",
+            "enum": [
+              "planned",
+              "i2i_planned",
+              "assigned",
+              "missing",
+              "reuse_pending",
+              "review_pending",
+              "i2i_review_pending",
+              "ready",
+              "approved",
+              "rejected",
+              "failed"
+            ]
+          },
           "ai": { "type": "boolean" },
           "duration": { "type": "number", "minimum": 0 },
           "purpose": { "type": "string" }
         },
         "additionalProperties": true
       }
+    },
+    "beats": {
+      "$ref": "#/properties/segments",
+      "description": "Alternative beat-list key used by newer and non-commercial planners."
     }
   },
   "additionalProperties": true

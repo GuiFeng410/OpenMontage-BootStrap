@@ -39,9 +39,9 @@ metadata:
 
 ## Scope
 
-**做：** 需求不清时先对齐主题与档位，再按档细化，再确认分段视频规划（商品片落在 Backlot「方案确认 / 素材检查」，见「商品片 ↔ 七阶段」；对用户不必死叫表 1/2/3）。商品片在首个正式决策前初始化只读 Backlot 并给出固定网址；完整分析与选项放网页，聊天一次只问当前一项（三点卡等固定小包可合并）。确认后写入简报 artifacts，交接 `04-produce`。
+**做：** 需求不清时先对齐主题与档位，再按档细化，再确认分段视频规划（商品片落在 Backlot「方案确认 / 素材检查」，见「商品片 ↔ 七阶段」；对用户不必死叫表 1/2/3）。商品片在首个正式决策前初始化只读 Backlot并给出固定网址；表 3 前先输出 `beat × 所需画面 × 候选图片` 覆盖矩阵，表 3 确认后在 `assets_gate` 关闭补传/I2I/复用/降级与审图子闸。完整分析与选项放网页，聊天一次只问当前一项（三点卡等固定小包可合并）。只有 `assets_gate=completed` 才交接 `04-produce`。
 
-**不做：** 跳过确认直接 compose；三张表堆在同一条消息；静默填 Key / 调 Stock / 付费 API；伪造用户原话；有视频 Key 就自动开烧；静默换视频渠道；轻度/中度出示付费视频渠模表；表 3 强塞全文旁白；商品片（含重度商品）跳过 `references/product-prompt-template.md`；缺图时静默图生图或静默硬烧佩戴支。
+**不做：** 跳过确认直接 compose；三张表堆在同一条消息；静默填 Key / 调 Stock / 付费 API；伪造用户原话；有视频 Key 就自动开烧；静默换视频渠道；轻度/中度出示付费视频渠模表；表 3 强塞全文旁白；商品片（含重度商品）跳过 `references/product-prompt-template.md` 或 `references/asset-preprocess-gate.md`；以“总张数够”代替 Beat 覆盖；缺图时静默图生图、静默复用或静默硬烧佩戴支；把 Pixverse/video provider 当生图 provider；把未 approved 候选交给 04。
 
 **旁白 / BGM：** 本 Skill 主表**不定**；脚注写「稍后安排」。需要时再交接 `05-captions-music` 或后续配音流程。
 
@@ -81,7 +81,7 @@ metadata:
 | 缺 Stock / 视频 / 付费 Key | 引导 | **06-providers** | 需要 Key 才能用这一档能力，我带你配置。 |
 | 工具失败 | 修复 | **07-error-handling** | 出片遇到错误，我先按 playbook 排查。 |
 
-**规则：** ①② 未过 → **禁止**进表 1；表 2/3 未确认 → **禁止**交接 04；用户改档 → 回到本 Skill 重走表 1→2→3。
+**规则：** ①② 未过 → **禁止**进表 1；表 2/3 未确认 → **禁止**交接 04；商品片另须 `assets_gate=completed`；用户改档 → 回到本 Skill 重走表 1→2→3 与受影响的素材闭环。
 
 ### 就绪接话（02 已通过 · 进入 03 时必用）
 
@@ -234,8 +234,8 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 
 | # | 阶段（Backlot） | Skill | 原「表」落点（对用户可改叫法） | 面板展示 | 聊天 |
 |---|-----------------|-------|--------------------------------|----------|------|
-| 1 | `brief_locked` 方案确认 | **03** | 三点卡 → 主题/档位/时长/预算/评审（旧表1）→ 按档细化（旧表2）→ 比例卡 → **分段规划全文（旧表3）** | 方案摘要、选项、推荐、费用、`video_plan` 文案 | 逐项确认；规划就绪后「确认规划」 |
-| 2 | `assets_gate` 素材检查 | **03** | 素材预检闸（表2后表3前已扫的，在此收口分类/缺口） | 已存在图片写 `asset_ledger.entries`；未产出的 AI 扩展写 `planned_entries` 状态卡；**不显示视频** | 确认分类或缺口策略；进阶段须发「已进入第 2 阶段」 |
+| 1 | `brief_locked` 方案确认 | **03** | 三点卡 → 主题/档位/时长/预算/评审（旧表1）→ 按档细化（旧表2）→ 比例卡 → 表 3 前覆盖矩阵 → **分段规划全文（旧表3）** | 方案摘要、选项、推荐、费用、`video_plan` 与 provisional unified matrix | 逐项确认；规划就绪后「确认规划」 |
+| 2 | `assets_gate` 素材检查 | **03** | 按已确认计划完成补传/I2I/显式复用/降级；生成图审查是本阶段内部子闸 | 已存在图片写 `asset_ledger.entries`；I2I 生命周期写 `planned_entries`；展示候选、复用范围与 unified matrix；**不显示视频** | 所有档位/评审方式均确认生成图；普通可批量，专业逐张；完成后才交接 04 |
 | 3 | `sample_review` 试片确认 | **04** | — | 试片成片、费用 | 试片是否过关 / 是否全长 |
 | 4 | `segment_build` 分段制作 | **04** | — | Beat 胶片、**镜提示词全文**、候选/抽帧（专业） | 专业：分批审查；普通：少打断 |
 | 5 | `draft_review` 初稿审查 | **04** | — | 初稿、问题片段、修改清单 | 确认修改清单后再改 |
@@ -252,11 +252,14 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 → 实验预算（¥8+ 须主动确认）
 → 按档：轻度表现 / 中度素材源 / 重度渠模
 → （启用 AI 视频时）运镜:AI 比例
-→ 素材扫描摘要可先写入面板；分类确认可留在「素材检查」阶段若用户想先锁规划
+→ 素材扫描并输出「beat × 所需画面 × 候选图片」覆盖矩阵；每张上传图归 used/reuse_pending/unused 并写原因
+→ 每个缺口只确认：补传 / I2I / 显式复用 / 降级或不补；无可用 image provider 时 I2I 标不可执行且不推荐
 → 分段规划（旧表3）全文进面板 → 聊天「确认规划」→ brief_locked/awaiting_human
+→ brief_locked=completed 后进入 assets_gate，执行补图与审图闭环
+→ assets_gate=completed 后才交接 04
 ```
 
-允许跳过已从用户原话锁定且用户刚确认过的项，但**禁止**跳过：档位、≥15s 评审模式明示、重度渠模、规划确认、素材主图缺口关闭（或已确认降级）。
+允许跳过已从用户原话锁定且用户刚确认过的项，但**禁止**跳过：档位、≥15s 评审模式明示、重度渠模、规划确认、覆盖矩阵、素材主图缺口关闭、生成图审查与 `assets_gate=completed`。
 
 非商品片：仍可用完整 Grill「表 1→2→3」话术；不强制七阶段商品板。
 
@@ -521,10 +524,11 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 若主题/用途为**商品宣传、种草、详情展示、产品佩戴演示**等（含**重度商品**）：
 
 1. **必须先读**本目录 `references/product-prompt-template.md`。  
-2. 素材分类、缺图询问（默认 I2I）、切段/重点段、每段主参考图、英文提示词组装——按该参考执行。  
-3. 缺图的 T2I/I2I 只能交给已配置 image provider；**不得把 Pixverse 当成图片生成器**。若补图随后用于 Pixverse 本地图 I2V，再走 3.3.1。
-4. 缺口未关闭前**不出最终表 3**、不交接 produce 烧视频。
-5. 禁止静默 I2I / 静默硬烧佩戴支。
+2. **必须再读** `references/asset-preprocess-gate.md`，先输出 `beat × 所需画面 × 候选图片` 覆盖矩阵；总张数够不代表段覆盖或关键角度够。每张上传图必须归 `used` / `reuse_pending` / `unused` 并写原因。
+3. 每个缺口只允许四选：补传、I2I、显式复用、降级/不补。I2I 不是默认项；无当前可用 image provider 时标“不可执行”且不推荐。**禁止把 Pixverse 或 video provider 当图片生成器**。
+4. 表 3 写入已确认的缺口动作，但此时只规划 I2I、不生成：缺图 Beat 写 `gap_fill="i2i"`、`assignment_status="i2i_planned"`、`planned_output_path`、provider/model，`ref_image` 可省略。用户确认表 3 并完成 `brief_locked` 后，进入顶层 `assets_gate` 执行补图、候选重试、审图与复用授权。
+5. 生成图确认是 `assets_gate` 内部子闸，不是第八阶段。所有档位、普通/专业/快速模式均须用户审图：普通可一次批量确认全部候选；专业逐张确认并可逐张重生成；快速不能绕过。
+6. 未经 `approved` 的生成图不得写入 `ref_image`、不得当实际素材、不得进入试片或 video generation。`assets_gate=completed` 前不交接 produce。
 
 非商品片：跳过本小节，按通用表 3 即可。
 
@@ -543,10 +547,11 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 1. 回复「确认规划」后才写入简报并交接 produce。  
 2. 可只改某一段后要求重贴。  
 3. **旁白与 BGM 稍后安排**（本表不定声线）。  
-4. 商品片：已按 `product-prompt-template.md` 完成分类/缺图/切段/参考图（若适用）。  
+4. 商品片：已按 `product-prompt-template.md` 与 `asset-preprocess-gate.md` 输出覆盖矩阵并确认四选一缺口计划；表 3 确认后仍须完成 `assets_gate` 生成/审图闭环。
 5. **可交付硬门槛**：商品身份一致、无结构断裂、流畅可播且动态不单调。AI 动态秒数是**实验/推荐目标**（由 `motion_mix` 推导整片 AI 总秒数，±约 15% 即可），**不是**单独否决成片的硬门槛。  
 6. 出片顺序：先 **10–15s 试片** 确认，再全长；普通模式只展开问题片段（可说「切专业」看逐 beat）。  
 7. 已锁 `motion_mix` 时：表 3 按推荐 AI 总秒数**大概**排布；审查中可改某段方式，允许终稿偏离比例。
+8. `assets_gate=completed` 是交接 04 的硬门禁；确认规划不等于确认复用或生成图。
 
 若已锁比例：排表前用 `recommended_ai_seconds(duration, motion_mix)` 或等价心算，避免有 Key 却几乎全是运镜。
 
@@ -610,15 +615,17 @@ produce_set_production_profile(
 | `video_quality` | 可选；Pixverse 画质，默认 `360p`（`360p` / `540p` / `720p` / `1080p`） |
 | `video_generate_audio` | 可选；Pixverse 原生平音频，默认 `false`（无声）。`true` 才传 `generate_audio_switch=true` |
 | `aspect_ratio` | 可选；如 `16:9` / `9:16`（Pixverse T2V） |
-| `video_plan` | 表 3 分段规划；商品片须含：切段/重点段、`asset_classes`、`path`、`gap_fill`、每段 `ref_image`（见 references） |
+| `video_plan` | 表 3 分段规划；商品片须含切段/重点段、`asset_classes`、`path`、`gap_fill`。已有批准素材的 Beat 写真实 `ref_image`；I2I 缺图 Beat 先写 `assignment_status="i2i_planned"`、`planned_output_path`、provider/model，审图 approved 前 `ref_image` 可省略 |
 
-6. 商品片 `brief_locked` 最终 checkpoint 的 `artifacts_json` 必须包含 `brief`、`asset_precheck`、`video_plan`、`segment_cards`；`asset_ledger`（素材角色、路径、候选、是否选中）在素材已确认时一并携带。缺少完整 `segment_cards` 时工具会拒绝封板。
-7. `approval_text` 用用户原话（禁止编造）。
-8. 商品片调用 `python -m backlot open <project_id>` 复用原网址；向 04 交接 `project_id` 与网址，不要求用户另开页面。
-9. 交接 **`openmontage-bootstrap-04-produce`**。字幕/BGM → `05-captions-music`（**后置**，不挡本步交接）。
-10. 失败 → `07-error-handling`。
+6. 商品片 `brief_locked` 最终 checkpoint 的 `artifacts_json` 必须包含 `brief`、`asset_precheck`、`video_plan`、`segment_cards`；其中分段素材计划必须与表 3 前 unified matrix 一致。缺少完整 `segment_cards` 时工具会拒绝封板。
+7. `approval_text` 用用户确认表 3 的原话（禁止编造）；完成 `brief_locked` 后进入现有第 2 阶段 `assets_gate`，不得直接交接 04。
+8. 按 `references/asset-preprocess-gate.md` 写 canonical `asset_ledger`，执行已批准的补传/I2I/显式复用/降级。I2I 必须先探测并锁定 provider/model，完整记录 `planned→generating→ready/review_pending→approved|rejected|failed`、`candidate_paths`、`retry_count`、`decision_id` 与真实 `output_path`；审图 decision 由工具写入当前文件 `asset_sha256`，同路径内容变化须重新审图。
+9. 对生成图执行用户审查：普通可批量确认，专业逐张确认，快速模式仍须确认。复用决定绑定当前 `project_id`、`stage=assets_gate`、精确 `asset_path + beat_ids` 与用户原话；未批准保持 `reuse_pending`。
+10. 重新计算 unified matrix。存在 `missing` / `orphan` / `reuse_pending` / `review_pending` / provider/model 缺失 / 文件缺失时，保持当前阶段并继续处理；全部关闭后才写 `assets_gate=completed`。
+11. 商品片调用 `python -m backlot open <project_id>` 复用原网址；向 04 交接 `project_id`、网址、已完成 checkpoint 与 canonical artifacts，不要求用户另开页面。
+12. 仅在第 10 步成功后交接 **`openmontage-bootstrap-04-produce`**。字幕/BGM → `05-captions-music`（后置，不挡画面）；失败 → `07-error-handling`。
 
-**闸门：** 表 2 / 表 3 未确认时，**禁止**交接 produce、禁止开始付费视频生成。
+**闸门：** 表 2 / 表 3 未确认或 `assets_gate` 未 `completed` 时，**禁止**交接 produce、禁止开始 sample 或任何视频生成。
 
 ### 6. 改档
 
@@ -631,58 +638,46 @@ produce_set_production_profile(
 
 ## 商品片素材需求与中文状态
 
-商品宣传片的素材预处理位于**表 2 后、表 3 前**，是「方案确认」阶段的内部闸门，不新增顶栏阶段。表 2 已锁定档位、时长、是否佩戴与生成路径后，才可以判断素材是否够用；表 3 未确认前禁止开始 I2I / I2V。图片数量是建议和门禁依据，不是要求每个镜头都使用不同图片；图片可以在不同镜头中复用，但重点镜头不应全部依赖同一张图。
+商品宣传片采用两段式素材协议：
 
-**操作细则（必读）：** `references/asset-preprocess-gate.md`  
-**提示词词库（写 AI 镜）：** `references/commercial-prompt-lexicon.md`  
-**写镜提示词：** 在 `04-produce` 付费 AI 段强制读 `openmontage-seedance-prompt`；03 只锁表与素材闸。
+1. **表 2 后、表 3 前**：扫描、分类，并输出 `beat × 所需画面 × 候选图片` provisional unified matrix；每张上传图归 `used` / `reuse_pending` / `unused` 并写原因。
+2. **表 3 确认后、交接 04 前**：在七阶段第 2 阶段 `assets_gate` 执行补传/I2I/显式复用/降级和生成图审查；不新增顶栏阶段。
 
-### 素材预处理闸（强制 · 仅商品/电商片）
+图片数量只用于提示，不能代替 Beat 覆盖和关键角度覆盖。允许复用，但未绑定精确路径、Beat 集与用户原话时只能是 `reuse_pending`。
 
-1. 调用只读 MCP `produce_scan_user_images(project_id)`，扫描 `assets/images/` 的文件名、尺寸、大小、重复文件与**文件名建议分类**；工具不写文件、不生成图片。
-2. **可选识图（有 Key 才调）：** 再调 `produce_describe_user_images(project_id)`。Key=`VISION_API_KEY` 或 `DASHSCOPE_API_KEY`；可覆盖 `VISION_BASE_URL` / `VISION_MODEL`。空 Key → 工具降级返回扫描结果，**不中断闸门**。识图结果只辅助 `suggested_class` / 中文描述，**不能**代替用户确认。
-3. Agent 将结果整理为 `asset_precheck`（可含 `vision_*` 字段）：`suggested_class` 仅为建议。尽量落盘 `artifacts/asset_precheck.json` 与 `artifacts/asset_vision.json`。
-4. 先将 `asset_precheck` 以内联 artifact 写入 `brief_locked/in_progress`（素材收口时写 `assets_gate/in_progress`）。仅在无素材、分类不明、低分辨率、重复、缺少所需角色，或需要补图/降级时，设置 `metadata.needs_user_decision=true` 并出示当前一个问题。
-5. 用户需决定时，完整证据在 Backlot；聊天只给网址 +「已进入第 N 阶段」+ 当前问题 + 推荐 + 回复示例。用户原话以 `asset_decision` 写入 `decision_log`。禁止静默补图或静默开始 I2I / I2V。
-6. 用户确认分类与缺口处理后，用 `lib.asset_precheck.build_asset_ledger` / `build_asset_requirements`（或等价）写入确认角色、`asset_requirements`、`asset_ledger`，再写入每段 `ref_image` / `gap_fill` 到 `video_plan`。最终 `brief_locked/awaiting_human` 必须同时携带 `brief`、`asset_precheck`、`video_plan`、完整 `segment_cards`（有则带 `asset_ledger`）。
-7. 进入顶层 `assets_gate` 前须落盘 `segment_cards`（时间 + `asset_plan_zh` / 缺口文案）与 canonical `asset_ledger`：
-   - 已实际存在的素材写 `entries`（actual entries）。每项除真实 `path` 外，按展示契约写 `beat`、`kind`、`origin`、`selected`、`label_zh`；商品图片路径必须真实位于当前项目 `assets/images/`。
-   - I2I 等尚未产出的图片只能写 `planned_entries`，状态只用 `planned` / `generating` / `ready` / `failed`。`planned_output_path` 只是计划，禁止创建不存在的文件或把计划路径塞进 `entries.path` 来伪装图片。
-   - 只有生成媒体已真实落入 `assets/images/`、canonical `asset_ledger` 已更新其 `output_path` 与状态为 `ready`，三者同时成立时，面板才可显示缩略图；缺文件的 `ready` 会按失败处理。
-   - 旧项目仅在“单 Beat + 单张图片”无歧义时可回退挂接；多 Beat 或多候选不得猜测归属，必须补齐显式 `beat` 关系。
-   - 素材检查页只显示图片与计划状态，`entries` / `planned_entries` 中的视频均不得在该页展示。
+**操作细则与 schema-valid 示例（必读）：** `references/asset-preprocess-gate.md`
+**提示词词库（写 AI 视频镜）：** `references/commercial-prompt-lexicon.md`
+**写视频镜提示词：** 在 `04-produce` 付费 AI 段强制读 `openmontage-seedance-prompt`；I2I 图片 prompt 则严格来自对应 Beat 已确认的 `copy_plan_zh`、`shot_plan_zh`、`asset_plan_zh` 和 source image。
+**扫描入口：** 先调只读 `produce_scan_user_images(project_id)`；有识图 Key 且符合授权边界时可调 `produce_describe_user_images(project_id)`。两者都不能代替用户分类和审图。
 
-**用户可见边界：**
+### 固定缺口与审图规则
 
-- 方案确认页：素材预检文字摘要；有风险时才折叠文件明细；时间线卡不出媒体。
-- 「素材检查」：已存在图片与 `planned_entries` 计划状态按 Beat 展示；只有 `ready` 且已更新 canonical artifact、真实落盘到 `assets/images/` 的图片才显示缩略图。该页不显示视频，视频证据从「试片确认」开始。
+1. 缺口只允许：**补传、I2I、显式复用、降级/不补**。
+2. 无可用 image provider：I2I 标不可执行，不推荐；禁止用 Pixverse/video provider 生图。
+3. I2I 先探测并锁定 provider/model，再写 `planned_entries`；换渠模须重新确认。
+4. I2I 状态固定：`planned→generating→ready/review_pending→approved|rejected|failed`。必须记录 candidates（`candidate_paths`）、`retry_count`、`decision_id`、最终 `output_path`；真实输出只落 `assets/images/`。`ready` 不能代替审图批准。actual 生成图和 `status="approved"` 的 planned 生成图必须 `candidate_paths` 非空；批准输出必须属于 `candidate_paths`，所有候选路径均须位于当前项目内，批准输出文件必须是真实可解析图片。
+5. 普通模式一次批量审全部候选；专业模式逐张审并可逐张重生成；快速模式不能绕过。审图 approved 后才把真实批准 `output_path` 写入 `ref_image` / actual ledger；此前不得进入 sample/video generation。
+6. `generated` / `t2i` / `text_to_image` / `i2i` / `image_to_image` / `ai_generated` 均按生成图强校验。actual 与 approved planned 都要求 provider、model、项目内真实 path/output、`review_status="approved"` 和审图 `decision_id`；该 `decision_id` 必须命中当前 `decision_log` 中唯一真实项，且当前 `project_id`、`stage="assets_gate"`、`category="asset_decision"`、`selected="approved"`、`user_approved=true`、非空用户原话、`asset_path` / `subject`、`asset_sha256`、`beat_ids` 与批准输出及 entry 精确一致。后续同路径同 Beat 范围的撤回即使 subject 漂移也使旧批准失效；planned 未 approved 时可有计划 decision_id，但不把它解析为审图批准；来源声明冲突即拒绝。
+7. 每个 planned image 必须声明唯一来源；出现计划输出、实际输出、候选、provider/model 或任何生成链状态时，省略来源也按生成图强校验。closed `video_plan` 中已有 `ref` / `ref_image` 必须与矩阵同 Beat 的唯一批准路径一致。
+8. `assets_gate=completed` 前扫描 `assets/images/` 全部真实图片并与 ledger 的 actual/planned/source/candidate/output 路径双向对账；拒绝未登记图片和账本引用的伪图片，unused actual 必须写原因。只要 decision log 存在，其 `project_id` 就必须匹配当前项目；多份日志只接受同一追加前缀，分叉、重复冲突 ID 或陈旧批准均拒绝；无决定且文件不存在可省略。
+9. `assets_gate=completed` 只在 unified matrix 没有 `missing`、`orphan`、`reuse_pending`、`review_pending`、provider/model 缺失、文件缺失或矩阵漂移时写入。
 
-| 目标时长 | 最低可运行图片数 | 建议图片数 | 建议覆盖类型 |
-|----------|------------------|------------|--------------|
-| 10 秒 | 1–2 张 | 2–3 张 | 商品主图、第二角度或细节图；可选佩戴/使用图 |
-| 30 秒 | 2–3 张 | 4–6 张 | 商品主图、多个角度、细节图、佩戴/使用图；可选氛围图 |
-| 60 秒 | 3–4 张 | 6–10 张 | 主图、正侧背角度、细节图、佩戴/使用图、包装/场景图 |
+### Advisory 数量参考（非闭环判定）
 
-至少需要 1 张能够清楚识别商品整体的**商品主图**。图片角色统一使用：商品主图（`product_hero`）、角度图（`product_angle`）、细节图（`product_detail`）、佩戴/使用图（`on_body` / `in_use`）、包装图（`packaging`）、生活方式场景（`lifestyle`）、背景图（`background`）。
+| 目标时长 | 最低提示 | 建议提示 | 常见覆盖 |
+|----------|----------|----------|----------|
+| 10 秒 | 1–2 张 | 2–3 张 | 主图、第二角度或细节 |
+| 30 秒 | 2–3 张 | 4–6 张 | 主图、多个角度、细节、佩戴/使用 |
+| 60 秒 | 3–4 张 | 6–10 张 | 主图、正侧背、细节、佩戴/使用、包装/场景 |
 
-素材检查状态使用中文，不使用英文状态值：
+至少一张清晰商品主图（`product_hero`）。其它角色：`product_angle`、`product_detail`、`on_body` / `in_use`、`packaging`、`lifestyle`、`background`。重复同构图不增加有效角度覆盖。用户可见汇总仍用中文：**就绪 / 降级继续 / 等待用户选择**；机器状态只写 schema/实现支持的值。
 
-| 中文状态 | 判断 | 处理 |
-|----------|------|------|
-| **就绪** | 至少有商品主图，达到最低图片数量，重点段有合理参考图 | 可以按计划继续 |
-| **降级继续** | 有商品主图但低于建议数量，或缺少角度/细节/佩戴图 | 必须提示一致性风险；用户确认后可继续，必要时先图生图补充 |
-| **等待用户选择** | 没有商品主图，或严格展示具体商品但缺少核心参考图 | 必须让用户选择补图、允许图生图生成概念素材，或改为概念片 |
+### Backlot 边界
 
-缺图处理也使用中文显示：**不补图**、**用户补图**、**图生图**、**仅概念素材**。表格面向用户时使用以下中文表头，括号内保留机器字段名以兼容现有 `video_plan`：
-
-| 分段 | 时长 | 镜头目的 | 画面/文案要点 | 素材类型（`asset_classes`） | 参考图片（`ref_image`） | 缺图处理（`gap_fill`） | 素材状态 |
-|------|------|----------|---------------|----------------------------|-------------------------|------------------------|----------|
-| 1 | 0–5s | 展示商品整体 | … | 商品主图 | `assets/images/hero.png` | 不补图 | 就绪 |
-| 2 | 5–10s | 展示商品细节 | … | 细节图 | `assets/images/detail.png` | 图生图 | 降级继续 |
-
-写入简报时，保留 `asset_classes`、`ref_image`、`gap_fill` 作为程序字段；它们的用户可读含义分别是“素材类型”“参考图片”“缺图处理”。商品片还应写入素材需求摘要 `asset_requirements`，至少包含：时长档位（`duration_profile`）、最低图片数（`minimum_image_count`）、建议图片数（`recommended_image_count`）、已有图片数（`available_image_count`）、已有/缺少图片类型（`available_asset_classes` / `missing_asset_classes`）、素材状态（`status`）、补图方式（`fallback`）、质量风险提示（`quality_warning`）和用户是否确认缺口（`user_confirmed_shortage`）。
-
-生成最终表 3 前，必须完成：数量检查 → 图片类型检查 → **分辨率粗检**（过小细节图勿当全屏主参考）→ **身份冲突提示**（色温/款式明显不一致须标待确认）→ 缺失类型提示 → 用户补图或允许补图确认 → 记录素材状态。没有商品主图时不能静默生成具体商品；允许图生图时必须明确“先补图，再 I2V”，并提示商品细节可能不一致。典型用户按 **5 张有效角色图** 模拟（主图/角度/佩戴或使用/细节/背面或场景）；重复同构图不算 5 张有效。
+- 方案确认页展示预检与 provisional matrix；表 3 仍不展示未生成媒体。
+- 素材检查页按 Beat 展示用户图、planned entries、候选与审图状态；只显示图片，不显示视频。
+- 生成文件真实落盘后才显示缩略图；`planned_output_path` 不能伪装实际文件。
+- 完整证据写入 `asset_precheck`、`asset_ledger`、`video_plan`、`segment_cards`、`decision_log`；用户在聊天决定，网页只读。
 
 ## 与其它 Skill
 
@@ -705,7 +700,11 @@ produce_set_production_profile(
 - 按档确认过 **表 2**；轻度互斥单选（含 Remotion/HyperFrames，按可用性推荐）；中度遵守 Stock Key 闸门；重度遵守视频 Key 闸门与推荐规则  
 - **≥15s 且可烧 AI** 时已确认 **画面构成比例**（或已说明无 Key）；已说明比例为推荐软约束  
 - **表 3** 三档都已确认（Demo 卡路径除外）；无全文旁白强求；无文案时已给 AI 提案并获「确认规划」；已说明硬门槛与推荐 AI 秒数目标  
-- 重度商品已强制走 `product-prompt-template.md`  
+- 商品片已强制走 `product-prompt-template.md` 与 `asset-preprocess-gate.md`；表 3 前已展示 Beat 覆盖矩阵，每张上传图均有归宿和原因
+- 缺口仅使用补传/I2I/显式复用/降级不补；无 image provider 时未推荐 I2I，未把 Pixverse/video provider 当生图
+- 复用批准已绑定当前项目、`assets_gate`、精确路径与 Beat 集；I2I 已锁 provider/model，候选、重试、决定和真实输出路径可追溯
+- 所有档位/评审模式中的生成图均获用户批准；普通可批量、专业逐张、快速未绕过
+- unified matrix 已关闭全部开放状态并成功写入 `assets_gate=completed`，之后才交接 04
 - 已写 `production_profile`（含 `api_budget_tier`/`budget_cny`/`review_mode`/`candidate_mode`/`motion_mix`）与 `video_plan` 等扩展字段  
 - 未在轻度/中度展示付费视频渠模；无 Key 时未假装可烧重度  
 - 未静默换渠、未静默 I2I、未跳过确认开烧  

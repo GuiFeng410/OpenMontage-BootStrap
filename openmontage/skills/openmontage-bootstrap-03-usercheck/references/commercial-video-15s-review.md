@@ -75,12 +75,14 @@
 
 用户说“直接出片”时，**只能触发下面这张单问题授权卡**；这句话本身不是全程预授权，也不得立即写 `approval_policy`。
 
+快速模式可自动推进 `assets_gate` **仅限无生成图，或所有生成图都已在当前 `project_id` 下完成审图且 `review_status="approved"`、审图 decision 与真实项目内输出齐全**。快速授权不能替代普通模式批量审图或专业模式逐张审图；也不能把 `ready`、AI 初审、表 3 批准或费用批准当作生成图批准。
+
 ```text
 是否授权“商品片快速模式 v1.0”？
 当前已披露基线：provider={provider}；model={model}；runtime={runtime}；预估单价={单次/单段估价}；总成本区间={区间}；预算基线={预算上限}；质量目标={承诺}；分辨率={分辨率}。
-授权范围：方案确认后自动完成素材检查；试片必须停下由你批准；试片通过后，仅在 provider/model/runtime、已披露的预估单价/总成本区间/预算基线、质量目标/分辨率及审查结果均无实质变化时，可使用你本次明确回复的原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或审查发现需修改都立即暂停；delivery_signoff 必须停下由你签收。
+授权范围：方案确认后，仅在无生成图或所有生成图已按本项目审图批准时自动完成 assets_gate；有生成图时仍须普通模式批量审图或专业模式逐张审图。试片必须停下由你批准；试片通过后，仅在 provider/model/runtime、已披露的预估单价/总成本区间/预算基线、质量目标/分辨率及审查结果均无实质变化时，可使用你本次明确回复的原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或审查发现需修改都立即暂停；delivery_signoff 必须停下由你签收。
 推荐：若你接受上述完整范围，回复下面示例；否则回复“逐阶段确认”。
-示例回复：我明确同意商品片快速模式 v1.0，并接受本卡列出的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标和分辨率基线：方案确认后自动完成素材检查；试片必须停下由我批准；试片通过后，仅在上述基线及审查结果均无实质变化时，可使用本条原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或需修改即暂停；delivery_signoff 必须停下由我签收。
+示例回复：我明确同意商品片快速模式 v1.0，并接受本卡列出的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标和分辨率基线：仅在无生成图或所有生成图已按本项目审图批准时自动完成 assets_gate；生成图仍须普通批量或专业逐张审图；试片必须停下由我批准；试片通过后，仅在上述基线及审查结果均无实质变化时，可使用本条原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或需修改即暂停；delivery_signoff 必须停下由我签收。
 ```
 
 只有用户回复包含上述**完整同意语义**后，才可用 `produce_append_decision` 写入。下例符合 `schemas/artifacts/decision_log.schema.json`，并同时展示授权项 `d-001` 与后续自动完成初稿审查时才追加的追溯项 `d-002`；授权当下只追加 `d-001`。实际写入时替换示例 ID、基线占位符，并把两处 `user_response_text` 整段替换为同一条用户真实原话，不得新增 schema 外字段：
@@ -100,7 +102,7 @@
           "option_id": "fast_track_v1",
           "label": "商品片快速模式 v1.0",
           "score": 1.0,
-          "reason": "当前基线：provider=<provider>；model=<model>；runtime=<runtime>；预估单价=<estimate>；总成本区间=<range>；预算基线=<budget>；质量目标=<target>；分辨率=<resolution>。仅在这些基线及审查结果无实质变化时，以本次明确原话覆盖 draft_review 审批并自动推进 final_compose；sample_review 与 delivery_signoff 仍停下。"
+          "reason": "当前基线：provider=<provider>；model=<model>；runtime=<runtime>；预估单价=<estimate>；总成本区间=<range>；预算基线=<budget>；质量目标=<target>；分辨率=<resolution>。assets_gate 仅在无生成图或生成图已按本项目审图批准时自动完成；快速授权不替代审图。仅在这些基线及审查结果无实质变化时，以本次明确原话覆盖 draft_review 审批并自动推进 final_compose；sample_review 与 delivery_signoff 仍停下。"
         },
         {
           "option_id": "guided",
@@ -111,10 +113,10 @@
         }
       ],
       "selected": "fast_track_v1",
-      "reason": "用户接受卡内已披露基线：provider=<provider>；model=<model>；runtime=<runtime>；预估单价=<estimate>；总成本区间=<range>；预算基线=<budget>；质量目标=<target>；分辨率=<resolution>。授权自动完成 assets_gate；sample_review 必停；仅在这些基线及审查结果均无实质变化时，以本条原话作为 draft_review 审批证据并自动推进 final_compose；异常暂停；delivery_signoff 必停。",
+      "reason": "用户接受卡内已披露基线：provider=<provider>；model=<model>；runtime=<runtime>；预估单价=<estimate>；总成本区间=<range>；预算基线=<budget>；质量目标=<target>；分辨率=<resolution>。仅在无生成图或所有生成图已按本项目审图批准时自动完成 assets_gate；快速授权不替代生成图审查；sample_review 必停；仅在这些基线及审查结果均无实质变化时，以本条原话作为 draft_review 审批证据并自动推进 final_compose；异常暂停；delivery_signoff 必停。",
       "user_visible": true,
       "user_approved": true,
-      "user_response_text": "我明确同意商品片快速模式 v1.0，并接受本卡列出的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标和分辨率基线：方案确认后自动完成素材检查；试片必须停下由我批准；试片通过后，仅在上述基线及审查结果均无实质变化时，可使用本条原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或需修改即暂停；delivery_signoff 必须停下由我签收。"
+      "user_response_text": "我明确同意商品片快速模式 v1.0，并接受本卡列出的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标和分辨率基线：仅在无生成图或所有生成图已按本项目审图批准时自动完成 assets_gate；生成图仍须普通批量或专业逐张审图；试片必须停下由我批准；试片通过后，仅在上述基线及审查结果均无实质变化时，可使用本条原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或需修改即暂停；delivery_signoff 必须停下由我签收。"
     },
     {
       "decision_id": "d-002",
@@ -140,7 +142,7 @@
       "reason": "审批依据为 approval_policy decision_id=d-001；已完成 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标、分辨率和审查结果比对，无实质变化且无修改项。",
       "user_visible": true,
       "user_approved": true,
-      "user_response_text": "我明确同意商品片快速模式 v1.0，并接受本卡列出的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标和分辨率基线：方案确认后自动完成素材检查；试片必须停下由我批准；试片通过后，仅在上述基线及审查结果均无实质变化时，可使用本条原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或需修改即暂停；delivery_signoff 必须停下由我签收。"
+      "user_response_text": "我明确同意商品片快速模式 v1.0，并接受本卡列出的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标和分辨率基线：仅在无生成图或所有生成图已按本项目审图批准时自动完成 assets_gate；生成图仍须普通批量或专业逐张审图；试片必须停下由我批准；试片通过后，仅在上述基线及审查结果均无实质变化时，可使用本条原话作为 draft_review 审批证据并自动推进 final_compose；任何上述变化或需修改即暂停；delivery_signoff 必须停下由我签收。"
     }
   ]
 }
@@ -150,7 +152,7 @@
 
 | 节点 | 快速模式行为 |
 |------|--------------|
-| `brief_locked` 完成后 | 在 `asset_ledger` 与素材路径已物化、前序已完成时，自动推进 `assets_gate` 到 `sample_review` |
+| `brief_locked` 完成后 | 仅在无生成图，或所有生成图均已有本项目审图批准、完整 decision 与真实输出时，才可自动完成 `assets_gate` 并推进到 `sample_review`；否则停在 `assets_gate` 执行普通批量或专业逐张审图 |
 | `sample_review` | **必须停下**，展示试片、费用基线和当前唯一问题，等待用户明确批准试片 |
 | 试片通过后 | 逐项比对授权时已披露的 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标、分辨率与实际审查结果；全部无实质变化才可自动推进 |
 | `draft_review` | `full_draft_pro` 已物化且审查无“需修改”后，必须调用 `produce_approve_checkpoint(stage="draft_review")`；`approval_text` 使用快速模式授权时的完整用户原话 |
@@ -158,7 +160,7 @@
 | 任一异常 | provider/model/runtime 变化；预估单价、总成本区间或预算基线变化（即使未越限）；质量目标或分辨率变化；候选结果低于承诺；审查发现需修改——均立即暂停，一次只问一个问题 |
 | `delivery_signoff` | **永远停下签收**，不得被快速模式覆盖 |
 
-正常在**已披露预算基线和总成本区间内**累计消费，不构成变化；但费用估计或基线本身变化必须停。快速模式仍须逐阶段生成 canonical artifact、挂接媒体路径、记录决定与费用，并遵守试片闸、项目 preflight、provider 可用性检查、付费确认和费用闸。
+正常在**已披露预算基线和总成本区间内**累计消费，不构成变化；但费用估计或基线本身变化必须停。快速模式仍须逐阶段生成 canonical artifact、挂接媒体路径、记录决定与费用，并遵守生成图人审、试片闸、项目 preflight、provider 可用性检查、付费确认和费用闸。
 
 `draft_review` 自动完成前还必须：
 
