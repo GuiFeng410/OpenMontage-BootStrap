@@ -1,0 +1,25 @@
+{
+  "version": "1.0",
+  "baseline_commit": "f975ca0",
+  "selectors": [
+    ".commercial-board",
+    ".commercial-beat-card[data-beat]",
+    ".stage",
+    ".rail",
+    ".sse-banner",
+    ".sse-refresh-btn",
+    ".edit-tab-btn",
+    ".commercial-decision-option",
+    ".commercial-chat-only"
+  ],
+  "copy_contract": [
+    "请回到聊天回复",
+    "提交剪辑要求",
+    "已确认决定"
+  ],
+  "baseline_tests": {
+    "chrome": "42 passed",
+    "state": "114 passed",
+    "node": "2 passed"
+  }
+}

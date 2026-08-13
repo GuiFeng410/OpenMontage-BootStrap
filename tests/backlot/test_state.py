@@ -2522,7 +2522,10 @@ class TestEditClosureRevisionSchemas:
 class TestCommercialUIContract:
     def test_video_players_require_confirmed_existing_files(self):
         source = (
-            Path(__file__).resolve().parents[2] / "backlot" / "ui" / "board.js"
+            Path(__file__).resolve().parents[2]
+            / "backlot"
+            / "ui"
+            / "board-commercial.js"
         ).read_text(encoding="utf-8")
 
         assert 'x.kind === "video" && x.path && x.exists === true' in source

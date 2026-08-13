@@ -99,6 +99,56 @@ def _copy_fixture_video(destination: Path) -> None:
     shutil.copy2(source, destination)
 
 
+def _intent_panel_project(
+    *,
+    timestamp: str = "2026-08-13T08:00:00Z",
+    options: bool = True,
+) -> str:
+    project_id = "commercial-intent-panel"
+    project = backlot_screenshot_stage.STAGE_DIR / project_id
+    if project.exists():
+        shutil.rmtree(project)
+    project.mkdir(parents=True)
+    _write_json(project / "project.json", {
+        "project_id": project_id,
+        "title": "L1-A 待确认面板",
+        "pipeline_type": "bootstrap-commercial",
+    })
+    metadata = {
+        "needs_user_decision": True,
+        "decision_title_zh": "制作档位",
+        "decision_prompt_zh": "请选择制作档位",
+        "decision_options": [
+            {
+                "id": "medium",
+                "label_zh": "中度",
+                "description_zh": "使用用户素材或 Stock",
+                "impact_zh": "成本较低",
+            },
+            {
+                "id": "heavy",
+                "label_zh": "重度",
+                "description_zh": "允许付费视频生成",
+                "impact_zh": "成本与一致性风险较高",
+                "recommended": True,
+            },
+        ] if options else [],
+        "recommendation_zh": "推荐重度",
+        "examples_zh": "确认面板选择",
+    }
+    _write_json(project / "checkpoint_brief_locked.json", {
+        "version": "1.0",
+        "project_id": project_id,
+        "pipeline_type": "bootstrap-commercial",
+        "stage": "brief_locked",
+        "status": "awaiting_human",
+        "timestamp": timestamp,
+        "artifacts": {},
+        "metadata": metadata,
+    })
+    return project_id
+
+
 COMMERCIAL_STAGE_ORDER = (
     "brief_locked",
     "assets_gate",
@@ -510,6 +560,310 @@ def test_staged_server_uses_isolated_temporary_projects_directory(
     assert backlot_screenshot_stage.STAGE_DIR.is_dir()
 
 
+def test_commercial_decision_options_are_clickable_and_show_selected_state(
+    staged_backlot_server,
+):
+    project_id = _intent_panel_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 390, "height": 844})
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.get_by_role("button", name="Switch to light theme").click()
+            expect(page.locator("html")).to_have_attribute("data-theme", "light")
+            heavy = page.locator(
+                '.commercial-decision-option[data-option-id="heavy"]'
+            )
+            expect(heavy).to_have_attribute("type", "button")
+            expect(heavy).to_have_attribute("aria-pressed", "false")
+
+            heavy.click()
+
+            heavy = page.locator(
+                '.commercial-decision-option[data-option-id="heavy"]'
+            )
+            expect(heavy).to_have_class(
+                "commercial-decision-option recommended selected"
+            )
+            expect(heavy).to_have_attribute("aria-pressed", "true")
+            selected_style = heavy.evaluate(
+                """(node) => {
+                    const style = getComputedStyle(node);
+                    return {
+                        backgroundColor: style.backgroundColor,
+                        borderColor: style.borderColor,
+                    };
+                }"""
+            )
+            unselected_style = page.locator(
+                '.commercial-decision-option[data-option-id="medium"]'
+            ).evaluate(
+                """(node) => {
+                    const style = getComputedStyle(node);
+                    return {
+                        backgroundColor: style.backgroundColor,
+                        borderColor: style.borderColor,
+                    };
+                }"""
+            )
+            assert selected_style != unselected_style
+            sizes = page.evaluate(
+                """() => ({
+                    scrollWidth: document.documentElement.scrollWidth,
+                    clientWidth: document.documentElement.clientWidth,
+                })"""
+            )
+            assert sizes["scrollWidth"] <= sizes["clientWidth"]
+        finally:
+            browser.close()
+
+
+def test_intent_basket_summary_contains_selected_option_and_pending_copy(
+    staged_backlot_server,
+):
+    project_id = _intent_panel_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(
+                '.commercial-decision-option[data-option-id="medium"]'
+            ).click()
+
+            basket = page.locator(".commercial-intent-basket")
+            expect(basket).to_have_count(1)
+            summary = basket.locator(".commercial-intent-summary")
+            expect(summary).to_have_attribute("readonly", "")
+            value = summary.input_value()
+            assert "中度" in value
+            assert "确认面板选择" in value
+            assert "尚未正式执行" in value
+            expect(page.locator(".commercial-chat-only")).to_contain_text(
+                "面板选择尚未正式执行；复制摘要后回聊天发送“确认面板选择”。"
+            )
+        finally:
+            browser.close()
+
+
+def test_intent_draft_survives_same_revision_reload(staged_backlot_server):
+    project_id = _intent_panel_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(
+                '.commercial-decision-option[data-option-id="heavy"]'
+            ).click()
+            page.reload(wait_until="networkidle")
+
+            restored = page.locator(
+                '.commercial-decision-option[data-option-id="heavy"]'
+            )
+            expect(restored).to_have_attribute("aria-pressed", "true")
+            assert "重度" in page.locator(
+                ".commercial-intent-summary"
+            ).input_value()
+        finally:
+            browser.close()
+
+
+def test_intent_draft_shows_stale_banner_after_revision_change(
+    staged_backlot_server,
+):
+    project_id = _intent_panel_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(
+                '.commercial-decision-option[data-option-id="medium"]'
+            ).click()
+            _intent_panel_project(timestamp="2026-08-13T08:01:00Z")
+            page.reload(wait_until="networkidle")
+
+            stale = page.locator(".intent-basket-stale")
+            expect(stale).to_be_visible()
+            expect(stale).to_contain_text("待确认内容已更新")
+            expect(page.locator(".commercial-intent-summary")).to_have_count(0)
+            expect(page.get_by_role("button", name="清空并重选")).to_be_visible()
+            stale_copy = page.locator(".commercial-chat-only")
+            expect(stale_copy).to_contain_text("选择已过期")
+            expect(stale_copy).to_contain_text("清空并重选")
+            expect(stale_copy).not_to_contain_text("复制摘要")
+            expect(stale_copy).not_to_contain_text("确认面板选择")
+
+            page.get_by_role("button", name="清空并重选").click()
+
+            expect(page.locator(".intent-basket-stale")).to_have_count(0)
+            expect(page.locator(".commercial-intent-summary")).to_have_count(1)
+        finally:
+            browser.close()
+
+
+def test_intent_copy_failure_keeps_summary_visible(staged_backlot_server):
+    project_id = _intent_panel_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        page.add_init_script(
+            """Object.defineProperty(navigator, "clipboard", {
+                configurable: true,
+                value: {
+                    writeText: () => Promise.reject(new Error("blocked")),
+                },
+            });"""
+        )
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(
+                '.commercial-decision-option[data-option-id="heavy"]'
+            ).click()
+            summary = page.locator(".commercial-intent-summary")
+            before = summary.input_value()
+
+            page.locator(".commercial-intent-copy").click()
+
+            expect(summary).to_be_visible()
+            assert summary.input_value() == before
+            expect(page.locator(".commercial-intent-feedback")).to_contain_text(
+                "复制失败"
+            )
+        finally:
+            browser.close()
+
+
+def test_intent_copy_success_shows_feedback(staged_backlot_server):
+    project_id = _intent_panel_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        page.add_init_script(
+            """Object.defineProperty(navigator, "clipboard", {
+                configurable: true,
+                value: {
+                    writeText: (text) => {
+                        window.__copiedIntentSummary = text;
+                        return Promise.resolve();
+                    },
+                },
+            });"""
+        )
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(
+                '.commercial-decision-option[data-option-id="heavy"]'
+            ).click()
+
+            page.locator(".commercial-intent-copy").click()
+
+            expect(page.locator(".commercial-intent-feedback")).to_contain_text(
+                "摘要已复制"
+            )
+            assert "重度" in page.evaluate("window.__copiedIntentSummary")
+        finally:
+            browser.close()
+
+
+def test_intent_panel_is_keyboard_accessible(staged_backlot_server):
+    project_id = _intent_panel_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            heavy = page.get_by_role("button", name="重度 推荐")
+            heavy.focus()
+            page.keyboard.press("Space")
+
+            heavy = page.locator(
+                '.commercial-decision-option[data-option-id="heavy"]'
+            )
+            expect(heavy).to_have_attribute("aria-pressed", "true")
+            assert heavy.evaluate("(node) => document.activeElement === node")
+        finally:
+            browser.close()
+
+
+def test_intent_panel_never_posts_to_intents_api(staged_backlot_server):
+    project_id = _intent_panel_project()
+    requests = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        page.on(
+            "request",
+            lambda request: requests.append((request.method, request.url)),
+        )
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(
+                '.commercial-decision-option[data-option-id="medium"]'
+            ).click()
+            page.locator(".commercial-intent-note").fill("保留片尾品牌标识")
+            page.locator(".commercial-intent-copy").click()
+            page.wait_for_timeout(100)
+
+            assert not [
+                request
+                for request in requests
+                if request[0] == "POST" or "/intents" in request[1]
+            ]
+        finally:
+            browser.close()
+
+
+def test_commercial_empty_decision_options_preserve_read_only_notice(
+    staged_backlot_server,
+):
+    project_id = _intent_panel_project(options=False)
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+
+            expect(page.locator(".commercial-notice")).to_contain_text(
+                "请选择制作档位"
+            )
+            expect(page.locator(".commercial-intent-basket")).to_have_count(0)
+            expect(page.locator(".commercial-intent-copy")).to_have_count(0)
+            expect(page.locator(".commercial-chat-only")).to_contain_text(
+                "本页只展示信息，不提交审批"
+            )
+        finally:
+            browser.close()
+
+
 def test_project_pages_fit_mobile_and_tablet_widths(staged_backlot_server):
     project_paths = [
         "/p/signal-in-the-static?static=1",
@@ -565,6 +919,126 @@ def test_static_navigation_invalid_route_and_active_takes(staged_backlot_server)
             page.goto(staged_backlot_server + "/p/the-last-lighthouse?static=1", wait_until="networkidle")
             page.wait_for_timeout(300)
             assert page.locator(".takes .tk.active").count() >= 1
+        finally:
+            browser.close()
+
+
+def test_replay_bar_still_seeks_after_module_split(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + "/p/signal-in-the-static?static=1",
+                wait_until="networkidle",
+            )
+            page.get_by_text("▶ REPLAY RUN", exact=True).click()
+            page.locator(".replay-bar .rp-btn").first.click()
+            done_at_start = page.locator(".stage.done").count()
+
+            page.locator('.replay-bar input[type="range"]').fill("1000")
+
+            assert page.locator(".stage.done").count() > done_at_start
+            assert (
+                page.locator('.replay-bar input[type="range"]').input_value()
+                == "1000"
+            )
+        finally:
+            browser.close()
+
+
+def test_replay_pause_does_not_stack_timers(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        page.add_init_script(
+            """(() => {
+                const nativeSetTimeout = window.setTimeout.bind(window);
+                const nativeClearTimeout = window.clearTimeout.bind(window);
+                const replayTimeouts = new Set();
+                window.__replayTimerStats = {
+                    pending: 0,
+                    maxPending: 0,
+                    fired: 0,
+                };
+                window.setTimeout = (callback, delay, ...args) => {
+                    const tracked = delay === 100 && callback?.name === "tickReplay";
+                    let timerId;
+                    const wrapped = tracked
+                        ? (...callbackArgs) => {
+                            if (replayTimeouts.delete(timerId)) {
+                                window.__replayTimerStats.pending -= 1;
+                            }
+                            window.__replayTimerStats.fired += 1;
+                            return callback(...callbackArgs);
+                        }
+                        : callback;
+                    timerId = nativeSetTimeout(wrapped, delay, ...args);
+                    if (tracked) {
+                        replayTimeouts.add(timerId);
+                        window.__replayTimerStats.pending += 1;
+                        window.__replayTimerStats.maxPending = Math.max(
+                            window.__replayTimerStats.maxPending,
+                            window.__replayTimerStats.pending,
+                        );
+                    }
+                    return timerId;
+                };
+                window.clearTimeout = (timerId) => {
+                    if (replayTimeouts.delete(timerId)) {
+                        window.__replayTimerStats.pending -= 1;
+                    }
+                    return nativeClearTimeout(timerId);
+                };
+            })()"""
+        )
+        try:
+            page.goto(
+                staged_backlot_server + "/p/signal-in-the-static?static=1",
+                wait_until="networkidle",
+            )
+            page.get_by_text("▶ REPLAY RUN", exact=True).click()
+            page.evaluate(
+                """() => {
+                    for (let i = 0; i < 6; i += 1) {
+                        document.querySelector(".replay-bar .rp-btn").click();
+                        document.querySelector(".replay-bar .rp-btn").click();
+                    }
+                }"""
+            )
+            page.wait_for_timeout(350)
+
+            stats = page.evaluate("window.__replayTimerStats")
+            assert stats["fired"] >= 1
+            assert stats["maxPending"] == 1
+        finally:
+            browser.close()
+
+
+def test_edit_tab_disables_replay_view(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + "/p/signal-in-the-static?static=1",
+                wait_until="networkidle",
+            )
+            live_done = page.locator(".stage.done").count()
+            page.get_by_text("▶ REPLAY RUN", exact=True).click()
+            page.locator(".replay-bar .rp-btn").first.click()
+            replay_done = page.locator(".stage.done").count()
+            assert replay_done < live_done
+
+            page.get_by_role("button", name="✂ 剪辑").click()
+
+            expect(page.locator(".edit-tab")).to_have_count(1)
+            expect(page.locator(".replay-bar")).to_have_count(0)
+            assert page.locator(".stage.done").count() == live_done
+
+            page.get_by_role("button", name="✂ 剪辑").click()
+            expect(page.locator(".replay-bar")).to_have_count(1)
+            assert page.locator(".stage.done").count() == replay_done
         finally:
             browser.close()
 
