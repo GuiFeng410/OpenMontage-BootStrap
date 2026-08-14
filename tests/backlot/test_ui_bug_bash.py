@@ -546,6 +546,232 @@ def _stage_edit_gate_project(
     return project_id
 
 
+CREATE_PRODUCT_VIDEO_PROMPT = (
+    "请帮我创建一个新的商品宣传片项目。请按默认推荐引导我确认商品主题、时长、素材、"
+    "制作档位、预算和快速模式；创建后把 Backlot 项目网址发给我。"
+)
+
+
+def test_library_is_localized(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + "/?static=1",
+                wait_until="networkidle",
+            )
+
+            expect(page.locator("html")).to_have_attribute("lang", "zh-CN")
+            assert page.title() == "Backlot — 项目库"
+            expect(page.get_by_role("heading", name="项目库")).to_be_visible()
+            expect(page.locator("#count")).to_contain_text("个项目")
+            expect(page.locator(".lib-poster .lp-txt").first).to_have_text(
+                "暂无媒体"
+            )
+            signal_card = page.locator(
+                'a.lib-card[href^="/p/signal-in-the-static"]'
+            )
+            expect(signal_card.locator("h3")).to_have_text("Signal in the Static")
+            expect(signal_card.locator(".lb-meta")).to_contain_text("cinematic")
+        finally:
+            browser.close()
+
+
+def test_library_shows_service_and_projects_root(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + "/?static=1",
+                wait_until="networkidle",
+            )
+
+            onboarding = page.locator(".library-onboarding")
+            expect(onboarding).to_contain_text("创建新商品片")
+            expect(onboarding).to_contain_text(
+                "正式项目由 Agent 在聊天中创建"
+            )
+            expect(page.get_by_role("button", name="复制“创建商品片”请求")).to_be_visible()
+            expect(onboarding).to_contain_text("回聊天发送")
+            project_count = page.locator(".lib-card").count()
+            expect(onboarding).to_contain_text(
+                f"本地服务：{staged_backlot_server.removeprefix('http://')}"
+            )
+            expect(onboarding).to_contain_text(
+                f"已发现 {project_count} 个项目"
+            )
+            details = page.locator("details.library-service-details")
+            expect(details).to_have_count(1)
+            assert details.evaluate("(node) => node.open") is False
+            assert "项目目录：" not in page.locator("body").inner_text()
+
+            details.locator("summary").click()
+
+            expect(details).to_contain_text(
+                f"项目目录：{backlot_screenshot_stage.STAGE_DIR}"
+            )
+        finally:
+            browser.close()
+
+
+def test_library_copy_create_prompt_success(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        page.add_init_script(
+            """Object.defineProperty(navigator, "clipboard", {
+                configurable: true,
+                value: {
+                    writeText: (text) => {
+                        window.__copiedCreatePrompt = text;
+                        return Promise.resolve();
+                    },
+                },
+            });"""
+        )
+        try:
+            page.goto(
+                staged_backlot_server + "/?static=1",
+                wait_until="networkidle",
+            )
+
+            prompt = page.locator(".library-onboarding-prompt")
+            expect(prompt).to_have_value(CREATE_PRODUCT_VIDEO_PROMPT)
+            page.get_by_role("button", name="复制“创建商品片”请求").click()
+
+            expect(page.locator(".library-onboarding-feedback")).to_have_text(
+                "已复制，请回聊天粘贴并发送。"
+            )
+            assert page.evaluate(
+                "window.__copiedCreatePrompt"
+            ) == CREATE_PRODUCT_VIDEO_PROMPT
+            expect(prompt).to_have_value(CREATE_PRODUCT_VIDEO_PROMPT)
+        finally:
+            browser.close()
+
+
+def test_library_copy_fallback_keeps_text_visible(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        page.add_init_script(
+            """Object.defineProperty(navigator, "clipboard", {
+                configurable: true,
+                value: {
+                    writeText: () => Promise.reject(new Error("blocked")),
+                },
+            });"""
+        )
+        try:
+            page.goto(
+                staged_backlot_server + "/?static=1",
+                wait_until="networkidle",
+            )
+            prompt = page.locator(".library-onboarding-prompt")
+
+            page.get_by_role("button", name="复制“创建商品片”请求").click()
+
+            expect(page.locator(".library-onboarding-feedback")).to_have_text(
+                "无法自动复制，请选中下方文本并手动复制到聊天。"
+            )
+            expect(prompt).to_be_visible()
+            expect(prompt).to_have_value(CREATE_PRODUCT_VIDEO_PROMPT)
+            assert prompt.evaluate("(node) => document.activeElement === node")
+            assert prompt.evaluate(
+                "(node) => node.selectionStart === 0 "
+                "&& node.selectionEnd === node.value.length"
+            )
+        finally:
+            browser.close()
+
+
+def test_library_create_prompt_never_posts(staged_backlot_server):
+    requests = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        page.on(
+            "request",
+            lambda request: requests.append((request.method, request.url)),
+        )
+        try:
+            page.goto(
+                staged_backlot_server + "/?static=1",
+                wait_until="networkidle",
+            )
+            page.get_by_role("button", name="复制“创建商品片”请求").click()
+            page.wait_for_timeout(100)
+
+            assert not [
+                request for request in requests if request[0] == "POST"
+            ]
+        finally:
+            browser.close()
+
+
+def test_library_project_cards_still_navigate(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(
+                staged_backlot_server + "/?static=1",
+                wait_until="networkidle",
+            )
+
+            page.locator(
+                'a.lib-card[href^="/p/signal-in-the-static"]'
+            ).click()
+
+            expect(page).to_have_url(
+                staged_backlot_server
+                + "/p/signal-in-the-static?static=1"
+            )
+        finally:
+            browser.close()
+
+
+def test_library_mobile_has_no_horizontal_overflow(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 390, "height": 844})
+        try:
+            page.goto(
+                staged_backlot_server + "/?static=1",
+                wait_until="networkidle",
+            )
+
+            sizes = page.evaluate(
+                """() => ({
+                    scrollWidth: document.documentElement.scrollWidth,
+                    innerWidth: window.innerWidth,
+                })"""
+            )
+            assert sizes["scrollWidth"] <= sizes["innerWidth"]
+        finally:
+            browser.close()
+
+
+def test_library_health_failure_keeps_projects_visible(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        page.route("**/api/health", lambda route: route.abort())
+        try:
+            page.goto(
+                staged_backlot_server + "/?static=1",
+                wait_until="networkidle",
+            )
+
+            expect(page.locator(".lib-card")).not_to_have_count(0)
+            details = page.locator(".library-service-details")
+            expect(details).to_contain_text("项目目录：未提供")
+        finally:
+            browser.close()
+
+
 def test_staged_server_uses_isolated_temporary_projects_directory(
     staged_backlot_server,
 ):

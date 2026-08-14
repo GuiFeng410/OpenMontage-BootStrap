@@ -86,10 +86,29 @@ def _write_png(path: Path, color: tuple[int, int, int] = (200, 40, 80)) -> None:
 
 
 class TestBacklotServerApi:
-    def test_health(self, client):
+    def test_health(self, client, projects_root):
         response = client.get("/api/health")
         assert response.status_code == 200
-        assert response.json() == {"ok": True, "app": "backlot"}
+        assert response.json() == {
+            "ok": True,
+            "app": "backlot",
+            "projects_dir": str(projects_root),
+        }
+
+    def test_health_exposes_projects_root(self, client):
+        payload = client.get("/api/health").json()
+        assert payload["ok"] is True
+        assert payload["app"] == "backlot"
+        assert payload["projects_dir"]
+
+    def test_library_static_assets_and_css_cache_bust(self, client):
+        css = client.get("/ui/library.css")
+        js = client.get("/ui/library-onboarding.js")
+        page = client.get("/")
+
+        assert css.status_code == 200
+        assert js.status_code == 200
+        assert "/ui/library.css?v=" in page.text
 
     def test_projects_shape_and_state(self, client, projects_root):
         _make_project(projects_root, "film")

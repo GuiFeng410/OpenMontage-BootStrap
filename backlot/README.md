@@ -54,6 +54,16 @@ Copying uses `navigator.clipboard.writeText` when available. If Clipboard API
 access fails, the summary stays visible, receives focus and is selected for
 manual copy.
 
+## B1.1 Library boundary
+
+- Library is localized to Chinese.
+- It displays the local service, project count and collapsed projects root.
+- “创建新商品片” copies a chat request; it does not create a project.
+- Clipboard failure keeps a selectable textarea.
+- Formal creation remains Agent/BootStrap in chat.
+- No create/upload POST exists.
+- B2 remains deferred.
+
 ## UI module ownership
 
 - `board.js`: thin page entry and board assembly.
@@ -63,6 +73,9 @@ manual copy.
 - `board-replay.js`: replay state, controls and projected views.
 - `board-intent-state.js`: pure decision-draft, revision and storage helpers.
 - `board-intent-panel.js`: commercial option buttons, summary and copy feedback.
+- `library.js`: Library cards, localized status labels and onboarding wiring.
+- `library-onboarding.js`: create-product-video prompt, service info and Clipboard helper.
+- `library.css`: Library onboarding and empty-state styles.
 
 Existing selectors and behavior remain compatibility contracts, including
 `.commercial-decision-option`, `.commercial-intent-summary`,

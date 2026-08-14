@@ -170,7 +170,11 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     async def health() -> dict:
-        return {"ok": True, "app": "backlot"}
+        return {
+            "ok": True,
+            "app": "backlot",
+            "projects_dir": str(PROJECTS_DIR),
+        }
 
     @app.get("/api/projects")
     async def projects() -> list:
@@ -342,7 +346,7 @@ def create_app() -> FastAPI:
 
     @app.get("/")
     async def library_page() -> HTMLResponse:
-        return _ui_html("index.html", ("board.css", "library.js"))
+        return _ui_html("index.html", ("board.css", "library.css", "library.js"))
 
     if UI_DIR.is_dir():
         app.mount("/ui", StaticFiles(directory=UI_DIR), name="ui")
