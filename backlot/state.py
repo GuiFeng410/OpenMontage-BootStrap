@@ -21,6 +21,7 @@ from lib.asset_precheck import (
 )
 from lib.checkpoint import _merge_project_decision_logs
 from lib.events import read_events
+from lib.interaction_intents import list_safe_interaction_intents
 from lib.paths import PROJECTS_DIR, REPO_ROOT  # single source of truth (env-overridable)
 
 MEDIA_IMAGE_EXT = {
@@ -2066,6 +2067,61 @@ def _build_commercial_board(
     }
 
 
+def _read_fast_track_pause(project_dir: Path) -> Optional[dict[str, str]]:
+    """Newest checkpoint metadata.fast_track_pause; display-only, never invented."""
+    newest: Optional[dict[str, str]] = None
+    newest_mtime = -1.0
+    for path in project_dir.glob("checkpoint_*.json"):
+        data = _read_json(path)
+        if not isinstance(data, dict):
+            continue
+        metadata = data.get("metadata")
+        pause = metadata.get("fast_track_pause") if isinstance(metadata, dict) else None
+        if not isinstance(pause, dict):
+            continue
+        reason_code = pause.get("reason_code")
+        friendly_zh = pause.get("friendly_zh")
+        if not isinstance(reason_code, str) or not isinstance(friendly_zh, str):
+            continue
+        try:
+            mtime = path.stat().st_mtime
+        except OSError:
+            continue
+        if mtime < newest_mtime:
+            continue
+        newest_mtime = mtime
+        question = pause.get("current_question")
+        newest = {
+            "reason_code": reason_code,
+            "friendly_zh": friendly_zh,
+            "current_question": question if isinstance(question, str) else "",
+        }
+    return newest
+
+
+def _read_final_video(
+    project_dir: Path,
+    commercial: dict[str, Any],
+) -> Optional[dict[str, Any]]:
+    """Playable project-relative final video, never an absolute path."""
+    if _canonical_video_path(project_dir, "renders/final.mp4"):
+        return {"path": "renders/final.mp4", "exists": True}
+    evidence = commercial.get("stage_evidence") or {}
+    for key in ("delivery", "compose"):
+        raw = (evidence.get(key) or {}).get("path")
+        resolved = _canonical_video_path(project_dir, raw)
+        if resolved:
+            return {"path": resolved, "exists": True}
+    return None
+
+
+def _attach_commercial_board_echo(project_dir: Path, commercial: dict[str, Any]) -> None:
+    """Attach read-only interaction / pause / final echo onto commercial."""
+    commercial["interaction_intents"] = list_safe_interaction_intents(project_dir)
+    commercial["fast_track_pause"] = _read_fast_track_pause(project_dir)
+    commercial["final_video"] = _read_final_video(project_dir, commercial)
+
+
 def _find_poster(project_dir: Path, state: dict) -> Optional[str]:
     """Best poster for the library card (image path, or a video path —
     the /thumb endpoint extracts a frame from videos)."""
@@ -2403,6 +2459,7 @@ def load_board_state(project_dir: Path) -> dict[str, Any]:
         state["commercial"] = _build_commercial_board(
             project_dir, marker, artifacts, stages, media, cost, legacy_checkpoints,
         )
+        _attach_commercial_board_echo(project_dir, state["commercial"])
         state["editing_gate"] = _build_editing_gate(project_dir, artifacts, stages)
         state["commercial"]["editing_gate"] = state["editing_gate"]
     artifacts.pop("_batch_review_sources", None)

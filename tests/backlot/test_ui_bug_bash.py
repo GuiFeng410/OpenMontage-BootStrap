@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -1061,6 +1062,267 @@ def test_intent_panel_never_posts_to_intents_api(staged_backlot_server):
                 for request in requests
                 if request[0] == "POST" or "/intents" in request[1]
             ]
+        finally:
+            browser.close()
+
+
+def test_commercial_submit_intent_posts_pending(staged_backlot_server):
+    project_id = _intent_panel_project()
+    posted = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+
+        def accept_intent(route):
+            posted.append(route.request.post_data_json)
+            route.fulfill(
+                status=201,
+                content_type="application/json",
+                body=json.dumps({
+                    "intent_id": posted[-1]["intent_id"],
+                    "status": "pending",
+                    "duplicate": False,
+                }),
+            )
+
+        page.route("**/intents", accept_intent)
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(
+                '.commercial-decision-option[data-option-id="medium"]'
+            ).click()
+            page.get_by_role("button", name="提交待确认", exact=True).click()
+
+            expect(page.locator(".commercial-intent-feedback")).to_have_text(
+                "已提交。请回聊天发送：确认面板选择"
+            )
+            assert len(posted) == 1
+            assert posted[0]["intent_type"] == "decision"
+            assert posted[0]["status"] == "pending"
+            assert posted[0]["payload"]["selections"][0]["option_id"] == "medium"
+        finally:
+            browser.close()
+
+
+def test_commercial_submit_never_writes_checkpoint(staged_backlot_server):
+    project_id = _intent_panel_project()
+    requests = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        page.on(
+            "request",
+            lambda request: requests.append((request.method, request.url)),
+        )
+        page.route(
+            "**/intents",
+            lambda route: route.fulfill(
+                status=201,
+                content_type="application/json",
+                body=json.dumps({
+                    "intent_id": "captured",
+                    "status": "pending",
+                    "duplicate": False,
+                }),
+            ),
+        )
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(
+                '.commercial-decision-option[data-option-id="heavy"]'
+            ).click()
+            page.get_by_role("button", name="提交待确认", exact=True).click()
+            expect(page.locator(".commercial-intent-feedback")).to_have_text(
+                "已提交。请回聊天发送：确认面板选择"
+            )
+
+            posts = [url for method, url in requests if method == "POST"]
+            assert posts == [f"{staged_backlot_server}/intents"]
+            assert not [url for url in posts if "checkpoint" in url.lower()]
+        finally:
+            browser.close()
+
+
+def test_commercial_submit_failure_falls_back_to_copy(staged_backlot_server):
+    project_id = _intent_panel_project()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        page.add_init_script(
+            """Object.defineProperty(navigator, "clipboard", {
+                configurable: true,
+                value: {
+                    writeText: (text) => {
+                        window.__copiedFallbackSummary = text;
+                        return Promise.resolve();
+                    },
+                },
+            });"""
+        )
+        page.route("**/intents", lambda route: route.abort())
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.locator(
+                '.commercial-decision-option[data-option-id="heavy"]'
+            ).click()
+            summary = page.locator(".commercial-intent-summary")
+            before = summary.input_value()
+
+            page.get_by_role("button", name="提交待确认", exact=True).click()
+
+            expect(page.locator(".commercial-intent-feedback")).to_have_text(
+                "提交失败，请复制上方摘要并回聊天发送。"
+            )
+            expect(summary).to_be_visible()
+            assert summary.input_value() == before
+            page.get_by_role("button", name="复制聊天摘要", exact=True).click()
+            assert page.evaluate("window.__copiedFallbackSummary") == before
+        finally:
+            browser.close()
+
+
+def _echo_project(project_id: str) -> Path:
+    project = backlot_screenshot_stage.STAGE_DIR / project_id
+    if project.exists():
+        shutil.rmtree(project)
+    project.mkdir(parents=True)
+    (project / "renders").mkdir()
+    _write_json(project / "project.json", {
+        "project_id": project_id,
+        "title": "看板回显",
+        "pipeline_type": "bootstrap-commercial",
+    })
+    return project
+
+
+def _echo_interaction_intent(project_id: str, summary: str) -> dict:
+    return {
+        "version": "1.0",
+        "intent_type": "decision",
+        "intent_id": "echo-intent",
+        "project_id": project_id,
+        "stage": "brief_locked",
+        "revision": "revision-echo",
+        "summary": summary,
+        "summary_sha256": hashlib.sha256(summary.encode("utf-8")).hexdigest(),
+        "payload": {"production_tier": "light"},
+        "expires_at": "2099-08-14T12:00:00+00:00",
+        "created_at": "2026-08-14T01:00:00+00:00",
+        "status": "pending",
+    }
+
+
+def test_commercial_board_shows_interaction_intent_status(staged_backlot_server):
+    project_id = "commercial-echo-intent"
+    project = _echo_project(project_id)
+    summary = "采用轻度档并等待素材评审"
+    _write_json(project / "intents" / "echo-intent.json", _echo_interaction_intent(project_id, summary))
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            status = page.locator(".commercial-intent-status")
+            expect(status).to_be_visible()
+            expect(status).to_contain_text("待确认")
+            expect(status).to_contain_text(summary)
+            expect(page.get_by_role("button", name="批准")).to_have_count(0)
+        finally:
+            browser.close()
+
+
+def test_commercial_board_shows_fast_track_pause_zh(staged_backlot_server):
+    project_id = "commercial-echo-pause"
+    project = _echo_project(project_id)
+    _write_json(project / "checkpoint_assets_gate.json", {
+        "version": "1.0",
+        "project_id": project_id,
+        "pipeline_type": "bootstrap-commercial",
+        "stage": "assets_gate",
+        "status": "awaiting_human",
+        "timestamp": "2026-08-14T02:00:00Z",
+        "artifacts": {},
+        "metadata": {
+            "fast_track_pause": {
+                "reason_code": "generated_image_review",
+                "friendly_zh": "有生成图待批量审图。",
+                "current_question": "请在聊天确认这批生成图？",
+            },
+        },
+    })
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            pause = page.locator(".commercial-fast-track-pause")
+            expect(pause).to_be_visible()
+            expect(pause).to_contain_text("有生成图待批量审图。")
+            expect(pause).to_contain_text("请在聊天确认这批生成图？")
+            expect(pause).to_contain_text("请回聊天")
+            expect(page.get_by_role("button", name="批准")).to_have_count(0)
+        finally:
+            browser.close()
+
+
+def test_commercial_board_final_video_playable_and_download(staged_backlot_server):
+    project_id = "commercial-echo-final"
+    project = _echo_project(project_id)
+    _copy_fixture_video(project / "renders" / "final.mp4")
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            video = page.locator(".commercial-final-video video")
+            expect(video).to_be_visible()
+            src = video.get_attribute("src") or ""
+            assert "/media/" in src
+            assert "final.mp4" in src
+            download = page.locator("a.commercial-final-download")
+            expect(download).to_have_text("下载终稿")
+            assert "/media/" in (download.get_attribute("href") or "")
+            expect(page.get_by_role("button", name="批准")).to_have_count(0)
+        finally:
+            browser.close()
+
+
+def test_edit_intents_still_require_editing_gate(staged_backlot_server):
+
+    project_id = _stage_edit_gate_project(
+        "commercial-submit-is-not-edit-gate",
+        stage="segment_build",
+    )
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page()
+        try:
+            page.goto(
+                f"{staged_backlot_server}/p/{project_id}?static=1",
+                wait_until="networkidle",
+            )
+            page.get_by_role("button", name="✂ 剪辑").click()
+
+            expect(page.locator(".edit-gate-locked")).to_be_visible()
+            expect(page.get_by_role("button", name="提交剪辑要求")).to_have_count(0)
         finally:
             browser.close()
 

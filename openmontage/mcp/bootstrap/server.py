@@ -313,6 +313,53 @@ def produce_apply_intent(project_id: str, intent_id: str) -> dict[str, Any]:
 
 
 @mcp.tool()
+def produce_list_interaction_intents(project_id: str) -> dict[str, Any]:
+    """List interaction intents only; edit intents remain on their existing tools."""
+    return _wrap(T.produce_list_interaction_intents, project_id)
+
+
+@mcp.tool()
+def produce_plan_approval_bundle(
+    project_id: str,
+    intent_id: str,
+    checkpoint_revision: str,
+) -> dict[str, Any]:
+    """Plan a pending panel decision into a §6.3 approval bundle, or re-plan an existing bundle."""
+    return _wrap(
+        T.produce_plan_approval_bundle,
+        project_id,
+        intent_id,
+        checkpoint_revision,
+    )
+
+
+@mcp.tool()
+def produce_apply_approval_bundle(
+    project_id: str,
+    intent_id: str,
+    confirm_phrase: str,
+    checkpoint_revision: str,
+) -> dict[str, Any]:
+    """Apply a planned approval bundle; exact chat confirmation is required."""
+    return _wrap(
+        T.produce_apply_approval_bundle,
+        project_id,
+        intent_id,
+        confirm_phrase,
+        checkpoint_revision,
+    )
+
+
+@mcp.tool()
+def produce_fast_track_evaluate(
+    project_id: str,
+    snapshot_json: str,
+) -> dict[str, Any]:
+    """Evaluate a supplied fast-track snapshot without loading or writing project state."""
+    return _wrap(T.produce_fast_track_evaluate, project_id, snapshot_json)
+
+
+@mcp.tool()
 def produce_read_state(project_id: str) -> dict[str, Any]:
     """Read project marker + checkpoints."""
     return _wrap(T.produce_read_state, project_id)

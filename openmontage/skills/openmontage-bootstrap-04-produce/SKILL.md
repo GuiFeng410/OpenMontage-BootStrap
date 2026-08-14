@@ -189,6 +189,33 @@ produce_list_intents
 
 快速模式只减少中间打断，不得跳过证据物化、生成图审查、unified matrix、`assets_gate=completed`、试片、项目 preflight、provider registry/MCP availability、费用闸、付费调用确认或最终签收。网页继续只读。
 
+### 快速模式 v2（执行）
+
+`fast_track_v1` 项目继续走上一节冻结流程；只有最新合法 `approval_policy.selected="fast_track_v2"` 的项目走本循环。禁止把「直接出片」当审批证据；面板提交也只产生待确认 intent，网页只读，不在浏览器 apply。
+
+```text
+produce_plan_approval_bundle
+→ 用户口令 确认面板选择
+→ produce_apply_approval_bundle(confirm_phrase=确认面板选择)
+→ loop:
+    produce_fast_track_evaluate
+    continue → 现有 produce_* 下一阶段
+    pause → 聊天只问一个问题
+    signoff_ready → 提示刷新看板签收
+```
+
+口令/plan/apply 只用于尚无合法授权的入口。若 03 已完成 list→plan→apply、intent 已 apply，或 `approval_policy` 已是 `selected=fast_track_v2`，04 跳过 plan/apply，从 produce_fast_track_evaluate 开始；此时待确认列表为空是正常状态，不得退回 Grill。
+
+执行硬规则：
+
+1. 每轮 evaluate 的 `snapshot_json` 由 Agent 根据 `produce_read_state` 与当前费用、QA、unified matrix 证据填写；`policy.unit_price_cny` 必须取自已 apply 审批包的锁定单价（`payload.unit_price_cny`），缺字段必须 fail-closed 并按 `pause` 处理，禁止凭空把布尔值设为 `True` 强制继续。
+2. evaluate 返回 `pause` 时禁止继续付费调用、禁止付费 generate。必须先调用 `produce_write_checkpoint`，用 `metadata_json` **只 patch** `fast_track_pause`（含 `reason_code`、`friendly_zh`、`current_question`）；禁止传入空 artifacts 覆盖已有产物。然后再聊天一次只问一个问题，优先直接使用 evaluate 返回的 `friendly_zh` + `current_question`。
+3. 生成图即使处于 v2 也必须经过 `generated_image_review` 用户批量审图；不得把 approval bundle 当成审图批准。
+4. `sample_review` 对 `fast_track_v2` 按 evaluate 决定，QA 通过且无暂停理由时可以 `continue`；v1 的“试片必须停”只属于 `fast_track_v1`。
+5. `delivery_signoff` 只能进入 `signoff_ready`，提示用户刷新看板签收，禁止自动完成。终稿尚未就绪时返回的 `missing_field` 是暂停证据；不得把它理解成「schema 缺字段」以外的放行理由。
+6. 自动重试最多 1 次，且沿用已冻结渠道/模型；禁止静默换渠道、换模型或启动后台 worker/daemon。
+7. 仅口令/plan/apply 入口：无合法待确认 interaction intent / bundle（列表为空、plan 失败、revision drift、intent expired）时不得 apply，退回 03 的完整 Grill 确认卡。若已是 `selected=fast_track_v2` 或 intent 已 apply，跳过 plan/apply，从 produce_fast_track_evaluate 开始。历史 v1 决定不改写、不迁移。
+
 ### 付费 AI 镜提示词：Skill 引用与面板递进（强制）
 
 适用：商品片或重度、且该段将调用付费 I2V/T2V。纯 Remotion/本地运镜段跳过。

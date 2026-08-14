@@ -36,12 +36,13 @@ writes project state or submits approval.
 
 - Backlot does not write checkpoint/artifact/decision truth.
 - B1 may store `sessionStorage`-only decision drafts and copy chat summaries.
-- `POST /intents` remains the sole server-side write exception and is edit-only.
-- B2 interaction intents and fast-track v2 are not implemented.
+- `POST /intents` is the sole server-side write exception: edit intents keep
+  the editing gate; B2 interaction intents skip that gate but still only
+  write `projects/<id>/intents/`.
+- Formal approval remains in chat. The panel never writes checkpoint,
+  decision log, or canonical artifacts, and never triggers paid generate.
 
-Formal approval remains in chat. The commercial decision panel only prepares a
-local draft and a copyable summary; it never posts the commercial selection or
-mutates project truth.
+B1 copy-summary stays as the fallback when the B2 submit request fails.
 
 The draft key is
 `backlot.intent-draft.v1:<project_id>:<stage>`. Its revision covers project,
@@ -62,7 +63,6 @@ manual copy.
 - Clipboard failure keeps a selectable textarea.
 - Formal creation remains Agent/BootStrap in chat.
 - No create/upload POST exists.
-- B2 remains deferred.
 
 ## UI module ownership
 
@@ -72,7 +72,10 @@ manual copy.
 - `board-commercial.js`: commercial evidence views and media guards.
 - `board-replay.js`: replay state, controls and projected views.
 - `board-intent-state.js`: pure decision-draft, revision and storage helpers.
-- `board-intent-panel.js`: commercial option buttons, summary and copy feedback.
+- `board-intent-panel.js`: commercial option buttons, copy fallback, and
+  「提交待确认」.
+- `board-intent-submit.js`: POST `/intents` helper for pending `decision`
+  intents; never posts `approval_bundle`.
 - `library.js`: Library cards, localized status labels and onboarding wiring.
 - `library-onboarding.js`: create-product-video prompt, service info and Clipboard helper.
 - `library.css`: Library onboarding and empty-state styles.
@@ -80,8 +83,29 @@ manual copy.
 Existing selectors and behavior remain compatibility contracts, including
 `.commercial-decision-option`, `.commercial-intent-summary`,
 `.commercial-chat-only`, the replay controls and generic/commercial/edit view
-boundaries. B2 server-backed interaction intents, approval bundles and
-fast-track v2 remain deferred.
+boundaries.
+
+## B2 interaction / fast-track v2 boundary
+
+- Panel button is 「提交待确认」. Success copy is
+  `已提交。请回聊天发送：确认面板选择`.
+- The page never shows 「批准」「立即创建」「开始生成」「已生效」.
+- Chat confirmation for panel intents is exactly `确认面板选择`.
+  「直接出片」 is not approval evidence.
+- Agent tools: `produce_list_interaction_intents`,
+  `produce_plan_approval_bundle` (promotes a pending panel `decision` into a
+  complete §6.3 `approval_bundle` using project evidence; missing evidence
+  fails closed), `produce_apply_approval_bundle`
+  (`confirm_phrase` required; writes `selected="fast_track_v2"`),
+  `produce_fast_track_evaluate` (read-only).
+- Fast-track v2 is an Agent session loop plus Python gates, not a daemon
+  and not Cursor auto-wake.
+- Evaluate missing fields fail-closed. Generated images still pause for
+  batch review. Delivery waits for signoff.
+- On evaluate `pause`, the Agent must `produce_write_checkpoint` with
+  `metadata.fast_track_pause` so the board can echo the Chinese reason.
+- Board echoes interaction intent status, checkpoint `metadata.fast_track_pause`,
+  and a playable/downloadable `renders/final.mp4`. The browser does not apply.
 
 Projects without checkpoints degrade gracefully to a "what the watcher
 found" view — media, snapshots, renders.

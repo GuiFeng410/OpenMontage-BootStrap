@@ -9,6 +9,11 @@ import {
   setDraftNote,
   summarizeDraft,
 } from "./board-intent-state.js";
+import {
+  buildDecisionIntent,
+  CONFIRM_PHRASE,
+  submitDecisionIntent,
+} from "./board-intent-submit.js";
 
 function currentDecision(decision, stage) {
   const options = Array.isArray(decision?.options) ? decision.options : [];
@@ -124,6 +129,11 @@ export function renderDecisionIntentPanel({
         : "之前保存的选择与当前版本不一致，旧草稿未应用。"),
       el("button", {
         type: "button",
+        class: "commercial-intent-submit",
+        disabled: "",
+      }, "提交待确认"),
+      el("button", {
+        type: "button",
         onclick: () => {
           clearDraft(storage, { projectId, stage });
           if (typeof onDraftChange === "function") onDraftChange(null);
@@ -164,13 +174,36 @@ export function renderDecisionIntentPanel({
         }
       },
     }, "复制聊天摘要");
+    const submitButton = el("button", {
+      type: "button",
+      class: "commercial-intent-submit",
+      onclick: async () => {
+        submitButton.disabled = true;
+        try {
+          const intent = await buildDecisionIntent({
+            projectId,
+            stage,
+            draft,
+            summary: summary.value,
+          });
+          const result = await submitDecisionIntent({ intent });
+          feedback.textContent = result.ok
+            ? `已提交。请回聊天发送：${CONFIRM_PHRASE}`
+            : "提交失败，请复制上方摘要并回聊天发送。";
+        } catch {
+          feedback.textContent = "提交失败，请复制上方摘要并回聊天发送。";
+        } finally {
+          submitButton.disabled = false;
+        }
+      },
+    }, "提交待确认");
     body.append(el("div", { class: "commercial-intent-basket" },
       el("div", { class: "commercial-intent-basket-head" },
         el("b", {}, "待确认篮子"),
         el("span", {}, projectTitle || projectId)),
       summary,
       note,
-      el("div", { class: "commercial-intent-actions" }, copyButton),
+      el("div", { class: "commercial-intent-actions" }, copyButton, submitButton),
       feedback));
   }
 

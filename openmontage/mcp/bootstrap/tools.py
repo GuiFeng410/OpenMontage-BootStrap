@@ -84,6 +84,10 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_append_decision",
             "produce_list_intents",
             "produce_apply_intent",
+            "produce_list_interaction_intents",
+            "produce_plan_approval_bundle",
+            "produce_apply_approval_bundle",
+            "produce_fast_track_evaluate",
             "produce_read_state",
             "produce_get_next_stage",
             "produce_import_project_images",
@@ -1316,6 +1320,96 @@ def produce_approve_checkpoint(
 def produce_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:
     """Append one user-visible decision to the project audit trail."""
     return doctor_tools.run_append_decision(project_id, decision_json)
+
+
+def _raise_approval_bundle_error(exc: Exception) -> None:
+    from lib.approval_bundle import ApprovalBundleError
+    from lib.interaction_intents import UnknownProjectError
+
+    if isinstance(exc, UnknownProjectError):
+        raise DoctorError("unknown project", code="unknown_project") from exc
+    if isinstance(exc, ApprovalBundleError):
+        raise DoctorError(exc.safe_message, code=exc.code) from exc
+    if isinstance(exc, DoctorError):
+        raise exc
+    raise DoctorError(
+        "approval bundle operation failed; intent changes were rolled back",
+        code="approval_bundle_failed",
+    ) from exc
+
+
+def produce_list_interaction_intents(project_id: str) -> dict[str, Any]:
+    """List valid interaction intents, excluding edit intents."""
+    from lib.approval_bundle import list_interaction_intents
+
+    try:
+        listed = list_interaction_intents(project_id)
+    except Exception as exc:  # noqa: BLE001
+        _raise_approval_bundle_error(exc)
+    return {"project_id": project_id, "intents": listed}
+
+
+def produce_plan_approval_bundle(
+    project_id: str,
+    intent_id: str,
+    checkpoint_revision: str,
+) -> dict[str, Any]:
+    """Plan a panel decision or approval bundle after checking checkpoint revision."""
+    from lib.approval_bundle import plan_approval_bundle
+
+    try:
+        return plan_approval_bundle(
+            project_id,
+            intent_id,
+            checkpoint_revision=checkpoint_revision,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _raise_approval_bundle_error(exc)
+
+
+def produce_apply_approval_bundle(
+    project_id: str,
+    intent_id: str,
+    confirm_phrase: str,
+    checkpoint_revision: str,
+) -> dict[str, Any]:
+    """Apply a planned approval bundle using the exact confirmation phrase."""
+    from lib.approval_bundle import apply_approval_bundle
+
+    try:
+        return apply_approval_bundle(
+            project_id,
+            intent_id,
+            confirm_phrase=confirm_phrase,
+            checkpoint_revision=checkpoint_revision,
+            append_decision=produce_append_decision,
+        )
+    except Exception as exc:  # noqa: BLE001
+        _raise_approval_bundle_error(exc)
+
+
+def produce_fast_track_evaluate(
+    project_id: str,
+    snapshot_json: str,
+) -> dict[str, Any]:
+    """Evaluate a caller-supplied fast-track snapshot without reading or writing disk."""
+    try:
+        snapshot = json.loads(snapshot_json)
+    except (json.JSONDecodeError, TypeError) as exc:
+        raise DoctorError(
+            "snapshot_json must be a valid JSON object",
+            code="bad_request",
+        ) from exc
+    if not isinstance(snapshot, dict):
+        raise DoctorError(
+            "snapshot_json must be a valid JSON object",
+            code="bad_request",
+        )
+
+    from lib.fast_track import evaluate_fast_track
+
+    result = evaluate_fast_track(snapshot)
+    return {"project_id": project_id, **result}
 
 
 def produce_list_intents(project_id: str) -> dict[str, Any]:

@@ -24,6 +24,7 @@ from lib.edit_intents import (
     UnknownProjectError,
     create_intent,
 )
+from lib import interaction_intents as interaction_intents
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
 THUMB_CACHE_DIR = REPO_ROOT / ".backlot" / "thumbs"
@@ -113,6 +114,10 @@ def _cached_summaries() -> list[dict]:
     return summaries
 
 
+def _read_interaction_intents(project_dir: Path) -> list[dict]:
+    return interaction_intents.list_safe_interaction_intents(project_dir)
+
+
 # Watch-loop hot path: pure string comparison, no per-path filesystem calls
 # (change batches can be thousands of paths during a render).
 import os as _os
@@ -195,6 +200,51 @@ def create_app() -> FastAPI:
         if not isinstance(project_id, str) or not project_id.strip():
             raise HTTPException(status_code=400, detail="missing project_id")
         project_dir = _safe_project_dir(project_id)
+
+        if "intent_type" in payload:
+            intent_type = payload.get("intent_type")
+            if intent_type not in interaction_intents.INTERACTION_INTENT_TYPES:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"unknown intent_type: {intent_type!r}",
+                )
+            interaction_payload = {
+                key: value
+                for key, value in payload.items()
+                if key != "risk_level"
+            }
+            try:
+                interaction_intents.validate_interaction_intent(
+                    interaction_payload
+                )
+                current = interaction_intents.expire_if_needed(
+                    interaction_payload
+                )
+                record = await asyncio.to_thread(
+                    interaction_intents.create_or_conflict,
+                    project_id,
+                    current,
+                )
+            except interaction_intents.UnknownProjectError:
+                raise HTTPException(status_code=404, detail="unknown project")
+            except interaction_intents.IntentConflictError:
+                raise HTTPException(
+                    status_code=409,
+                    detail="intent_id already exists with different content",
+                )
+            except interaction_intents.IntentError as exc:
+                raise HTTPException(status_code=400, detail=str(exc))
+            hub.publish(project_id)
+            intent = record["intent"]
+            return JSONResponse(
+                status_code=200 if record.get("duplicate") else 201,
+                content={
+                    "intent_id": intent["intent_id"],
+                    "status": intent["status"],
+                    "duplicate": bool(record.get("duplicate", False)),
+                },
+            )
+
         board_state = await asyncio.to_thread(load_board_state, project_dir)
         editing_gate = board_state.get("editing_gate")
         if not isinstance(editing_gate, dict) or editing_gate.get("enabled") is not True:
@@ -233,6 +283,17 @@ def create_app() -> FastAPI:
                 "duplicate": bool(record.get("duplicate", False)),
             },
         )
+
+    @app.get("/api/project/{project_id}/interaction-intents")
+    async def interaction_intent_list(project_id: str) -> dict:
+        project_dir = _safe_project_dir(project_id)
+        if not (project_dir / "project.json").is_file():
+            raise HTTPException(status_code=404, detail="unknown project")
+        intents = await asyncio.to_thread(
+            _read_interaction_intents,
+            project_dir,
+        )
+        return {"project_id": project_id, "intents": intents}
 
     @app.get("/api/project/{project_id}/state")
     async def project_state(project_id: str) -> dict:

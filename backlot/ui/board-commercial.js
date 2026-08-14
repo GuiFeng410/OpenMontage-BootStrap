@@ -6,6 +6,56 @@ export function isCommercial(state) {
   return state?.pipeline?.pipeline_type === "bootstrap-commercial";
 }
 
+export const INTENT_STATUS_ZH = {
+  pending: "待确认",
+  planned: "已汇总",
+  approved: "聊天已确认",
+  applied: "已执行",
+  superseded: "已作废",
+  rejected: "已拒绝",
+  failed: "失败",
+};
+
+export function intentStatusZh(status) {
+  return INTENT_STATUS_ZH[status] || "";
+}
+
+export function formatIntentStatusLine(item) {
+  const summary = item?.summary || "";
+  return `${intentStatusZh(item?.status)} · ${summary}`;
+}
+
+function renderIntentStatus(list) {
+  if (!Array.isArray(list) || !list.length) return null;
+  const body = el("div", { class: "commercial-intent-status-list" });
+  for (const item of list) {
+    body.append(el("div", { class: "commercial-intent-status-row" }, formatIntentStatusLine(item)));
+  }
+  return el("div", { class: "notice commercial-intent-status" }, body);
+}
+
+function renderFastTrackPause(pause) {
+  if (!pause || typeof pause !== "object") return null;
+  return el("div", { class: "notice commercial-fast-track-pause" },
+    el("div", { class: "commercial-pause-friendly" }, pause.friendly_zh || ""),
+    pause.current_question
+      ? el("div", { class: "commercial-pause-question" }, pause.current_question)
+      : null,
+    el("div", { class: "commercial-chat-only" }, "请回聊天确认；本页只展示暂停原因，不提交审批。"));
+}
+
+function renderFinalVideo(projectId, finalVideo) {
+  if (!finalVideo?.exists || !finalVideo.path) return null;
+  const src = mediaURL(projectId, finalVideo.path);
+  return el("div", { class: "notice commercial-final-video" },
+    el("video", { controls: "", src, preload: "metadata", playsinline: "" }),
+    el("a", {
+      class: "commercial-final-download",
+      href: src,
+      download: "",
+    }, "下载终稿"));
+}
+
 export function renderAwaitingNotice(s, context) {
   const awaiting = s.stages.find((x) => x.status === "awaiting_human") ||
     (isCommercial(s) ? s.stages.find(stageNeedsDecision) : null);
@@ -1004,6 +1054,12 @@ export function renderCommercialBoard(s, context) {
   if (activity) aside.append(activity);
 
   const main = el("div", { class: "main-col" });
+  const intentStatus = renderIntentStatus(s.commercial?.interaction_intents);
+  if (intentStatus) main.append(intentStatus);
+  const pause = renderFastTrackPause(s.commercial?.fast_track_pause);
+  if (pause) main.append(pause);
+  const finalVideo = renderFinalVideo(s.project_id, s.commercial?.final_video);
+  if (finalVideo) main.append(finalVideo);
   const sseBanner = renderSseBanner(s, context);
   if (sseBanner) main.append(sseBanner);
   const legacyNotice = renderCommercialLegacyNotice(s);

@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openmontage/artifacts/approval_bundle",
+  "title": "Approval Bundle",
+  "description": "An interaction intent that locks the complete fast-track authorization envelope.",
+  "type": "object",
+  "required": [
+    "version",
+    "intent_type",
+    "intent_id",
+    "project_id",
+    "stage",
+    "revision",
+    "summary",
+    "summary_sha256",
+    "payload",
+    "expires_at",
+    "created_at",
+    "status"
+  ],
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "intent_type": { "type": "string", "const": "approval_bundle" },
+    "intent_id": { "type": "string", "minLength": 1 },
+    "project_id": { "type": "string", "minLength": 1 },
+    "stage": { "type": "string", "minLength": 1 },
+    "revision": { "type": "string", "minLength": 1 },
+    "summary": { "type": "string", "minLength": 1 },
+    "summary_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "payload": {
+      "type": "object",
+      "required": [
+        "theme",
+        "duration_seconds",
+        "production_tier",
+        "review_mode",
+        "provider",
+        "model",
+        "runtime",
+        "asset_strategy",
+        "allow_deterministic_reuse",
+        "max_generations",
+        "unit_price_cny",
+        "total_budget_cny",
+        "resolution",
+        "quality_target",
+        "auto_retry_count",
+        "auto_stages",
+        "pause_conditions",
+        "expires_at",
+        "revoke_method"
+      ],
+      "properties": {
+        "theme": { "type": "string", "minLength": 1 },
+        "duration_seconds": { "type": "number", "exclusiveMinimum": 0 },
+        "production_tier": { "type": "string", "minLength": 1 },
+        "review_mode": { "type": "string", "minLength": 1 },
+        "provider": { "type": "string", "minLength": 1 },
+        "model": { "type": "string", "minLength": 1 },
+        "runtime": { "type": "string", "minLength": 1 },
+        "asset_strategy": { "type": "string", "minLength": 1 },
+        "allow_deterministic_reuse": { "type": "boolean" },
+        "max_generations": { "type": "integer", "minimum": 0 },
+        "unit_price_cny": { "type": "number", "minimum": 0 },
+        "total_budget_cny": { "type": "number", "minimum": 0 },
+        "resolution": { "type": "string", "minLength": 1 },
+        "quality_target": { "type": "string", "minLength": 1 },
+        "auto_retry_count": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1
+        },
+        "auto_stages": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "pause_conditions": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "revoke_method": { "type": "string", "minLength": 1 }
+      },
+      "additionalProperties": false
+    },
+    "provider": { "type": ["string", "null"], "minLength": 1 },
+    "model": { "type": ["string", "null"], "minLength": 1 },
+    "runtime": { "type": ["string", "null"], "minLength": 1 },
+    "cost_cap_cny": { "type": ["number", "null"], "minimum": 0 },
+    "call_cap": { "type": ["integer", "null"], "minimum": 0 },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "created_at": { "type": "string", "format": "date-time" },
+    "status": {
+      "type": "string",
+      "enum": [
+        "pending",
+        "planned",
+        "approved",
+        "applied",
+        "superseded",
+        "rejected",
+        "failed"
+      ]
+    },
+    "note": { "type": ["string", "null"] }
+  },
+  "additionalProperties": false
+}

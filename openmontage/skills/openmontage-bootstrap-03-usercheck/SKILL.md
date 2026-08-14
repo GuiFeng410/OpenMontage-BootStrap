@@ -29,7 +29,7 @@ metadata:
 
 `references/commercial-video-15s-review.md`
 
-该参考文档规定：默认**普通评审**（方案→试片→初稿/问题片段）；**专业模式**才强制总览表与 3–4 beat 分批逐段卡（≥15s **须显式请用户选择**，不强制专业，但禁止静默不告知）。另含画面构成比例（运镜:AI，软约束）、累计 API 费用卡、三状态、修改清单确认门、**直接出片/快速模式 v1.0**，以及 AI 段重试用尽后再询问用户的回退规则。用户决策消息统一用本 Skill「Grill 确认卡」。
+该参考文档规定：默认**普通评审**（方案→试片→初稿/问题片段）；**专业模式**才强制总览表与 3–4 beat 分批逐段卡（≥15s **须显式请用户选择**，不强制专业，但禁止静默不告知）。另含画面构成比例（运镜:AI，软约束）、累计 API 费用卡、三状态、修改清单确认门、**直接出片/快速模式 v1.0**（面板 intent 另见快速模式 v2），以及 AI 段重试用尽后再询问用户的回退规则。用户决策消息统一用本 Skill「Grill 确认卡」。
 
 本路由不替代当前 03 -> 04 主链，也不改变已经确认的 provider、模型或 render runtime。它只增加商品视频的展示、暂停、修改和用户确认方式。
 
@@ -226,6 +226,29 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 授权卡必须填入当前实际 provider/model/runtime、预估单价、总成本区间、预算基线、质量目标与分辨率，并一次讲清：自动 `assets_gate`；`sample_review` 必停；试片通过后，只有这些已披露基线及审查结果均无实质变化，才能用本次完整原话作为 `draft_review` 审批证据并自动推进 `final_compose`；任何变化或需修改即暂停；`delivery_signoff` 必停。用户回复包含 reference 给出的**完整同意语义**后，才按其中 schema 合法 JSON 示例调用 `produce_append_decision`。
 
 完整推进、暂停条件、固定话术与回复示例以 §0.5 为唯一展开处。快速模式不允许跳过 canonical artifact、素材证据、项目 preflight、provider registry/MCP availability、试片、费用闸或付费确认，且聊天仍一次只问一个问题。
+
+### Backlot B2 面板 intent / 快速模式 v2
+
+商品片首轮正式选择可在 Backlot 面板勾选后点击「提交待确认」；网页仍然只读，这一步只创建待确认 interaction intent，不代表批准，也不得在浏览器直接 apply。
+
+聊天中**只认完全一致的口令** `确认面板选择`。`直接出片`、`好的`、`确认` 都不是面板 intent 的审批证据；其中「直接出片」仍只打开上一节 v1.0 完整确认卡，不能代替该口令。
+
+收到准确口令后，Agent 固定按当前 checkpoint revision 执行：
+
+```text
+1. produce_list_interaction_intents
+2. produce_plan_approval_bundle（使用当前 checkpoint revision）
+3. 只展示 plan 返回的一份中文摘要
+4. produce_apply_approval_bundle(confirm_phrase="确认面板选择")
+```
+
+`produce_plan_approval_bundle` 必须把面板 pending `decision`（同一 `intent_id`）提升为完整 §6.3 `approval_bundle`：用项目 `project.json` / `production_profile` / `artifacts/brief.json` 与面板 selections 填齐必填授权字段后再 pending→planned。禁止要求用户或网页直接 POST 审批包。项目证据不足、plan/apply 失败、revision drift 或 intent expired 时**不得 apply**，应回退现有完整 Grill 确认卡，一次只问一个问题。用户也可退回 B1 copy-summary（文案摘要）逐项确认。
+
+若 intent 列表为空，同样不得 apply，回退 Grill。
+
+新的商品片快速授权统一写 `selected="fast_track_v2"`；记录选项时用 `option_id="fast_track_v2"`，后续 checkpoint metadata 的 `approval_source` 也写 `fast_track_v2`。已有项目中的 `fast_track_v1` 继续按历史协议只读并保持有效：禁止改写历史，也不得仅因 v2 上线要求用户重新授权。
+
+v2 仍遵守既有硬门：网页只读、聊天一次只问一个问题、不静默付费、不静默换渠道/模型，所有生成图必须经过用户审查。完整 evaluate 推进规则见 reference §0.5.1 与 04-produce「快速模式 v2（执行）」。
 
 ## 商品片 ↔ 七阶段（强制对照）
 

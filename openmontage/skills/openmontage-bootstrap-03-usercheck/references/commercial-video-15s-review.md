@@ -168,6 +168,60 @@
 2. 在 `draft_review` checkpoint `metadata` 写入授权 decision ID、固定 subject、`approval_source="fast_track_v1"`、基线比对结论和对应 `stage_review_decision` ID。
 3. 调用 `produce_approve_checkpoint(project_id, stage="draft_review", approval_text=<完整授权用户原话>, ...)`，保留 `full_draft_pro`、metadata 与费用快照。只改 checkpoint 状态或只写 metadata 均不算完成。
 
+### 0.5.1 快速模式 v2（面板 intent）
+
+**触发：** 用户在面板「提交待确认」后发送完全一致的口令 `确认面板选择`，或 Agent 已通过 `produce_list_interaction_intents` 列到待确认 interaction intent。页面只提交 pending `decision`，不审批、不写审批包。Agent 仍须先 `produce_plan_approval_bundle`：该工具用项目证据把同一 `intent_id` 的 `decision` 提升为完整 §6.3 `approval_bundle`，再展示一份中文摘要，然后以 `produce_apply_approval_bundle(confirm_phrase="确认面板选择")` 应用。列表为空、项目证据不足、plan/apply 失败、revision drift 或 expired 时不得 apply，回退完整确认卡 / Grill；用户也可回到 B1 copy-summary（文案摘要）逐项确认。
+
+新的授权写入 `selected="fast_track_v2"`、`option_id="fast_track_v2"`，checkpoint metadata 写 `approval_source="fast_track_v2"`。历史 `fast_track_v1` 继续只读有效，不改写、不迁移，也不要求重新授权。「直接出片」仍只打开 §0.5 v1.0 卡，不是审批证据。
+
+v2 的自动推进必须由 evaluate 驱动：Agent 根据当前项目证据构造 `snapshot_json`，调用 `produce_fast_track_evaluate`，并且只按返回的 `continue` / `pause` / `signoff_ready` 行动。snapshot 必须来自 `produce_read_state`、费用、QA 与 unified matrix 等证据；`policy.unit_price_cny` 取已锁定审批包单价；缺少 snapshot 字段即 `pause`（fail-closed），Agent 不得编造 `True` 强制继续。evaluate 返回 `pause` 后，必须 `produce_write_checkpoint` 写入 `metadata.fast_track_pause`（reason_code / friendly_zh / current_question），看板才能回显暂停原因；evaluate 本身只读、不落盘。
+
+| 节点 | v2 行为 |
+|------|---------|
+| `assets_gate` / 生成图 | 所有生成图仍必须进入 `generated_image_review` 批量审图；快速授权不能替代用户审图 |
+| `sample_review` | `fast_track_v1` 的“必须停”只适用于 v1；`fast_track_v2` 按 evaluate 行动，QA 通过且无 pause reasons 时允许 `continue` |
+| `draft_review` / `final_compose` | 每次均先 evaluate；`pause` 时停下且聊天一次只问一个问题 |
+| `delivery_signoff` | evaluate 只可返回 `signoff_ready` 并提示刷新看板签收；永远不得自动完成交付 |
+
+`delivery_signoff` 在终稿尚未就绪时出现的 `missing_field` 是当前证据未满足的暂停理由，不能误解成可忽略的 schema 缺字段，更不能据此放行。自动重试最多 1 次，且必须沿用已冻结渠道与模型。
+
+#### Schema-valid 快速模式 v2 decision_log 示例
+
+```json
+{
+  "version": "1.0",
+  "project_id": "commercial-demo-v2",
+  "decisions": [
+    {
+      "decision_id": "d-003",
+      "stage": "brief_locked",
+      "category": "approval_policy",
+      "subject": "Commercial fast-track production",
+      "options_considered": [
+        {
+          "option_id": "fast_track_v2",
+          "label": "商品片快速模式 v2（面板 intent）",
+          "score": 1.0,
+          "reason": "面板已提交待确认选择；Agent 已按当前 revision 生成并展示 approval bundle 中文摘要，后续推进由证据 snapshot 的 evaluate 结果决定。"
+        },
+        {
+          "option_id": "guided",
+          "label": "完整确认卡",
+          "score": 0.8,
+          "reason": "每个人审阶段逐项确认。",
+          "rejected_because": "用户以准确口令确认当前面板 approval bundle。"
+        }
+      ],
+      "selected": "fast_track_v2",
+      "reason": "approval_source=fast_track_v2；只按 produce_fast_track_evaluate 的 continue、pause 或 signoff_ready 推进，生成图与最终签收仍保留人审。",
+      "user_visible": true,
+      "user_approved": true,
+      "user_response_text": "确认面板选择"
+    }
+  ]
+}
+```
+
 ### 0.6 项目 provider preflight 与 Pixverse 边界
 
 最终锁定/恢复视频渠道前及每次付费调用前，调用只读 `produce_provider_preflight(project_id)`。它**只检查**已落盘项目计划、Pixverse T2V/I2V 模式、图源、OSS 配置和当前项目上传授权证据；**不检查** `TOKENHUB_API_KEY` / `AGNES_API_KEY`，也不探测 provider 在线可用性。

@@ -1,6 +1,8 @@
 """Unit tests for Backlot BoardState derivation (backlot/state.py)."""
 
+import hashlib
 import json
+import os
 import time
 from pathlib import Path
 
@@ -2759,3 +2761,192 @@ class TestStoryboardVisualSelection:
         assert card["visual"]["exists"] is True
         assert card["visual"]["path"].endswith("real.png")
         assert [t["path"].split("/")[-1] for t in card["takes"]] == ["real.png"]
+
+
+def _make_commercial(root: Path, pid: str) -> Path:
+    p = _make_project(root, pid)
+    _write(p / "project.json", {
+        "project_id": pid,
+        "title": pid,
+        "pipeline_type": "bootstrap-commercial",
+    })
+    return p
+
+
+def _interaction_intent(project_id: str, **overrides) -> dict:
+    summary = overrides.pop("summary", "采用轻度档并等待素材评审")
+    data = {
+        "version": "1.0",
+        "intent_type": "decision",
+        "intent_id": "foo",
+        "project_id": project_id,
+        "stage": "brief_locked",
+        "revision": "revision-001",
+        "summary": summary,
+        "summary_sha256": hashlib.sha256(summary.encode("utf-8")).hexdigest(),
+        "payload": {"production_tier": "light"},
+        "expires_at": "2099-08-14T12:00:00+00:00",
+        "created_at": "2026-08-14T01:00:00+00:00",
+        "status": "pending",
+    }
+    data.update(overrides)
+    return data
+
+
+def _edit_intent_file() -> dict:
+    return {
+        "version": "1.0",
+        "intent_id": "edit-001",
+        "project_id": "demo",
+        "created_at": "2026-08-14T01:00:00+00:00",
+        "status": "pending",
+        "base": {
+            "artifact": "edit_decisions",
+            "cuts_revision": "v1",
+            "source_render": "renders/draft.mp4",
+        },
+        "actions": [{"type": "delete", "cut_id": "c01"}],
+    }
+
+
+class TestCommercialBoardEcho:
+    def test_pending_interaction_intent_is_listed(self, projects_root):
+        p = _make_commercial(projects_root, "echo-pending")
+        _write(p / "intents" / "foo.json", _interaction_intent("echo-pending"))
+
+        commercial = load_board_state(p)["commercial"]
+        listed = commercial["interaction_intents"]
+
+        assert listed[0]["status"] == "pending"
+        assert listed[0]["intent_id"] == "foo"
+        assert listed[0]["intent_type"] == "decision"
+        assert listed[0]["summary"] == "采用轻度档并等待素材评审"
+        assert "payload" not in listed[0]
+        assert "risk_level" not in listed[0]
+
+    def test_edit_intent_file_is_ignored(self, projects_root):
+        p = _make_commercial(projects_root, "echo-edit")
+        _write(p / "intents" / "edit-001.json", _edit_intent_file())
+        _write(p / "intents" / "foo.json", _interaction_intent("echo-edit"))
+
+        listed = load_board_state(p)["commercial"]["interaction_intents"]
+
+        assert [item["intent_id"] for item in listed] == ["foo"]
+
+    def test_fast_track_pause_comes_from_newest_checkpoint(self, projects_root):
+        p = _make_commercial(projects_root, "echo-pause")
+        _write(p / "checkpoint_brief_locked.json", {
+            "version": "1.0",
+            "project_id": "echo-pause",
+            "pipeline_type": "bootstrap-commercial",
+            "stage": "brief_locked",
+            "status": "awaiting_human",
+            "timestamp": "2026-08-14T01:00:00Z",
+            "artifacts": {},
+            "metadata": {
+                "fast_track_pause": {
+                    "reason_code": "missing_field",
+                    "friendly_zh": "旧暂停，不应显示",
+                    "current_question": "旧问题？",
+                },
+            },
+        })
+        _write(p / "checkpoint_assets_gate.json", {
+            "version": "1.0",
+            "project_id": "echo-pause",
+            "pipeline_type": "bootstrap-commercial",
+            "stage": "assets_gate",
+            "status": "awaiting_human",
+            "timestamp": "2026-08-14T02:00:00Z",
+            "artifacts": {},
+            "metadata": {
+                "fast_track_pause": {
+                    "reason_code": "awaiting_human",
+                    "friendly_zh": "当前需要你在聊天里确认档位。",
+                    "current_question": "请确认制作档位？",
+                },
+            },
+        })
+        os.utime(p / "checkpoint_brief_locked.json", (1, 1))
+        os.utime(p / "checkpoint_assets_gate.json", (100, 100))
+
+        pause = load_board_state(p)["commercial"]["fast_track_pause"]
+
+        assert pause["reason_code"] == "awaiting_human"
+        assert pause["friendly_zh"] == "当前需要你在聊天里确认档位。"
+        assert pause["current_question"] == "请确认制作档位？"
+
+    def test_missing_fast_track_pause_is_none(self, projects_root):
+        p = _make_commercial(projects_root, "echo-no-pause")
+        _write(p / "checkpoint_brief_locked.json", {
+            "version": "1.0",
+            "project_id": "echo-no-pause",
+            "pipeline_type": "bootstrap-commercial",
+            "stage": "brief_locked",
+            "status": "completed",
+            "timestamp": "2026-08-14T01:00:00Z",
+            "artifacts": {},
+            "metadata": {},
+        })
+
+        assert load_board_state(p)["commercial"]["fast_track_pause"] is None
+
+    def test_nonempty_final_mp4_is_echoed(self, projects_root):
+        p = _make_commercial(projects_root, "echo-final")
+        (p / "renders" / "final.mp4").write_bytes(b"video-bytes")
+
+        final_video = load_board_state(p)["commercial"]["final_video"]
+
+        assert final_video == {"path": "renders/final.mp4", "exists": True}
+        dumped = json.dumps(load_board_state(p))
+        assert str(p.resolve()) not in dumped
+        assert ".env" not in dumped
+
+    def test_missing_final_video_is_none(self, projects_root):
+        p = _make_commercial(projects_root, "echo-no-final")
+
+        assert load_board_state(p)["commercial"]["final_video"] is None
+
+    def test_empty_final_mp4_falls_back_to_stage_evidence_path(self, projects_root):
+        p = _make_commercial(projects_root, "echo-fallback")
+        (p / "renders" / "final.mp4").write_bytes(b"")
+        (p / "assets" / "video").mkdir(parents=True, exist_ok=True)
+        (p / "assets" / "video" / "delivery.mp4").write_bytes(b"delivery")
+        _write(p / "artifacts" / "final_review.json", {
+            "output_path": "assets/video/delivery.mp4",
+            "status": "review",
+        })
+
+        final_video = load_board_state(p)["commercial"]["final_video"]
+
+        assert final_video == {"path": "assets/video/delivery.mp4", "exists": True}
+
+    def test_load_board_state_does_not_rewrite_expired_intent(self, projects_root):
+        p = _make_commercial(projects_root, "echo-expire")
+        intent_path = p / "intents" / "foo.json"
+        _write(intent_path, _interaction_intent(
+            "echo-expire",
+            expires_at="2020-01-01T00:00:00+00:00",
+        ))
+        before = intent_path.read_bytes()
+        before_mtime = intent_path.stat().st_mtime_ns
+
+        listed = load_board_state(p)["commercial"]["interaction_intents"]
+
+        assert listed[0]["status"] == "superseded"
+        assert intent_path.read_bytes() == before
+        assert intent_path.stat().st_mtime_ns == before_mtime
+
+    def test_changing_intent_file_changes_load_board_state(self, projects_root):
+        p = _make_commercial(projects_root, "echo-change")
+        intent_path = p / "intents" / "foo.json"
+        _write(intent_path, _interaction_intent("echo-change"))
+        assert load_board_state(p)["commercial"]["interaction_intents"][0]["status"] == (
+            "pending"
+        )
+
+        _write(intent_path, _interaction_intent("echo-change", status="planned"))
+
+        assert load_board_state(p)["commercial"]["interaction_intents"][0]["status"] == (
+            "planned"
+        )

@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "openmontage/artifacts/fast_track_policy",
+  "title": "Fast Track Policy",
+  "description": "Fail-closed limits for an explicitly approved fast-track session.",
+  "type": "object",
+  "required": [
+    "version",
+    "provider",
+    "model",
+    "runtime",
+    "call_cap",
+    "cost_cap_cny",
+    "unit_price_cny",
+    "resolution",
+    "quality_target",
+    "auto_retry_count",
+    "auto_stages",
+    "expires_at",
+    "revoke_method"
+  ],
+  "properties": {
+    "version": { "type": "string", "const": "1.0" },
+    "provider": { "type": "string", "minLength": 1 },
+    "model": { "type": "string", "minLength": 1 },
+    "runtime": { "type": "string", "minLength": 1 },
+    "call_cap": { "type": "integer", "minimum": 0 },
+    "cost_cap_cny": { "type": "number", "minimum": 0 },
+    "unit_price_cny": { "type": "number", "minimum": 0 },
+    "resolution": { "type": "string", "minLength": 1 },
+    "quality_target": { "type": "string", "minLength": 1 },
+    "auto_retry_count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 1
+    },
+    "auto_stages": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "expires_at": { "type": "string", "format": "date-time" },
+    "revoke_method": { "type": "string", "minLength": 1 }
+  },
+  "additionalProperties": false
+}
