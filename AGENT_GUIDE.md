@@ -19,7 +19,7 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 | **发布远程** | 日常双推 **`gitee` + `bootstrap`**；**禁止** `git push origin`（上游只读对照） |
 | **默认配齐** | **5 MCP**（门面 + tts/image/video/stock）+ **6 Skill**（02–07）；Key 可空 |
 | **出片三档** | 轻度（零 Key / Remotion 等）→ 中度（Stock）→ 重度（付费生图+生视频） |
-| **简报主链** | `03-usercheck`：就绪后**推荐**首次 10s/30s 轻度 Demo（可跳过；有啥推啥 Remotion/HF）→ 或表 1→2→3 → `04-produce` |
+| **简报主链** | `03-usercheck`：就绪后**先扫 Key**，**默认电商宣传片**（给网址；缺时长/图/预算问一句）→ `04-produce`。轻度 Demo **仅**用户明确要求或无 Key 退路 |
 | **旁白默认** | **Edge-TTS** 男声（主推，可后置）；Piper **仅离线可选**（setup 默认不装）；字幕/BGM 走 05 |
 | **合成引擎** | Remotion 为轻度常用必装路径；**HyperFrames 建议装、可跳过**（Node≥22；不挡 `verify_ready`） |
 | **本机会话** | 新对话先读 `Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md` → 同目录日期最新长篇交接（**Agent-\* 本机区，gitignore，勿主动提交**；遗留镜像仍在 `docs/会话交接/`） |
@@ -34,7 +34,7 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 |---|--------|------|---------|
 | **01** | `openmontage-bootstrap-01-installer` | Clone/pull、注册 5 MCP、启用 6 Skill、闭环检查 | 「安装 / 更新 BootStrap / 我想生成视频」且未配齐 |
 | **02** | `openmontage-bootstrap-02-setup` | `detect` → `plan_install`（Edge 主推 / HF 建议可跳过 / Piper 可选）→ 批准后装依赖 → `verify_ready` | 仓库已在，环境未就绪 |
-| **03** | `openmontage-bootstrap-03-usercheck` | 成片简报：可选首次 Demo 确认卡 → 表 1→2→3；商品片读 `product-prompt-template` | 模糊出片、改档、缺已确认简报 |
+| **03** | `openmontage-bootstrap-03-usercheck` | 成片简报：默认电商；先扫 Key；轻度 Demo 仅明确要求；商品片读 `product-prompt-template` | 模糊出片、改档、缺已确认简报 |
 | **04** | `openmontage-bootstrap-04-produce` | 按锁定档位跑门面 `produce_*` → `renders/final.mp4` | 简报已确认；**默认不重选档** |
 | **05** | `openmontage-bootstrap-05-captions-music` | 文稿→字幕、本地 BGM、duck 混音 | 画面后补字幕/配乐 |
 | **06** | `openmontage-bootstrap-06-providers` | 收费 / Stock Key 引导（不代调付费 API） | 中重度缺 Key |
@@ -42,7 +42,7 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 
 ```text
 【装机层】  01-installer  →  02-setup（verify_ready）
-【出片主链】03-usercheck（表1→2→3）  →  04-produce
+【出片主链】03-usercheck（默认电商 · 扫 Key · 给网址）  →  04-produce
 【补充层】  05 字幕配乐  ·  06 Key 引导  ·  07 错误修复（按需）
 ```
 
@@ -81,7 +81,7 @@ Use full `pipeline_defs/` + stage directors when the user explicitly wants an up
 
 When the user's first message is vague, exploratory, or asks what you can do ("make me a video", "what can you do?", "help me create something", "I want to make content"):
 
-1. **BootStrap path (default on this fork):** follow **缺步路由** above — usually read `openmontage-bootstrap-03-usercheck` (or 01/02 if install/env incomplete). When env is ready and no brief is locked, **recommend** the first-run light Demo card (`references/first-run-demo.md`) before full tables — skippable; engines **only if available**.
+1. **BootStrap path (default on this fork):** follow **缺步路由** above — usually read `openmontage-bootstrap-03-usercheck` (or 01/02 if install/env incomplete). When env is ready and no brief is locked, **scan video keys then default to ecommerce commercial** (Backlot URL required). Light Demo (`references/first-run-demo.md`) **only** if the user explicitly asks for explainer/Demo, or chooses the no-key free fallback. Do not dump Tables 1–3 in one message. Whole-film cap **75s**.
 2. **Optional discovery:** `skills/meta/onboarding.md` or `openmontage-router` if you need a capability menu before briefing.
 3. **Session continuity:** if continuing prior work, read `Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md` and the latest dated handoff first (legacy mirror: `docs/会话交接/`).
 

@@ -303,7 +303,7 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 - 付费 TTS / 生图：仅当用户**明确要做**旁白或补图时再要求对应 MCP（**不因未配旁白而阻塞画面出片**）；Pixverse 不属于生图 provider
 
 前提：`openmontage-bootstrap-02-setup` 的 `verify_ready` 通过（或等价 doctor ready）。  
-**模糊需求 / 无简报：** 先读并执行 **`openmontage-bootstrap-03-usercheck`**（表 1 → 表 2 → 表 3），确认后再进入本 Skill。
+**模糊需求 / 无简报：** 先读并执行 **`openmontage-bootstrap-03-usercheck`**（默认电商入口：扫 Key → 给网址 → 缺啥问一句），确认后再进入本 Skill。
 
 ## 档位执行摘要（只读锁定 · 不在此选型）
 
@@ -330,7 +330,7 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 用户明确说「改档 / 升到中度 / 升到重度 / 改回轻度」：
 
 1. **禁止**在 04 内静默改 `production_tier` 后继续烧。  
-2. 交接回 **`03-usercheck`**：重走表 1（至少新档位）→ 表 2 → 表 3。  
+2. 交接回 **`03-usercheck`**：按 03 默认电商入口重锁档位与规划（内部仍走表 1→2→3 字段包）。  
 3. 新简报写入后再回到 04。
 
 ## P0 商品/重度出片闸门（冻结口径）
@@ -415,7 +415,7 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 
 ### 0–1. 简报与项目
 
-0. 无已确认简报，或商品片 `assets_gate` 不为 `completed` → **先交接 03**（表 1→2→3→素材闭环）。
+0. 无已确认简报，或商品片 `assets_gate` 不为 `completed` → **先交接 03**（默认电商入口 → 素材闭环）。
 1. 重算 unified matrix 后做锁定复查（见上）；`approval_text` 用用户原话。
 2. 复用 03 返回的项目与网址，禁止重新初始化。商品片固定 `pipeline_type=bootstrap-commercial`。若简报阶段未建项目，先交回 03 以 `mode=create_new` 或经用户明确确认后的 `mode=resume` 初始化。
 3. 核对 / 写入 `production_profile`（简报已写则可跳过或核对）：

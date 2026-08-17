@@ -73,7 +73,7 @@ Stock / 付费 Key 可空；空 Key **不使用**该通道。
 ② 仓库在 <TARGET>（clone 或 pull）
 ③ 5 个 MCP 一并注册可启动 + Skills 目录指向仓内 + 6 个 Skill 已启用
 ④ 「安装闭环检查通过」→ 02-setup → verify_ready
-   → 模糊需求先 03-usercheck（表 1→2→3）→ 04-produce
+   → 模糊需求先 03-usercheck（默认电商 · 扫 Key · 给网址）→ 04-produce
 ```
 
 ## 触发话术
@@ -219,7 +219,7 @@ pip install -r requirements.txt
 | # | Skill | 作用 |
 |---|-------|------|
 | 1 | `openmontage-bootstrap-02-setup` | 环境 → `verify_ready` |
-| 2 | `openmontage-bootstrap-03-usercheck` | 成片简报 · 表 1→2→3 |
+| 2 | `openmontage-bootstrap-03-usercheck` | 成片简报 · 默认电商 |
 | 3 | `openmontage-bootstrap-04-produce` | 按锁定出片 |
 | 4 | `openmontage-bootstrap-05-captions-music` | 字幕配乐（可后置） |
 | 5 | `openmontage-bootstrap-06-providers` | Key 引导 |
@@ -253,7 +253,7 @@ pip install -r requirements.txt
 
 > 先检测环境，给我看完整安装计划，不要直接改系统。
 
-**02-setup** → `plan_install`（**Edge-TTS 主推**；**HyperFrames 建议装、可跳过**；Piper **默认不装**，仅离线可选）→ `verify_ready` → 用户说「做个视频 / 生成视频」等时走 **03-usercheck**（**入口导览 · 缺步路由 · 就绪接话** → **推荐首次 10s/30s 轻度 Demo 确认卡**（可跳过；有啥推啥 Remotion/HyperFrames，见 `03-usercheck/references/first-run-demo.md`）→ 或完整表 1→2→3 / `video_plan`；商品片按时长检查图片数量和类型）→ **04-produce**。旁白默认 **Edge-TTS**（可后置）；字幕/BGM 可走 05。若要用 HyperFrames，setup 阶段建议 Node.js **≥ 22**。
+**02-setup** → `plan_install`（**Edge-TTS 主推**；**HyperFrames 建议装、可跳过**；Piper **默认不装**，仅离线可选）→ `verify_ready` → 用户说「做个视频 / 生成视频」等时走 **03-usercheck**（**入口导览 · 缺步路由 · 就绪接话** → **先扫 Key，默认电商宣传片**（给网址；缺时长/图/预算问一句）；轻度 Demo **仅**用户明确要求或无 Key 退路，见 `03-usercheck/references/first-run-demo.md`；商品片按时长检查图片数量和类型）→ **04-produce**。旁白默认 **Edge-TTS**（可后置）；字幕/BGM 可走 05。若要用 HyperFrames，setup 阶段建议 Node.js **≥ 22**。
 
 商品片的图片数量、图片类型和缺图处理由 **03-usercheck** 负责；**04-produce** 只执行已经确认的素材计划，必要时按用户确认先补图再生成视频。**01-installer** 不在安装阶段替用户选择商品图片、图生图或视频渠道。
 

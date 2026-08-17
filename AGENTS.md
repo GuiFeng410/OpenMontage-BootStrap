@@ -35,7 +35,7 @@
 |---|--------|----------------|
 | **01** | `openmontage-bootstrap-01-installer` | 新装 / 更新仓库、补齐 **5 MCP + 6 Skill** |
 | **02** | `openmontage-bootstrap-02-setup` | 环境检测 → 计划确认 → 装依赖 → `verify_ready` |
-| **03** | `openmontage-bootstrap-03-usercheck` | 模糊「做个视频」：先推荐首次轻度短 Demo（可跳过）→ 或表 1→2→3 |
+| **03** | `openmontage-bootstrap-03-usercheck` | 模糊「做个视频」：先扫 Key，**默认电商宣传片**（给网址；缺啥问一句）；轻度 Demo 仅明确要求 |
 | **04** | `openmontage-bootstrap-04-produce` | 按 03 已锁定简报执行出片（默认不重选档） |
 | **05** | `openmontage-bootstrap-05-captions-music` | 字幕 / 本地 BGM（可后置，不挡画面） |
 | **06** | `openmontage-bootstrap-06-providers` | 收费 / Stock Key 引导（空 Key 禁止调用） |
@@ -43,7 +43,7 @@
 
 ```text
 【装机】01-installer → 02-setup（verify_ready）
-【出片主链】03-usercheck（推荐 Demo 或表1→2→3）→ 04-produce → renders/final.mp4
+【出片主链】03-usercheck（默认电商 · 扫 Key · 给网址）→ 04-produce → renders/final.mp4
 【补充】05 字幕配乐 · 06 Key · 07 排错（按需）
 ```
 
