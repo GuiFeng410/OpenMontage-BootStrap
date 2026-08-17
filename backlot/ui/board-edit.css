@@ -204,3 +204,17 @@
   border-color: var(--blue);
   color: var(--blue);
 }
+.export-tab-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.export-tab-btn.done {
+  opacity: .75;
+  cursor: default;
+}
+.export-tab-feedback {
+  font-size: 11px;
+  color: var(--text-3);
+  max-width: 220px;
+}

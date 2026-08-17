@@ -21,6 +21,8 @@ NEW_TOOL_NAMES = {
     "produce_plan_approval_bundle",
     "produce_apply_approval_bundle",
     "produce_fast_track_evaluate",
+    "produce_apply_project_export",
+    "produce_runner_tick",
 }
 
 

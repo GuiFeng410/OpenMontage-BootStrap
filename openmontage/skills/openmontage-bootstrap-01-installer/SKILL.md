@@ -156,6 +156,20 @@ pip install -r requirements.txt
 
 **验收口令：**「venv 与依赖已装好」
 
+### C.1 `.env`（硬步骤）
+
+若 `<TARGET>\.env` **不存在**，先复制模板（Key 留空；**禁止覆盖**已有 `.env`）：
+
+```powershell
+cd "<TARGET>"
+if (-not (Test-Path .env)) { Copy-Item .env.example .env }
+```
+
+也可用 MCP：`ensure_env_file(dry_run=false, confirm_execute=true)`。  
+填写 Key 对照 `<TARGET>\.env-example.md`，填完再重启 MCP。
+
+**验收口令：**「.env 已存在（可为空 Key）」
+
 ## D. 注册 MCP（5 个一并注册）
 
 ### D.1 在哪改
@@ -245,7 +259,8 @@ pip install -r requirements.txt
 3. Skills 目录 = `<TARGET>/openmontage/skills`  
 4. **六个 Skill**均已启用（02–07）  
 5. 五个 MCP 的 `OPENMONTAGE_PROJECTS_DIR` 相同  
-6. （提醒项）外置单独拷贝的 installer 已与仓内副本同步（若适用）  
+6. `.env` 已存在（没有则已从 `.env.example` 复制；Key 可空）  
+7. （提醒项）外置单独拷贝的 installer 已与仓内副本同步（若适用）  
 
 **验收口令：**「安装闭环检查通过」
 
@@ -260,7 +275,7 @@ pip install -r requirements.txt
 ### Key 引导（需要质量再填）
 
 1. 打开 `<TARGET>/.env-example.md`，按分类填写（含 Pexels/Pixabay、视频渠、付费 TTS/图等）。  
-2. 写入真实配置：复制为 `<TARGET>/.env`，并同步到对应 MCP 的 `env`。  
+2. 写入真实配置：若尚无 `.env`，先 `Copy-Item .env.example .env`（或 `ensure_env_file`），再按 `.env-example.md` 填写，并同步到对应 MCP 的 `env`。  
 3. 重启相关 MCP；中度 Stock / 重度视频 / 付费生成前再启用 E.3 执行 Skill。  
 4. **未填 Key：禁止调用** Stock 下载与付费 generate。
 

@@ -79,6 +79,15 @@ class ChangeHub:
 
 hub = ChangeHub()
 
+
+def _runner_alive() -> bool:
+    try:
+        from backlot.runner import runner_alive
+
+        return bool(runner_alive())
+    except Exception:
+        return False
+
 # Library summaries are expensive to derive (full state parse per project);
 # cache per project and invalidate from the watcher.
 _summary_cache: dict[str, dict] = {}
@@ -179,6 +188,7 @@ def create_app() -> FastAPI:
             "ok": True,
             "app": "backlot",
             "projects_dir": str(PROJECTS_DIR),
+            "runner_alive": _runner_alive(),
         }
 
     @app.get("/api/projects")

@@ -28,6 +28,7 @@ def test_open_prints_url_when_spawn_times_out(monkeypatch, capsys):
 
 def test_open_prints_url_when_already_alive(monkeypatch, capsys):
     monkeypatch.setattr("backlot.__main__._server_alive", lambda port: True)
+    monkeypatch.setattr("backlot.__main__._spawn_runner", lambda project_id: None)
     monkeypatch.setattr("webbrowser.open", lambda url: True)
     rc = cmd_open("alive-proj")
     out = capsys.readouterr().out

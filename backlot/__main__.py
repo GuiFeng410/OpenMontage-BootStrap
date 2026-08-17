@@ -75,6 +75,39 @@ def _spawn_server(port: int):
     return Path(log_path)
 
 
+def _spawn_runner(project_id: str | None):
+    """Start the local intent runner beside Backlot; idempotent if already alive."""
+    from backlot.runner import log_path, runner_alive
+    from lib.paths import REPO_ROOT
+
+    if runner_alive():
+        return log_path()
+    cmd = [sys.executable, "-m", "backlot", "runner"]
+    if project_id:
+        cmd.append(project_id)
+    log_fh = open(log_path(), "a", encoding="utf-8")
+    log_fh.write(f"\n--- spawn runner project={project_id or '*'} ---\n")
+    log_fh.flush()
+    env = os.environ.copy()
+    env.setdefault("OPENMONTAGE_P1_ALLOW_WRITES", "true")
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("OPENMONTAGE_PROJECTS_DIR", str(REPO_ROOT / "projects"))
+    kwargs: dict = {
+        "stdout": log_fh,
+        "stderr": log_fh,
+        "stdin": subprocess.DEVNULL,
+        "env": env,
+    }
+    if os.name == "nt":
+        kwargs["creationflags"] = (
+            subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
+        )
+    else:
+        kwargs["start_new_session"] = True
+    subprocess.Popen(cmd, **kwargs)
+    return log_path()
+
+
 def cmd_open(project_id: str | None) -> int:
     port = _port()
     url = _board_url(port, project_id)
@@ -100,6 +133,10 @@ def cmd_open(project_id: str | None) -> int:
         webbrowser.open(url)
     except Exception:
         pass
+    try:
+        _spawn_runner(project_id)
+    except Exception as exc:
+        print(f"backlot: runner not started ({exc})")
     print(f"backlot: {url}")
     return 0
 
@@ -121,11 +158,18 @@ def main(argv: list[str] | None = None) -> int:
     p_serve = sub.add_parser("serve", help="run the Backlot server in the foreground")
     p_serve.add_argument("--port", type=int, default=_port())
 
+    p_runner = sub.add_parser("runner", help="consume pending board intents on this machine")
+    p_runner.add_argument("project_id", nargs="?", default="")
+
     args = parser.parse_args(argv)
     if args.command == "open":
         return cmd_open(args.project_id)
     if args.command == "serve":
         return cmd_serve(args.port)
+    if args.command == "runner":
+        from backlot.runner import run_loop
+
+        return run_loop(args.project_id or "")
     parser.print_help()
     return 2
 

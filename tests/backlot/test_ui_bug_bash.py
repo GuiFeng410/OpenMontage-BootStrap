@@ -873,7 +873,7 @@ def test_intent_basket_summary_contains_selected_option_and_pending_copy(
             assert "确认面板选择" in value
             assert "尚未正式执行" in value
             expect(page.locator(".commercial-chat-only")).to_contain_text(
-                "面板选择尚未正式执行；复制摘要后回聊天发送“确认面板选择”。"
+                "点提交后请留在本页。若进度无变化，再回聊天发送“确认面板选择”。"
             )
         finally:
             browser.close()
@@ -1097,7 +1097,7 @@ def test_commercial_submit_intent_posts_pending(staged_backlot_server):
             page.get_by_role("button", name="提交待确认", exact=True).click()
 
             expect(page.locator(".commercial-intent-feedback")).to_have_text(
-                "已提交。请回聊天发送：确认面板选择"
+                "已提交。请留在本页等待本机处理。"
             )
             assert len(posted) == 1
             assert posted[0]["intent_type"] == "decision"
@@ -1139,7 +1139,7 @@ def test_commercial_submit_never_writes_checkpoint(staged_backlot_server):
             ).click()
             page.get_by_role("button", name="提交待确认", exact=True).click()
             expect(page.locator(".commercial-intent-feedback")).to_have_text(
-                "已提交。请回聊天发送：确认面板选择"
+                "已提交。请留在本页等待本机处理。"
             )
 
             posts = [url for method, url in requests if method == "POST"]

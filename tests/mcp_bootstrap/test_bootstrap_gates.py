@@ -23,6 +23,7 @@ def test_list_bootstrap_tools_minimal_surface() -> None:
     assert "probe_hyperframes" in data["bootstrap"]
     assert "verify_ready" in data["bootstrap"]
     assert "scan_video_keys" in data["bootstrap"]
+    assert "ensure_env_file" in data["bootstrap"]
     assert "read_install_state" in data["bootstrap"]
     assert "snapshot_install_state" in data["bootstrap"]
     assert "produce_compose_start" in data["produce_minimal"]

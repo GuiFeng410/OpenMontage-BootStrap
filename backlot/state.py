@@ -22,6 +22,7 @@ from lib.asset_precheck import (
 from lib.checkpoint import _merge_project_decision_logs
 from lib.events import read_events
 from lib.interaction_intents import list_safe_interaction_intents
+from lib.project_export import is_completed, read_runner_status
 from lib.paths import PROJECTS_DIR, REPO_ROOT  # single source of truth (env-overridable)
 
 MEDIA_IMAGE_EXT = {
@@ -2120,6 +2121,18 @@ def _attach_commercial_board_echo(project_dir: Path, commercial: dict[str, Any])
     commercial["interaction_intents"] = list_safe_interaction_intents(project_dir)
     commercial["fast_track_pause"] = _read_fast_track_pause(project_dir)
     commercial["final_video"] = _read_final_video(project_dir, commercial)
+    marker = commercial.get("project") if isinstance(commercial.get("project"), dict) else {}
+    if not marker:
+        try:
+            raw = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
+            marker = raw if isinstance(raw, dict) else {}
+        except (OSError, json.JSONDecodeError):
+            marker = {}
+    commercial["lifecycle_status"] = marker.get("lifecycle_status")
+    commercial["export_path"] = marker.get("export_path")
+    commercial["exported_at"] = marker.get("exported_at")
+    commercial["completed"] = is_completed(marker)
+    commercial["runner_status"] = read_runner_status(project_dir)
 
 
 def _find_poster(project_dir: Path, state: dict) -> Optional[str]:

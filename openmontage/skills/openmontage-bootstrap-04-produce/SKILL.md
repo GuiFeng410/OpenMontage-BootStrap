@@ -67,7 +67,7 @@ metadata:
 
 商品片从 03 接收 `bootstrap-commercial` 的 `project_id` 和固定 Backlot 网址。进入 04 后：
 
-1. 必须接收 03 初始化工具返回的实际 `project_id`。先调用 `produce_read_state` 核对管线，再运行 `python -m backlot open <project_id>`；主动把**同一网址**发给用户，不创建第二个看板项目。聊天须含：`你可以查看该网址了解详细信息：{URL}`。进入 04 后**禁止重新调用 produce_init_project**；缺少项目 ID、状态或完整简报时退回 03，不得猜测新建或续作。
+1. 必须接收 03 初始化工具返回的实际 `project_id`。先调用 `produce_read_state` 核对管线，再运行 `python -m backlot open <project_id>`（会同时拉起本机 runner）；主动把**同一网址**发给用户，不创建第二个看板项目。聊天须含：`你可以查看该网址了解详细信息：{URL}`。进入 04 后**禁止重新调用 produce_init_project**；缺少项目 ID、状态或完整简报时退回 03，不得猜测新建或续作。已 `lifecycle_status=completed` 的项目不得续做。
 2. 每进入试片 / 分段 / 初稿 / 合成 / 交付阶段并写完对应 checkpoint 后，聊天固定一句：`已进入第 N 阶段：{中文名}。请打开看板查看最新证据（若未自动更新请刷新页面）。`
 3. 试片、专业批次、初稿和交付需要用户裁定时，先用 `produce_write_checkpoint` 写入当前阶段证据：`artifacts_json` 带阶段产物，`metadata_json` 带当前唯一决策、选项、推荐、回复示例和 `partial_progress`，`cost_snapshot_json` 带累计费用。
 4. 网页可用时，完整审查卡、候选、抽帧、费用明细放网页；聊天只发“网址或阶段句 + 当前一个问题 + 推荐 + 回复示例”。网页打不开时仍须先发出同一完整 URL，再退回完整 Grill 卡，流程继续。禁止用「看板暂不可用」代替发链接。
@@ -191,17 +191,18 @@ produce_list_intents
 
 ### 快速模式 v2（执行）
 
-`fast_track_v1` 项目继续走上一节冻结流程；只有最新合法 `approval_policy.selected="fast_track_v2"` 的项目走本循环。禁止把「直接出片」当审批证据；面板提交也只产生待确认 intent，网页只读，不在浏览器 apply。
+`fast_track_v1` 项目继续走上一节冻结流程；只有最新合法 `approval_policy.selected="fast_track_v2"` 的项目走本循环。禁止把「直接出片」当审批证据；面板提交也只产生待确认 intent，网页只写 intent，不在浏览器 apply。本机 runner（随 `backlot open`）可 `produce_runner_tick` 代 plan/apply；聊天口令「确认面板选择」仍是退路。
 
 ```text
 produce_plan_approval_bundle
-→ 用户口令 确认面板选择
+→ 用户点「提交待确认」（本机 runner apply）或聊天口令 确认面板选择
 → produce_apply_approval_bundle(confirm_phrase=确认面板选择)
 → loop:
     produce_fast_track_evaluate
     continue → 现有 produce_* 下一阶段
-    pause → 聊天只问一个问题
-    signoff_ready → 提示刷新看板签收
+    pause → 看板展示问题；聊天也可答
+    signoff_ready → 提示刷新看板签收（不算项目结束）
+结束导出：看板「结束并导出项目」或聊天「结束导出」→ produce_apply_project_export
 ```
 
 口令/plan/apply 只用于尚无合法授权的入口。若 03 已完成 list→plan→apply、intent 已 apply，或 `approval_policy` 已是 `selected=fast_track_v2`，04 跳过 plan/apply，从 produce_fast_track_evaluate 开始；此时待确认列表为空是正常状态，不得退回 Grill。
@@ -213,7 +214,7 @@ produce_plan_approval_bundle
 3. 生成图即使处于 v2 也必须经过 `generated_image_review` 用户批量审图；不得把 approval bundle 当成审图批准。
 4. `sample_review` 对 `fast_track_v2` 按 evaluate 决定，QA 通过且无暂停理由时可以 `continue`；v1 的“试片必须停”只属于 `fast_track_v1`。
 5. `delivery_signoff` 只能进入 `signoff_ready`，提示用户刷新看板签收，禁止自动完成。终稿尚未就绪时返回的 `missing_field` 是暂停证据；不得把它理解成「schema 缺字段」以外的放行理由。
-6. 自动重试最多 1 次，且沿用已冻结渠道/模型；禁止静默换渠道、换模型或启动后台 worker/daemon。
+6. 自动重试最多 1 次，且沿用已冻结渠道/模型；禁止静默换渠道、换模型。禁止在聊天循环里偷偷起 daemon。只允许随 `python -m backlot open` 一起启动的本机 runner（看得见、可停），且不静默付费、不静默换渠。
 7. 仅口令/plan/apply 入口：无合法待确认 interaction intent / bundle（列表为空、plan 失败、revision drift、intent expired）时不得 apply，退回 03 的完整 Grill 确认卡。若已是 `selected=fast_track_v2` 或 intent 已 apply，跳过 plan/apply，从 produce_fast_track_evaluate 开始。历史 v1 决定不改写、不迁移。
 
 ### 付费 AI 镜提示词：Skill 引用与面板递进（强制）

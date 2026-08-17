@@ -21,6 +21,7 @@
 .commercial-done-notice { border-color: var(--green); background: var(--green-dim); margin-bottom: 14px; }
 .commercial-intent-status,
 .commercial-fast-track-pause,
+.commercial-runner-status,
 .commercial-final-video {
   display: grid;
   gap: 8px;
@@ -30,6 +31,7 @@
 .commercial-intent-status-row { line-height: 1.5; }
 .commercial-pause-friendly { line-height: 1.55; }
 .commercial-pause-question { color: var(--text-2); line-height: 1.55; }
+.commercial-runner-phase { font-weight: 600; }
 .commercial-final-video video {
   width: 100%;
   max-height: min(360px, 40vh);

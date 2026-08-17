@@ -96,6 +96,16 @@ def test_interaction_intent_rejects_unknown_type():
         )
 
 
+def test_project_export_intent_validates():
+    validate_artifact(
+        "interaction_intent",
+        _interaction_intent(
+            intent_type="project_export",
+            payload={"action": "end_and_export"},
+        ),
+    )
+
+
 def test_interaction_intent_rejects_browser_risk_level():
     with pytest.raises(ValidationError):
         validate_artifact(

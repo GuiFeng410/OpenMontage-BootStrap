@@ -188,8 +188,8 @@ export function renderDecisionIntentPanel({
           });
           const result = await submitDecisionIntent({ intent });
           feedback.textContent = result.ok
-            ? `已提交。请回聊天发送：${CONFIRM_PHRASE}`
-            : "提交失败，请复制上方摘要并回聊天发送。";
+            ? "已提交。请留在本页等待本机处理。"
+            : `提交失败，请复制上方摘要并回聊天发送：${CONFIRM_PHRASE}`;
         } catch {
           feedback.textContent = "提交失败，请复制上方摘要并回聊天发送。";
         } finally {
@@ -210,7 +210,7 @@ export function renderDecisionIntentPanel({
   body.append(el("div", { class: "commercial-chat-only" },
     stale
       ? "选择已过期，请先清空并重选。"
-      : "面板选择尚未正式执行；复制摘要后回聊天发送“确认面板选择”。"));
+      : "点提交后请留在本页。若进度无变化，再回聊天发送“确认面板选择”。"));
   return el("div", { id: panelId, class: "notice commercial-notice" },
     el("span", {
       class: "commercial-intent-icon",

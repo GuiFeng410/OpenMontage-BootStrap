@@ -80,6 +80,12 @@ def detect_environment(deep: bool = False) -> dict[str, Any]:
 
 
 @mcp.tool()
+def ensure_env_file(dry_run: bool = True, confirm_execute: bool = False) -> dict[str, Any]:
+    """If .env is missing, copy .env.example. Never overwrite an existing .env."""
+    return _wrap(T.ensure_env_file, dry_run, confirm_execute)
+
+
+@mcp.tool()
 def plan_install(
     projects_dir: str = "",
     piper_model_dir: str = "",
@@ -382,6 +388,22 @@ def produce_fast_track_evaluate(
 ) -> dict[str, Any]:
     """Evaluate a supplied fast-track snapshot without loading or writing project state."""
     return _wrap(T.produce_fast_track_evaluate, project_id, snapshot_json)
+
+
+@mcp.tool()
+def produce_apply_project_export(
+    project_id: str,
+    intent_id: str = "",
+    confirm_phrase: str = "",
+) -> dict[str, Any]:
+    """End-and-export: copy final.mp4 to exports/ after a board click or chat phrase 结束导出."""
+    return _wrap(T.produce_apply_project_export, project_id, intent_id, confirm_phrase)
+
+
+@mcp.tool()
+def produce_runner_tick(project_id: str = "") -> dict[str, Any]:
+    """One local runner tick: apply pending panel/export intents. No paid generate."""
+    return _wrap(T.produce_runner_tick, project_id)
 
 
 @mcp.tool()

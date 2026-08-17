@@ -879,6 +879,7 @@ def init_project(
         "assets/subs",
         "assets/stock",
         "renders",
+        "exports",
     ):
         (project_dir / sub).mkdir(parents=True, exist_ok=True)
 

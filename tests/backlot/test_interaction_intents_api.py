@@ -222,3 +222,28 @@ def test_get_unknown_project_returns_404(interaction_client):
 
     assert response.status_code == 404
     assert folder_only.status_code == 404
+
+
+def test_project_export_post_writes_intent_only(interaction_client):
+    client, project = interaction_client
+    summary = "结束并导出项目"
+    payload = _interaction(
+        intent_id="export-001",
+        intent_type="project_export",
+        stage="delivery_signoff",
+        revision="export-v1",
+        summary=summary,
+        summary_sha256=hashlib.sha256(summary.encode("utf-8")).hexdigest(),
+        payload={"action": "end_and_export"},
+    )
+
+    response = client.post("/intents", json=payload)
+
+    assert response.status_code == 201
+    stored = json.loads(
+        (project / "intents" / "export-001.json").read_text(encoding="utf-8")
+    )
+    assert stored["intent_type"] == "project_export"
+    assert stored["status"] == "pending"
+    assert list(project.glob("checkpoint_*.json")) == []
+    assert not (project / "exports" / "final.mp4").exists()

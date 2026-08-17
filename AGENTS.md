@@ -59,4 +59,5 @@
 - 发布清单：[`distribution/manifests/release-manifest.json`](distribution/manifests/release-manifest.json)
 - **本机状态文件（v0.6）：** 仓根 `.openmontage/install-state.json`（gitignore，**不提交、不写密钥**）
   - 字段：`verify_ready`、`repo_root`、`projects_dir`、`latest_project_id`、`video_key_present`（及非空变量名）
-  - MCP：`read_install_state` / `scan_video_keys` / `snapshot_install_state`；`verify_ready` 通过后会写入
+  - MCP：`read_install_state` / `scan_video_keys` / `snapshot_install_state` / `ensure_env_file`；`verify_ready` 通过后会写入
+  - 看板：`python -m backlot open` 会拉起本机 runner（消费面板 intent 与结束导出；不调付费 API）

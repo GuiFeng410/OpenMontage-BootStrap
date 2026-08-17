@@ -98,6 +98,8 @@ metadata:
 
 主题已说清（商品 + 用途，或图文件夹等）→ 直接 `bootstrap-commercial`：`produce_init_project(create_new)`、立刻 `backlot open`、聊天必须出现 `你可以查看该网址了解详细信息：{URL}`；缺时长 / 图 / 预算再问**一句**；不推轻度、不把表 1–3 一次丢进聊天。整片时长上限 **75s**（不是单段；单段仍按渠道切，如 Pixverse ~5s）。字幕/BGM 开头不单独问，看板上标可选可后补。
 
+**结束导出：** 看板按钮「结束并导出项目」只写 `project_export` intent；聊天备选口令精确为 `结束导出`。本机（runner 或 `produce_apply_project_export`）把 `renders/final.mp4` 拷到该项目 `exports/`，`project.json` 写 `lifecycle_status=completed`。没有成片则提示，不静默标完成。画面签收、补字幕、再出片都不算结束。已结束后不要自动对该项目 `resume`；换商品/换主题用 `create_new`。
+
 示例接话（有主题、有 Key）：
 
 > **可以开始出电商宣传片了。** 环境已就绪；已检测到可用视频 Key。  
@@ -139,7 +141,7 @@ metadata:
 
 禁止把表 1 + 表 2 + 表 3 堆在同一条回复里。Demo 确认卡确认后**不必**再走完整三表（已写入等价锁定字段）。
 
-## 商品片：只读网页 + 聊天决策协议（强制）
+## 商品片：看板点选 + 聊天退路（强制）
 
 适用：商品宣传、种草、详情展示、产品佩戴演示等进入 `bootstrap-commercial` 的任务。非商品片继续使用下文完整 Grill 卡。
 
@@ -592,7 +594,7 @@ v2 仍遵守既有硬门：网页只读、聊天一次只问一个问题、不�
 
 1. 安装未闭环 → installer。  
 2. 未 `verify_ready` → setup。  
-3. 复查表 1 前 `produce_init_project` 返回的实际项目 ID；商品片此处禁止再次初始化。非商品片若尚无项目，也默认 `mode=create_new`；只有用户明确续作时才用 `mode=resume`。
+3. 复查表 1 前 `produce_init_project` 返回的实际项目 ID；商品片此处禁止再次初始化。非商品片若尚无项目，也默认 `mode=create_new`；只有用户明确续作时才用 `mode=resume`。若 `project.json` 已是 `lifecycle_status=completed`，禁止当续作，必须新开项目。
 4. 写入档位：
 
 ```text

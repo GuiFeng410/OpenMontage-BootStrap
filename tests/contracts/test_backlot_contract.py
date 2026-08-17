@@ -123,6 +123,7 @@ class TestInitProject:
         assert (pdir / "artifacts").is_dir()
         assert (pdir / "assets" / "images").is_dir()
         assert (pdir / "renders").is_dir()
+        assert (pdir / "exports").is_dir()
         marker = json.loads((pdir / PROJECT_MARKER_FILENAME).read_text())
         assert marker["project_id"] == "my-film"
         assert marker["pipeline_type"] == "cinematic"

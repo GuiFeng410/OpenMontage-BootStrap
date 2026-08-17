@@ -84,6 +84,22 @@ test("helper copy never implies execution", async () => {
   assert.doesNotMatch(source, /批准|已生效|开始生成|立即创建/);
 });
 
+test("export envelope is pending project_export", async () => {
+  const { buildExportIntent, EXPORT_PHRASE } = await import(
+    "../../backlot/ui/board-intent-submit.js"
+  );
+  assert.equal(EXPORT_PHRASE, "结束导出");
+  const intent = await buildExportIntent({
+    projectId: "demo-pro",
+    now: new Date("2026-08-17T01:00:00.000Z"),
+    intentId: "export-001",
+    digestSha256: async () => "c".repeat(64),
+  });
+  assert.equal(intent.intent_type, "project_export");
+  assert.equal(intent.status, "pending");
+  assert.equal(intent.payload.action, "end_and_export");
+});
+
 test("201 response reports successful submission", async () => {
   const calls = [];
   const intent = await buildIntent();

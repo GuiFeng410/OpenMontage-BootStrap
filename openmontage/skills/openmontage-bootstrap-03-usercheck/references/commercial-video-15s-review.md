@@ -62,9 +62,9 @@
 
 - 03 在商品主题已知且环境就绪后初始化 `bootstrap-commercial`，主动运行 `python -m backlot open <project_id>` 并给出固定项目网址；04 继续复用。
 - Backlot 展示完整方案、素材、选项、推荐、试片、分段、**镜提示词全文**、费用与当前唯一待决定事项。
-- 聊天一次只发：项目网址、当前问题、推荐项、回复示例（**不**贴长提示词全文）。用户只在聊天回复，Agent 用用户原话写 `decision_log` 并推进 checkpoint。
+- 聊天一次只发：项目网址、当前问题、推荐项、回复示例（**不**贴长提示词全文）。用户可在看板点选；聊天仍是退路。Agent / 本机 runner 用已提交 intent 或用户原话写 `decision_log` 并推进 checkpoint。
 - 方案阶段中间选择使用 `brief_locked/in_progress + metadata.needs_user_decision=true`；严格前序 `completed` 后才能进入下一阶段。每阶段先物化 canonical artifact 及其中引用的项目内媒体路径，确认可读取后才写 `completed` / `awaiting_human`。不得用空 checkpoint 冒充审批关；Backlot 的“未挂接媒体”只是修复提示，不是合法阶段证据。
-- 网页保持只读；不得直接提交审批、修改项目 JSON 或自动唤醒 Agent。看板不可用时回退完整 Grill 卡，生产继续。
+- 网页只写 intent，不得直接改 checkpoint、不得调付费 API。本机 runner 随 `backlot open` 消费 intent。看板不可用时回退完整 Grill 卡，生产继续。结束以「结束并导出项目」/「结束导出」为准。
 - 与七阶段对照、原「表 1/2/3」落点：见 `03-usercheck`「商品片 ↔ 七阶段」。
 
 **强制回复协议适用：**

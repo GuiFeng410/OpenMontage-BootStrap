@@ -1,4 +1,5 @@
 export const CONFIRM_PHRASE = "确认面板选择";
+export const EXPORT_PHRASE = "结束导出";
 
 async function browserDigestSha256(value) {
   const bytes = new TextEncoder().encode(value);
@@ -41,6 +42,37 @@ export async function buildDecisionIntent({
       selections: draft.selections,
       note: draft.note,
     },
+    expires_at: expiresAt.toISOString(),
+    created_at: createdAt.toISOString(),
+    status: "pending",
+  };
+}
+
+export async function buildExportIntent({
+  projectId,
+  stage = "delivery_signoff",
+  now = new Date(),
+  intentId,
+  digestSha256 = browserDigestSha256,
+}) {
+  const createdAt = now instanceof Date ? now : new Date(now);
+  const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
+  const summary = "结束并导出项目";
+  const summarySha256 = await digestSha256(summary);
+  const id = intentId
+    || (globalThis.crypto?.randomUUID
+      ? `export-${globalThis.crypto.randomUUID()}`
+      : `export-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  return {
+    version: "1.0",
+    intent_type: "project_export",
+    intent_id: id,
+    project_id: projectId,
+    stage,
+    revision: "export-v1",
+    summary,
+    summary_sha256: summarySha256,
+    payload: { action: "end_and_export" },
     expires_at: expiresAt.toISOString(),
     created_at: createdAt.toISOString(),
     status: "pending",

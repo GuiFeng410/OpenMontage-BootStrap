@@ -37,6 +37,7 @@ metadata:
    | 必做验收 | `probe_edge_tts` | 确认 Edge 可 import（合成时需联网） |
    | **建议** | `probe_hyperframes` | Node ≥ 22 + npx + ffmpeg；可跳过，**不挡** `verify_ready` |
    | 必做 | `configure_sandbox` | `OPENMONTAGE_PROJECTS_DIR` 等 |
+   | 必做 | `ensure_env_file` | 没有 `.env` 时复制 `.env.example`；**不覆盖**已有文件 |
    | 可选 | `ensure_piper_model` | **仅**用户要离线旁白时；`plan_install(include_piper=true)` |
 
 4. Wait for explicit user approval of the plan.  

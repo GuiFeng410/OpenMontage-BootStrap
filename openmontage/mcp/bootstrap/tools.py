@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from openmontage.mcp.bootstrap import install_state as install_state_mod
+from openmontage.mcp.bootstrap.env_file import ensure_env_file as _ensure_env_file
 from openmontage.mcp.common.errors import ConfigError, DoctorError
 from openmontage.mcp.common.sandbox import project_dir
 from openmontage.mcp.doctor import tools as doctor_tools
@@ -74,6 +75,7 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "ensure_piper_model",
             "configure_sandbox",
             "verify_ready",
+            "ensure_env_file",
             "scan_video_keys",
             "read_install_state",
             "snapshot_install_state",
@@ -92,6 +94,8 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "produce_plan_approval_bundle",
             "produce_apply_approval_bundle",
             "produce_fast_track_evaluate",
+            "produce_apply_project_export",
+            "produce_runner_tick",
             "produce_read_state",
             "produce_get_next_stage",
             "produce_import_project_images",
@@ -213,6 +217,7 @@ def detect_environment(deep: bool = False) -> dict[str, Any]:
     data = doctor_tools.run_doctor(deep=deep)
     edge = probe_edge_tts()
     hf = probe_hyperframes(run_doctor=bool(deep))
+    env_file = _ensure_env_file(repo_root=REPO_ROOT, dry_run=True, confirm_execute=False)
     return {
         "doctor": data,
         "can_produce_video_now": data.get("can_produce_video_now"),
@@ -222,6 +227,7 @@ def detect_environment(deep: bool = False) -> dict[str, Any]:
         "tts_fallback": "piper (optional, offline)",
         "edge_tts": edge,
         "hyperframes": hf,
+        "env_file": env_file,
         "recommendations": _install_recommendations(edge=edge, hf=hf),
     }
 
@@ -246,6 +252,7 @@ def plan_install(
     # Shallow by default (Node/npx/ffmpeg). User can run probe_hyperframes(run_doctor=true) after install.
     hf = probe_hyperframes(run_doctor=False)
     sandbox = configure_sandbox(projects_dir=projects_dir or "", dry_run=True, confirm_execute=False)
+    env_file = _ensure_env_file(repo_root=REPO_ROOT, dry_run=True, confirm_execute=False)
 
     steps: list[dict[str, Any]] = [
         {**py, "priority": "required", "label": "Python venv + requirements (includes edge-tts)"},
@@ -259,6 +266,7 @@ def plan_install(
             "label": "HyperFrames (recommended; skip does not block verify_ready)",
         },
         {**sandbox, "priority": "required", "label": "Projects sandbox + env"},
+        {**env_file, "priority": "required", "label": "Copy .env.example to .env if missing (never overwrite)"},
     ]
 
     if include_piper:
@@ -721,6 +729,15 @@ def configure_sandbox(
         "note": "Also set these in OpenClaw MCP env so they persist across restarts.",
         "plan": plan,
     }
+
+
+def ensure_env_file(dry_run: bool = True, confirm_execute: bool = False) -> dict[str, Any]:
+    """Copy .env.example to .env when missing. Never overwrites an existing .env."""
+    return _ensure_env_file(
+        repo_root=REPO_ROOT,
+        dry_run=dry_run,
+        confirm_execute=confirm_execute,
+    )
 
 
 def verify_ready(deep: bool = False) -> dict[str, Any]:
@@ -1459,6 +1476,41 @@ def produce_fast_track_evaluate(
 
     result = evaluate_fast_track(snapshot)
     return {"project_id": project_id, **result}
+
+
+def produce_apply_project_export(
+    project_id: str,
+    intent_id: str = "",
+    confirm_phrase: str = "",
+) -> dict[str, Any]:
+    """Copy renders/final.mp4 to exports/ and mark the project completed."""
+    from lib.interaction_intents import UnknownProjectError
+    from lib.project_export import ProjectExportError, apply_project_export
+
+    try:
+        return apply_project_export(
+            project_id,
+            intent_id=intent_id,
+            confirm_phrase=confirm_phrase,
+        )
+    except UnknownProjectError as exc:
+        raise DoctorError("unknown project", code="unknown_project") from exc
+    except ProjectExportError as exc:
+        raise DoctorError(exc.safe_message, code=exc.code) from exc
+
+
+def produce_runner_tick(project_id: str = "") -> dict[str, Any]:
+    """Consume pending panel/export intents on this machine. Does not call paid generate."""
+    from lib.board_runner import tick_all
+    from lib.interaction_intents import UnknownProjectError
+    from lib.project_export import ProjectExportError
+
+    try:
+        return tick_all(append_decision=produce_append_decision, project_id=project_id)
+    except UnknownProjectError as exc:
+        raise DoctorError("unknown project", code="unknown_project") from exc
+    except ProjectExportError as exc:
+        raise DoctorError(exc.safe_message, code=exc.code) from exc
 
 
 def produce_list_intents(project_id: str) -> dict[str, Any]:

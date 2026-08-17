@@ -27,6 +27,7 @@ INTERACTION_INTENT_TYPES = frozenset(
         "asset_review",
         "revision_request",
         "approval_bundle",
+        "project_export",
     }
 )
 

@@ -88,20 +88,25 @@ boundaries.
 ## B2 interaction / fast-track v2 boundary
 
 - Panel button is 「提交待确认」. Success copy is
-  `已提交。请回聊天发送：确认面板选择`.
+  `已提交。请留在本页等待本机处理。`
 - The page never shows 「批准」「立即创建」「开始生成」「已生效」.
-- Chat confirmation for panel intents is exactly `确认面板选择`.
+- Chat confirmation for panel intents is exactly `确认面板选择` (fallback).
   「直接出片」 is not approval evidence.
+- Local runner starts with `python -m backlot open` and consumes pending
+  intents via `produce_runner_tick`. Browser still only POSTs intents.
+- End-and-export button writes `project_export`; chat phrase is `结束导出`.
 - Agent tools: `produce_list_interaction_intents`,
   `produce_plan_approval_bundle` (promotes a pending panel `decision` into a
   complete §6.3 `approval_bundle` using project evidence; missing evidence
   fails closed), `produce_apply_approval_bundle`
   (`confirm_phrase` required; writes `selected="fast_track_v2"`),
-  `produce_fast_track_evaluate` (read-only).
-- Fast-track v2 is an Agent session loop plus Python gates, not a daemon
-  and not Cursor auto-wake.
+  `produce_fast_track_evaluate` (read-only),
+  `produce_apply_project_export`, `produce_runner_tick`.
+- Fast-track v2 may use the visible Backlot-side runner; Agent must not
+  silently start a daemon, silently pay, or silently switch providers.
 - Evaluate missing fields fail-closed. Generated images still pause for
-  batch review. Delivery waits for signoff.
+  batch review. Delivery waits for signoff. Project completion is
+  「结束并导出项目」 only.
 - On evaluate `pause`, the Agent must `produce_write_checkpoint` with
   `metadata.fast_track_pause` so the board can echo the Chinese reason.
 - Board echoes interaction intent status, checkpoint `metadata.fast_track_pause`,

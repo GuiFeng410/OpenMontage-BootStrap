@@ -27,7 +27,8 @@
         "decision",
         "asset_review",
         "revision_request",
-        "approval_bundle"
+        "approval_bundle",
+        "project_export"
       ]
     },
     "intent_id": { "type": "string", "minLength": 1 },

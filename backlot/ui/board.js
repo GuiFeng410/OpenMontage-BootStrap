@@ -11,6 +11,7 @@ import {
   renderStageDrawer, renderStageRail, stageLabel,
 } from "/ui/board-rail.js";
 import { bindRerender, renderEditTab } from "/ui/board-edit.js";
+import { renderExportButton } from "/ui/board-export.js";
 import {
   commercialFocusStage, isCommercial, renderAwaitingNotice, renderCommercialBoard,
 } from "/ui/board-commercial.js";
@@ -167,6 +168,7 @@ function renderSlate(s) {
         : "剪辑标签：对成片做轻量标记（Agent 确认后出片）",
       onclick: () => { context.editOpen = !context.editOpen; render(); },
     }, "✂ 剪辑"),
+    renderExportButton(s),
     renderThemeToggle(),
     liveEl,
     cost,

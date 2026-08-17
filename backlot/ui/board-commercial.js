@@ -41,7 +41,30 @@ function renderFastTrackPause(pause) {
     pause.current_question
       ? el("div", { class: "commercial-pause-question" }, pause.current_question)
       : null,
-    el("div", { class: "commercial-chat-only" }, "请回聊天确认；本页只展示暂停原因，不提交审批。"));
+    el("div", { class: "commercial-chat-only" }, "暂停原因写在本页；可在看板继续选，或回聊天回答。"));
+}
+
+function renderRunnerStatus(status) {
+  if (!status || typeof status !== "object") return null;
+  const phase = status.phase || "idle";
+  const label = {
+    queued: "排队",
+    applying: "进行中",
+    producing: "进行中",
+    paused: "暂停，要你选",
+    ready: "已出片",
+    exported: "已导出",
+    needs_chat: "请回聊天继续",
+    idle: "本机空闲",
+  }[phase] || phase;
+  return el("div", { class: "notice commercial-runner-status" },
+    el("div", { class: "commercial-runner-phase" }, label),
+    status.friendly_zh
+      ? el("div", { class: "commercial-runner-copy" }, status.friendly_zh)
+      : null,
+    status.current_question
+      ? el("div", { class: "commercial-pause-question" }, status.current_question)
+      : null);
 }
 
 function renderFinalVideo(projectId, finalVideo) {
@@ -1056,6 +1079,8 @@ export function renderCommercialBoard(s, context) {
   const main = el("div", { class: "main-col" });
   const intentStatus = renderIntentStatus(s.commercial?.interaction_intents);
   if (intentStatus) main.append(intentStatus);
+  const runner = renderRunnerStatus(s.commercial?.runner_status);
+  if (runner) main.append(runner);
   const pause = renderFastTrackPause(s.commercial?.fast_track_pause);
   if (pause) main.append(pause);
   const finalVideo = renderFinalVideo(s.project_id, s.commercial?.final_video);
