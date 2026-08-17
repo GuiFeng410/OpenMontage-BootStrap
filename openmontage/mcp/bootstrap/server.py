@@ -150,8 +150,33 @@ def verify_ready(deep: bool = False) -> dict[str, Any]:
     """Return whether produce can start (can_produce_video_now).
 
     HyperFrames absence does not block readiness; recommendations still list it.
+    Also snapshots .openmontage/install-state.json (no secrets).
     """
     return _wrap(T.verify_ready, deep)
+
+
+@mcp.tool()
+def scan_video_keys() -> dict[str, Any]:
+    """Read-only scan of video-channel env names from .env-example.md, .env, and process env.
+
+    Returns names that are non-empty only. Never returns Key values.
+    """
+    return _wrap(T.scan_video_keys)
+
+
+@mcp.tool()
+def read_install_state() -> dict[str, Any]:
+    """Read repo-root .openmontage/install-state.json (no secrets)."""
+    return _wrap(T.read_install_state)
+
+
+@mcp.tool()
+def snapshot_install_state(
+    verify_ready_flag: str = "",
+    latest_project_id: str = "",
+) -> dict[str, Any]:
+    """Scan video keys and write .openmontage/install-state.json (names/flags only)."""
+    return _wrap(T.snapshot_install_state, verify_ready_flag, latest_project_id)
 
 
 @mcp.tool()

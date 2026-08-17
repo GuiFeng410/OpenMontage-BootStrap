@@ -57,4 +57,6 @@
 
 - 逻辑分层（不搬家）：[`PRODUCT_MAP.md`](PRODUCT_MAP.md)
 - 发布清单：[`distribution/manifests/release-manifest.json`](distribution/manifests/release-manifest.json)
-- 本机安装次数 / 工作区根 / 环境快照文件：v0.6 再定，路径将写在本节便于扫读
+- **本机状态文件（v0.6）：** 仓根 `.openmontage/install-state.json`（gitignore，**不提交、不写密钥**）
+  - 字段：`verify_ready`、`repo_root`、`projects_dir`、`latest_project_id`、`video_key_present`（及非空变量名）
+  - MCP：`read_install_state` / `scan_video_keys` / `snapshot_install_state`；`verify_ready` 通过后会写入

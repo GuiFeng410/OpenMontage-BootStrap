@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from openmontage.mcp.bootstrap import install_state as install_state_mod
 from openmontage.mcp.common.errors import ConfigError, DoctorError
 from openmontage.mcp.common.sandbox import project_dir
 from openmontage.mcp.doctor import tools as doctor_tools
@@ -73,6 +74,9 @@ def list_bootstrap_tools() -> dict[str, Any]:
             "ensure_piper_model",
             "configure_sandbox",
             "verify_ready",
+            "scan_video_keys",
+            "read_install_state",
+            "snapshot_install_state",
         ],
         "produce_minimal": [
             "produce_init_project",
@@ -724,6 +728,14 @@ def verify_ready(deep: bool = False) -> dict[str, Any]:
     edge = probe_edge_tts()
     hf = probe_hyperframes(run_doctor=bool(deep))
     can = bool(data.get("can_produce_video_now"))
+    snapshot: dict[str, Any] | None = None
+    try:
+        snapshot = install_state_mod.snapshot_install_state(
+            repo_root=REPO_ROOT,
+            verify_ready=can,
+        )
+    except Exception:
+        snapshot = None
     return {
         "can_produce_video_now": can,
         "next_install_for_p1": data.get("next_install_for_p1"),
@@ -735,11 +747,38 @@ def verify_ready(deep: bool = False) -> dict[str, Any]:
         "hyperframes_toolchain_ok": bool(hf.get("toolchain_ok")),
         "hyperframes_recommended_if_missing": not bool(hf.get("ready")),
         "recommendations": _install_recommendations(edge=edge, hf=hf),
+        "install_state": None if snapshot is None else snapshot.get("state"),
+        "install_state_path": None if snapshot is None else snapshot.get("path"),
         "note": (
             "HyperFrames missing does not block verify_ready. "
             "Primary TTS is Edge-TTS; Piper is optional offline fallback."
         ),
     }
+
+
+def scan_video_keys() -> dict[str, Any]:
+    return install_state_mod.scan_video_keys(repo_root=REPO_ROOT)
+
+
+def read_install_state() -> dict[str, Any]:
+    return install_state_mod.read_install_state(repo_root=REPO_ROOT)
+
+
+def snapshot_install_state(
+    verify_ready_flag: str = "",
+    latest_project_id: str = "",
+) -> dict[str, Any]:
+    ready: bool | None = None
+    flag = (verify_ready_flag or "").strip().lower()
+    if flag in {"true", "1", "yes"}:
+        ready = True
+    elif flag in {"false", "0", "no"}:
+        ready = False
+    return install_state_mod.snapshot_install_state(
+        repo_root=REPO_ROOT,
+        verify_ready=ready,
+        latest_project_id=latest_project_id,
+    )
 
 
 # --- produce_* thin wrappers (minimal explainer surface) ---
@@ -751,7 +790,17 @@ def produce_init_project(
     pipeline_type: str = "animated-explainer",
     mode: str = "create_new",
 ) -> dict[str, Any]:
-    return doctor_tools.run_init_project(project_id, title, pipeline_type, mode)
+    result = doctor_tools.run_init_project(project_id, title, pipeline_type, mode)
+    actual_id = str(result.get("project_id") or "").strip()
+    if actual_id:
+        try:
+            install_state_mod.snapshot_install_state(
+                repo_root=REPO_ROOT,
+                latest_project_id=actual_id,
+            )
+        except Exception:
+            pass
+    return result
 
 
 _PIXVERSE_MODEL = "pixverse-video-v6.0"

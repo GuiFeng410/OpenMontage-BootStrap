@@ -44,8 +44,8 @@ metadata:
 6. Never call high-risk tools with `confirm_execute=true` while `dry_run` is still true-only preview without user OK.  
 7. If a tool returns `skipped_no_admin_or_failed` / `manual_commands`: show those commands; do not pretend success.  
 8. HyperFrames：**建议安装**。向用户说明 Node.js **≥ 22**、PATH 上有 `npx`/`ffmpeg`，然后可跑 `npx hyperframes doctor` 或 `probe_hyperframes(run_doctor=true)`。用户说跳过 → 继续；勿因缺 HF 判定 setup 失败。  
-9. `verify_ready` — when `can_produce_video_now`（或等价 ready）为真即可交接下游。读返回的 `recommendations`：若缺 HF，仍可交接，但用一句话提醒「建议补装 HyperFrames，轻度讲解/品牌片可多一条路径」。  
-10. 交接：模糊需求 → **`openmontage-bootstrap-03-usercheck`**（先扫 Key，默认电商）；简报已锁定 → **`openmontage-bootstrap-04-produce`**。
+9. `verify_ready` — when `can_produce_video_now`（或等价 ready）为真即可交接下游。该工具会写入仓根 `.openmontage/install-state.json`（不写密钥）。读返回的 `recommendations`：若缺 HF，仍可交接，但用一句话提醒「建议补装 HyperFrames，轻度讲解/品牌片可多一条路径」。  
+10. 交接：模糊需求 → **`openmontage-bootstrap-03-usercheck`**（先 `scan_video_keys`，默认电商）；简报已锁定 → **`openmontage-bootstrap-04-produce`**。
 
 ## TTS 策略（强制口径）
 
@@ -76,5 +76,6 @@ metadata:
 - `verify_ready` / `can_produce_video_now` 为真。  
 - HyperFrames：已建议；若未装，已告知可跳过且不挡出片。  
 - MCP `command` preferably points at `.venv` python after install.  
-- Hand-off: **03-usercheck**（默认电商 · 扫 Key · 给网址；轻度仅明确要求）→ **04-produce**。  
+- Hand-off: **03-usercheck**（默认电商 · `scan_video_keys` · 给网址；轻度仅明确要求）→ **04-produce**。  
+- 已写入 `.openmontage/install-state.json`（或已说明写入失败但不挡出片）。  
 - 向用户可加一句：「环境已就绪；旁白默认 Edge-TTS；建议有 Node 22+ 时再装 HyperFrames。默认按电商宣传片出片，明确要讲解时再走轻度。」
