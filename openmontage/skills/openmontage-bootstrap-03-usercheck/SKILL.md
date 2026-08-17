@@ -159,7 +159,7 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 ```
 
    该工具只复制 `assets/images/` 中列出的图片，不复制 checkpoint、旧视频、旧渲染或其它 artifact。禁止用目录整体复制代替。
-2. 立即运行 `python -m backlot open <project_id>`，其中 `<project_id>` 必须是初始化工具返回的实际 ID。把命令输出的完整项目网址主动发给用户；03→04 全程复用同一网址。打开失败只说明“看板暂不可用”，随后退回完整 Grill 卡，**不得阻塞简报或出片**。
+2. 立即运行 `python -m backlot open <project_id>`，其中 `<project_id>` 必须是初始化工具返回的实际 ID。把命令输出的完整项目网址主动发给用户；03→04 全程复用同一网址。**无论 open 成功或超时，聊天都必须发出完整 URL**（见下条固定话术）。禁止用「看板暂不可用」「网址打不开」代替发链接。开板失败不得判为出片失败，简报与 produce 继续；看板不可用时后续决策改用完整 Grill 卡。
 3. **网址强制话术（首次决策前必发，禁止等用户追问）：** 在三点卡 / 表 1 等任何确认问题之前，聊天必须先出现固定句式：  
    `你可以查看该网址了解详细信息：{Backlot完整URL}`  
    之后每进入新阶段（写完该阶段 `in_progress` / `awaiting_human` checkpoint 后），再发：  

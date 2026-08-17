@@ -50,6 +50,64 @@ from tools.base_tool import (
 )
 
 
+def infer_project_root(
+    inputs: dict[str, Any] | None = None,
+    edit_decisions: dict[str, Any] | None = None,
+) -> Path | None:
+    """Best-effort project directory for resolving relative cut sources."""
+    inputs = inputs or {}
+    edit_decisions = edit_decisions or {}
+    raw = inputs.get("project_root")
+    if raw:
+        path = Path(str(raw)).expanduser()
+        return path.resolve() if path.exists() else path
+    project_id = (
+        inputs.get("project_id")
+        or edit_decisions.get("project_id")
+        or (edit_decisions.get("metadata") or {}).get("project_id")
+    )
+    if not project_id:
+        return None
+    pid = str(project_id)
+    try:
+        from openmontage.mcp.common.sandbox import project_dir
+
+        return project_dir(pid)
+    except Exception:
+        from lib.paths import PROJECTS_DIR
+
+        return PROJECTS_DIR / pid
+
+
+def resolve_cut_source(
+    source: str,
+    *,
+    project_root: str | Path | None = None,
+    asset_lookup: dict[str, Any] | None = None,
+) -> str:
+    """Resolve cuts[].source from asset id, absolute path, or project-relative path.
+
+    Project-relative values like ``assets/video/seg_beat_01.mp4`` are joined to
+    ``project_root``. Missing files keep the resolved path so callers can error
+    with a concrete location instead of a bare relative string.
+    """
+    raw = (source or "").strip()
+    if not raw:
+        return raw
+    if asset_lookup and raw in asset_lookup:
+        looked = str((asset_lookup[raw] or {}).get("path") or raw).strip()
+        if looked and looked != raw:
+            return resolve_cut_source(looked, project_root=project_root, asset_lookup=None)
+        raw = looked or raw
+    path = Path(raw)
+    if path.is_absolute():
+        return str(path)
+    if project_root:
+        candidate = Path(project_root) / raw
+        return str(candidate.resolve() if candidate.exists() else candidate)
+    return raw
+
+
 class VideoCompose(BaseTool):
     name = "video_compose"
     version = "0.1.0"
@@ -439,6 +497,8 @@ class VideoCompose(BaseTool):
         if not cuts:
             return ToolResult(success=False, error="No cuts in edit_decisions")
 
+        project_root = infer_project_root(inputs, edit_decisions)
+
         # Resolve subtitle style using the layered priority resolver
         # (explicit > edit_decisions > playbook > defaults)
         playbook_data = inputs.get("playbook")
@@ -462,7 +522,9 @@ class VideoCompose(BaseTool):
 
         try:
             for i, cut in enumerate(cuts):
-                source = Path(cut["source"])
+                source = Path(
+                    resolve_cut_source(str(cut.get("source") or ""), project_root=project_root)
+                )
                 if not source.exists():
                     return ToolResult(success=False, error=f"Cut source not found: {source}")
 
@@ -1266,11 +1328,15 @@ class VideoCompose(BaseTool):
             except Exception as e:
                 log.warning("Could not compute slideshow risk: %s", e)
 
-        # --- 3. Missing renderer_family (BLOCK — must be set at proposal) ---
-        if not renderer_family:
+        # --- 3. Missing renderer_family ---
+        # FFmpeg concat of already-rendered clips does not use a scene family.
+        # Remotion/HyperFrames still require it; fail clearly instead of hanging.
+        render_runtime_locked = (edit_decisions.get("render_runtime") or "").strip().lower()
+        if not renderer_family and render_runtime_locked != "ffmpeg":
             blocks.append(
                 "No renderer_family in edit_decisions. "
-                "renderer_family must be set at proposal stage and locked before compose. "
+                "renderer_family must be set at proposal stage and locked before compose "
+                "(not required when render_runtime is ffmpeg). "
                 "Re-run the proposal stage with a renderer_family selection."
             )
 
@@ -1371,13 +1437,17 @@ class VideoCompose(BaseTool):
         if not cuts:
             return ToolResult(success=False, error="No cuts in edit_decisions")
 
-        # Resolve asset IDs in cuts to file paths
+        # Resolve asset IDs and project-relative paths (assets/video/...)
+        project_root = infer_project_root(inputs, edit_decisions)
         resolved_cuts = []
         for cut in cuts:
             source_id = cut.get("source", "")
             resolved_cut = dict(cut)
-            if source_id in asset_lookup:
-                resolved_cut["source"] = asset_lookup[source_id]["path"]
+            resolved_cut["source"] = resolve_cut_source(
+                str(source_id or ""),
+                project_root=project_root,
+                asset_lookup=asset_lookup,
+            )
             resolved_cuts.append(resolved_cut)
 
         # Remotion Explainer expects audio.narration.src (not segments/asset_id).
@@ -1663,6 +1733,10 @@ class VideoCompose(BaseTool):
         compose_inputs = dict(inputs)
         compose_inputs["edit_decisions"] = dict(edit_decisions, cuts=resolved_cuts)
         compose_inputs["output_path"] = str(output_path)
+        if not compose_inputs.get("project_root"):
+            root = infer_project_root(inputs, edit_decisions)
+            if root:
+                compose_inputs["project_root"] = str(root)
         if subtitle_path:
             compose_inputs["subtitle_path"] = subtitle_path
         if profile:

@@ -52,3 +52,9 @@
 **环境口径（02）：** 旁白主推 **Edge-TTS**；**HyperFrames 建议装、可跳过**（不挡 `verify_ready`）；**Piper 仅离线可选**，默认不下载模型。
 
 细节、缺步路由、Git 双推、与上游 pipeline 的关系 → **全部见 `AGENT_GUIDE.md`**。
+
+## 版本身份（v0.5.0）
+
+- 逻辑分层（不搬家）：[`PRODUCT_MAP.md`](PRODUCT_MAP.md)
+- 发布清单：[`distribution/manifests/release-manifest.json`](distribution/manifests/release-manifest.json)
+- 本机安装次数 / 工作区根 / 环境快照文件：v0.6 再定，路径将写在本节便于扫读

@@ -1,0 +1,19 @@
+{
+  "version": "0.5.0",
+  "channel": "stable",
+  "released_at": "2026-08-17",
+  "minimum_python": "3.10",
+  "requires_mcp_restart": true,
+  "project_schema_migrations": [],
+  "changes": [
+    "Backlot B1/B1.1/B2：面板选择、审批包、快速模式 v2",
+    "商品素材分配与生成图审查门禁",
+    "compose 支持项目相对路径 assets/video/… 并正式写出 final.mp4",
+    "backlot open 写启动日志，失败仍打印项目网址"
+  ],
+  "known_limits": [
+    "尚无用户工作区安装器与聊天检查更新",
+    "网页点击后自动出片属于 v0.6",
+    "轻度 Demo 仍存在，电商宣传片将在 v0.6 改为默认主路径"
+  ]
+}

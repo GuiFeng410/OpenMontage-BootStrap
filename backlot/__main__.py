@@ -27,6 +27,22 @@ def _port() -> int:
         return DEFAULT_PORT
 
 
+def _board_url(port: int, project_id: str | None) -> str:
+    if project_id:
+        return f"http://127.0.0.1:{port}/p/{project_id}"
+    return f"http://127.0.0.1:{port}/"
+
+
+def _log_path() -> "Path":
+    from pathlib import Path
+
+    from lib.paths import REPO_ROOT
+
+    log_dir = REPO_ROOT / ".backlot"
+    log_dir.mkdir(parents=True, exist_ok=True)
+    return log_dir / "server.log"
+
+
 def _server_alive(port: int) -> bool:
     try:
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=1.5) as resp:
@@ -35,12 +51,18 @@ def _server_alive(port: int) -> bool:
         return False
 
 
-def _spawn_server(port: int) -> None:
-    """Start the server as a detached background process."""
+def _spawn_server(port: int):
+    """Start the server as a detached background process; log stdout/stderr."""
+    from pathlib import Path
+
+    log_path = _log_path()
     cmd = [sys.executable, "-m", "backlot", "serve", "--port", str(port)]
+    log_fh = open(log_path, "a", encoding="utf-8")
+    log_fh.write(f"\n--- spawn port={port} ---\n")
+    log_fh.flush()
     kwargs: dict = {
-        "stdout": subprocess.DEVNULL,
-        "stderr": subprocess.DEVNULL,
+        "stdout": log_fh,
+        "stderr": log_fh,
         "stdin": subprocess.DEVNULL,
     }
     if os.name == "nt":
@@ -50,15 +72,19 @@ def _spawn_server(port: int) -> None:
     else:
         kwargs["start_new_session"] = True
     subprocess.Popen(cmd, **kwargs)
+    return Path(log_path)
 
 
 def cmd_open(project_id: str | None) -> int:
     port = _port()
+    url = _board_url(port, project_id)
+    log_path = None
     if not _server_alive(port):
         try:
-            _spawn_server(port)
+            log_path = _spawn_server(port)
         except Exception as exc:
-            print(f"backlot: could not start server ({exc}) — continuing without the board")
+            print(f"backlot: {url}")
+            print(f"backlot: could not start server ({exc})")
             return 1
         deadline = time.time() + 15
         while time.time() < deadline:
@@ -66,11 +92,10 @@ def cmd_open(project_id: str | None) -> int:
                 break
             time.sleep(0.4)
         else:
-            print("backlot: server did not come up in time — continuing without the board")
+            print(f"backlot: {url}")
+            extra = f" log={log_path}" if log_path else ""
+            print(f"backlot: server did not come up in time{extra}")
             return 1
-    url = f"http://127.0.0.1:{port}/"
-    if project_id:
-        url = f"http://127.0.0.1:{port}/p/{project_id}"
     try:
         webbrowser.open(url)
     except Exception:

@@ -243,30 +243,52 @@ def compose_start(
     manifest = _parse_json_obj(asset_manifest_json, "asset_manifest_json")
     proposal = _parse_json_obj(proposal_packet_json, "proposal_packet_json") if proposal_packet_json else None
 
+    project_root = None
+    pid = str(edit.get("project_id") or "").strip()
+    if pid:
+        try:
+            from openmontage.mcp.common.sandbox import project_dir
+
+            project_root = str(project_dir(pid))
+        except Exception:
+            from lib.paths import PROJECTS_DIR
+
+            project_root = str(PROJECTS_DIR / pid)
+
     job = create_job(
         "compose_render",
         meta={"output_path": out, "operation": "render"},
     )
 
     def worker(job_id: str) -> None:
-        if read_job(job_id).get("status") == "cancelled":
-            return
-        update_job(job_id, progress=0.2)
-        tool = get_tool("video_compose")
-        inputs: dict[str, Any] = {
-            "operation": "render",
-            "edit_decisions": edit,
-            "asset_manifest": manifest,
-            "output_path": out,
-        }
-        if proposal:
-            inputs["proposal_packet"] = proposal
-        result = tool.execute(inputs)
-        payload = tool_result_to_dict(result)
-        if not payload.get("success"):
-            update_job(job_id, status="failed", error=payload.get("error") or "compose failed", result=payload)
-            return
-        update_job(job_id, result=payload, progress=0.95)
+        try:
+            if read_job(job_id).get("status") == "cancelled":
+                return
+            update_job(job_id, progress=0.2)
+            tool = get_tool("video_compose")
+            inputs: dict[str, Any] = {
+                "operation": "render",
+                "edit_decisions": edit,
+                "asset_manifest": manifest,
+                "output_path": out,
+            }
+            if proposal:
+                inputs["proposal_packet"] = proposal
+            if project_root:
+                inputs["project_root"] = project_root
+            result = tool.execute(inputs)
+            payload = tool_result_to_dict(result)
+            if not payload.get("success"):
+                update_job(
+                    job_id,
+                    status="failed",
+                    error=payload.get("error") or "compose failed",
+                    result=payload,
+                )
+                return
+            update_job(job_id, result=payload, progress=0.95)
+        except Exception as exc:
+            update_job(job_id, status="failed", error=str(exc))
 
     start_background(job["job_id"], worker)
     return {"job_id": job["job_id"], "status": "queued", "output_path": out}
