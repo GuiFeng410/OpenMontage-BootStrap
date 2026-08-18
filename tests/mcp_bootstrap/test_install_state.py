@@ -68,8 +68,20 @@ def test_scan_and_snapshot_never_write_secret_values(tmp_path, monkeypatch) -> N
     assert "kling-secret-do-not-leak-456" not in text
     assert snap["state"]["verify_ready"] is True
     assert snap["state"]["latest_project_id"] == "shop-demo"
+    assert snap["state"]["existing_project_count"] == 0
     assert snap["state"]["video_key_present"] is True
     assert "TOKENHUB_API_KEY" in snap["state"]["video_key_names_present"]
+
+
+def test_snapshot_counts_existing_projects(tmp_path, monkeypatch) -> None:
+    (tmp_path / ".env-example.md").write_text(EXAMPLE, encoding="utf-8")
+    project = tmp_path / "projects" / "used-before"
+    project.mkdir(parents=True)
+    (project / "project.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    snap = snapshot_install_state(repo_root=tmp_path)
+    assert snap["state"]["existing_project_count"] == 1
+    assert snap["state"]["verify_ready"] is False
 
 
 def test_snapshot_keeps_project_id_when_rescan(tmp_path, monkeypatch) -> None:
@@ -79,6 +91,7 @@ def test_snapshot_keeps_project_id_when_rescan(tmp_path, monkeypatch) -> None:
     again = snapshot_install_state(repo_root=tmp_path, verify_ready=False)
     assert again["state"]["latest_project_id"] == "keep-me"
     assert again["state"]["verify_ready"] is False
+    assert again["state"]["existing_project_count"] == 0
 
 
 def test_repo_env_example_excludes_oss_and_includes_aliases() -> None:

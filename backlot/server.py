@@ -184,12 +184,66 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     async def health() -> dict:
+        from lib.library_create import public_install_flags
+
+        flags = public_install_flags()
         return {
             "ok": True,
             "app": "backlot",
             "projects_dir": str(PROJECTS_DIR),
             "runner_alive": _runner_alive(),
+            **flags,
         }
+
+    # Library create is a local write: it calls produce_init_project after
+    # install-state.verify_ready, and never calls paid generate APIs.
+    @app.post("/api/library/create-project")
+    async def create_library_project(request: Request) -> JSONResponse:
+        from lib.library_create import LibraryCreateError, create_library_project as create_project
+
+        content_type = (request.headers.get("content-type") or "").lower()
+        asset_files: list[tuple[str, bytes]] = []
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            payload = {
+                "title": form.get("title") or "",
+                "review_mode": form.get("review_mode") or "",
+                "duration_seconds": form.get("duration_seconds"),
+                "asset_location": form.get("asset_location") or form.get("product_url") or "",
+            }
+            uploads = form.getlist("files")
+            for item in uploads:
+                filename = getattr(item, "filename", "") or "asset"
+                read = getattr(item, "read", None)
+                data = await read() if read else b""
+                if data:
+                    asset_files.append((str(filename), data))
+        else:
+            try:
+                payload = await request.json()
+            except Exception:
+                raise HTTPException(status_code=400, detail="invalid JSON body")
+            if not isinstance(payload, dict):
+                raise HTTPException(status_code=400, detail="body must be a JSON object")
+        try:
+            result = await asyncio.to_thread(
+                create_project,
+                title=str(payload.get("title") or ""),
+                review_mode=str(payload.get("review_mode") or ""),
+                duration_seconds=payload.get("duration_seconds"),
+                asset_location=str(
+                    payload.get("asset_location") or payload.get("product_url") or ""
+                ),
+                asset_files=asset_files,
+            )
+        except LibraryCreateError as exc:
+            raise HTTPException(
+                status_code=exc.http_status,
+                detail={"code": exc.code, "friendly_zh": exc.friendly_zh},
+            ) from exc
+        _invalidate_summary(result["project_id"])
+        hub.publish(result["project_id"])
+        return JSONResponse(status_code=201, content=result)
 
     @app.get("/api/projects")
     async def projects() -> list:

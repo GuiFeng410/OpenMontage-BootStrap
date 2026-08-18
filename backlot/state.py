@@ -931,6 +931,15 @@ def _build_commercial_board(
     ledger_doc = artifacts.get("asset_ledger") or {}
     precheck_doc = artifacts.get("asset_precheck") or {}
     review_mode = profile.get("review_mode") or overview_doc.get("review_mode") or "normal"
+    from lib.review_interrupt import (
+        confirm_stop_ids,
+        normalize_review_preset,
+        review_mode_zh as interrupt_mode_zh,
+        user_progress,
+    )
+    review_preset = normalize_review_preset(profile.get("review_mode_preset"))
+    confirm_ids = list(confirm_stop_ids(review_preset))
+    progress = user_progress(stages, review_preset)
     usd_cny = float(profile.get("usd_cny_rate") or budget.get("usd_cny_rate") or 7.2)
     card_mode = _commercial_card_mode(stages)
     show_preview = card_mode == "produce"
@@ -1996,11 +2005,17 @@ def _build_commercial_board(
     motion_mix_zh = "运镜约 50% / AI 约 50%" if motion_mix == "1:1" else str(motion_mix or "")
 
     tier_labels = {"heavy": "重", "medium": "中", "light": "轻"}
-    mode_labels = {"pro": "专业", "normal": "普通"}
+    mode_labels = {"pro": "专业", "normal": "普通", "minimal": "极简"}
+    display_mode_zh = interrupt_mode_zh(review_preset, review_mode) or mode_labels.get(
+        review_mode, review_mode
+    )
     candidate_labels = {"stable_dual": "稳定双候选", "adaptive": "自适应"}
 
     return {
-        "review_mode": review_mode,
+        "review_mode": review_preset or review_mode,
+        "review_mode_preset": review_preset,
+        "confirm_stop_ids": confirm_ids,
+        "user_stage_zh": progress.get("label_zh"),
         "card_mode": card_mode,
         "show_preview": show_preview,
         "show_players": show_players,
@@ -2010,7 +2025,8 @@ def _build_commercial_board(
             "duration_seconds": profile.get("duration_seconds") or brief.get("duration_seconds") or duration,
             "production_tier": tier_labels.get(profile.get("production_tier"), profile.get("production_tier")),
             "video_channel": (profile.get("video_channel") or brief.get("channel", {}).get("video_channel") or "").upper(),
-            "review_mode_zh": mode_labels.get(review_mode, review_mode),
+            "review_mode_zh": display_mode_zh,
+            "imported_asset_count": profile.get("imported_asset_count"),
             "motion_mix_zh": motion_mix_zh,
             "budget_cny": budget_cny,
             "style_label_zh": profile.get("style_label_zh"),
@@ -2365,6 +2381,7 @@ def _last_activity(project_dir: Path) -> float:
     latest = 0.0
     try:
         candidates = list(project_dir.glob("checkpoint_*.json"))
+        candidates.append(project_dir / "project.json")
         candidates.append(project_dir / "events.jsonl")
         art = project_dir / "artifacts"
         if art.is_dir():
@@ -2485,6 +2502,14 @@ def summarize_project(project_dir: Path) -> dict[str, Any]:
     state = load_board_state(project_dir)
     active = next((s for s in state["stages"] if s["status"] in ("in_progress", "awaiting_human")), None)
     done = [s for s in state["stages"] if s["status"] == "completed"]
+    commercial = state.get("commercial") or {}
+    confirm_ids = commercial.get("confirm_stop_ids") or []
+    allowed = set(confirm_ids)
+    visible_stages = [
+        s for s in state["stages"]
+        if not s.get("undeclared") and (not allowed or s["name"] in allowed)
+    ]
+    brief = commercial.get("brief_summary") or {}
     return {
         "project_id": state["project_id"],
         "title": state["title"],
@@ -2497,11 +2522,16 @@ def summarize_project(project_dir: Path) -> dict[str, Any]:
         "awaiting_human": bool(active and active["status"] == "awaiting_human"),
         "stage_states": [
             {"name": s["name"], "status": s["status"]}
-            for s in state["stages"] if not s.get("undeclared")
+            for s in visible_stages
         ],
         "completed_count": len(done),
         "render_count": len(state["media"]["renders"]),
         "scene_count": len((state["storyboard"] or {}).get("scenes", [])),
+        "review_mode_preset": commercial.get("review_mode_preset"),
+        "review_mode_zh": brief.get("review_mode_zh"),
+        "user_stage_zh": commercial.get("user_stage_zh"),
+        "production_tier_zh": brief.get("production_tier"),
+        "imported_asset_count": brief.get("imported_asset_count"),
     }
 
 

@@ -3,6 +3,10 @@ import {
   buildCreateProductVideoPrompt,
   copyCreatePrompt,
   formatServiceInfo,
+  getReviewModeRoute,
+  listReviewModes,
+  readStoredReviewMode,
+  writeStoredReviewMode,
 } from "/ui/library-onboarding.js";
 
 const grid = document.getElementById("grid");
@@ -19,6 +23,7 @@ const LABELS = {
   "unknown": "未识别管线",
 };
 let currentTheme = localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
+let creatingProject = false;
 
 function applyTheme(theme) {
   currentTheme = theme === "light" ? "light" : "dark";
@@ -57,30 +62,215 @@ function miniRail(states) {
   return rail;
 }
 
+let selectedReviewMode = "normal";
+let lastOnboardingHealth = { projects_dir: "未提供" };
+let lastProjectCount = 0;
+
+function currentReviewMode() {
+  return readStoredReviewMode(window.sessionStorage) || selectedReviewMode;
+}
+
+function setReviewMode(mode) {
+  selectedReviewMode = writeStoredReviewMode(window.sessionStorage, mode);
+  renderOnboarding(lastOnboardingHealth, lastProjectCount);
+}
+
+function renderModeRoute(mode) {
+  const route = getReviewModeRoute(mode);
+  const modes = listReviewModes();
+  const picker = el("div", {
+    class: "library-mode-picker",
+    role: "radiogroup",
+    "aria-label": "评审方式",
+  });
+  for (const item of modes) {
+    const selected = item.id === route.id;
+    picker.append(el("button", {
+      type: "button",
+      class: "library-mode-btn" + (selected ? " selected" : ""),
+      role: "radio",
+      "aria-checked": selected ? "true" : "false",
+      "data-mode": item.id,
+      onclick: () => {
+        if (item.id !== route.id) setReviewMode(item.id);
+      },
+    }, item.label_zh));
+  }
+
+  const steps = el("ol", { class: "library-mode-steps" });
+  for (const step of route.confirm_steps) {
+    steps.append(el("li", {
+      class: "library-mode-step stop",
+    },
+      el("span", { class: "library-mode-step-index" }, String(step.index)),
+      el("span", { class: "library-mode-step-name" }, step.label_zh),
+      el("span", { class: "library-mode-step-action" }, step.action_zh),
+    ));
+  }
+
+  return el("div", { class: "library-mode-route" },
+    el("p", { class: "library-mode-kicker" }, "评审方式"),
+    picker,
+    el("p", { class: "library-mode-summary" }, route.summary_zh),
+    steps,
+    el("p", { class: "library-mode-note" },
+      "只列出需要你确认的步骤。其余本机接着走。轻度/中度/重度是花钱档位，进流程后再确认。"),
+  );
+}
+
 function renderOnboarding(health, projectCount) {
-  const prompt = buildCreateProductVideoPrompt();
+  lastOnboardingHealth = health || lastOnboardingHealth;
+  lastProjectCount = projectCount;
+  selectedReviewMode = currentReviewMode();
+  const prompt = buildCreateProductVideoPrompt(selectedReviewMode);
   const [serviceLine, countLine, rootLine] = formatServiceInfo({
     host: location.host,
     projectsDir: health?.projects_dir,
     projectCount,
   });
+  const themeField = el("input", {
+    class: "library-create-input",
+    type: "text",
+    required: "",
+    placeholder: "商品主题（必填）",
+    "aria-label": "商品主题",
+  });
+  const durationField = el("input", {
+    class: "library-create-input",
+    type: "number",
+    min: "1",
+    max: "75",
+    placeholder: "时长秒数（可选，上限 75）",
+    "aria-label": "时长秒数",
+  });
+  const assetField = el("input", {
+    class: "library-create-input",
+    type: "text",
+    placeholder: "素材网址（可选）",
+    "aria-label": "素材网址",
+  });
+  const fileInput = el("input", {
+    class: "library-file-input",
+    type: "file",
+    multiple: "",
+    accept: "image/*,video/*",
+    "aria-label": "选择本地文件",
+  });
+  const folderInput = el("input", {
+    class: "library-file-input",
+    type: "file",
+    multiple: "",
+    webkitdirectory: "",
+    directory: "",
+    "aria-label": "选择本地文件夹",
+  });
+  const assetHint = el("span", { class: "library-asset-hint" }, "也可选本机文件或文件夹");
+  const assetList = el("ul", { class: "library-asset-list", "aria-live": "polite" });
+  const selectedFiles = () => [...fileInput.files, ...folderInput.files];
+  const syncAssetHint = () => {
+    const files = selectedFiles();
+    assetList.replaceChildren();
+    if (!files.length) {
+      assetHint.textContent = "也可选本机文件或文件夹";
+      return;
+    }
+    assetHint.textContent = `已选 ${files.length} 个本地文件，创建时导入项目；能否使用仍在「素材检查」确认。`;
+    for (const file of files.slice(0, 12)) {
+      assetList.append(el("li", {}, file.webkitRelativePath || file.name));
+    }
+    if (files.length > 12) {
+      assetList.append(el("li", {}, `……还有 ${files.length - 12} 个`));
+    }
+  };
+  fileInput.addEventListener("change", syncAssetHint);
+  folderInput.addEventListener("change", syncAssetHint);
   const promptField = el("textarea", {
     class: "library-onboarding-prompt",
     readonly: "",
-    rows: "4",
+    rows: "3",
     "aria-label": "创建商品片请求",
   }, prompt);
   const feedback = el("p", {
     class: "library-onboarding-feedback",
     "aria-live": "polite",
-  }, "复制请求后，回聊天发送。");
-  const copyButton = el("button", {
+  }, "填写主题后点开始创建，进入对应确认步骤。");
+  const createButton = el("button", {
     class: "library-onboarding-copy",
     type: "button",
     onclick: async () => {
+      const title = themeField.value.trim();
+      if (!title) {
+        feedback.textContent = "请先填写商品主题";
+        themeField.focus();
+        return;
+      }
+      creatingProject = true;
+      feedback.textContent = "正在创建项目…";
+      createButton.disabled = true;
+      const files = selectedFiles();
+      try {
+        let response;
+        if (files.length) {
+          const form = new FormData();
+          form.append("title", title);
+          form.append("review_mode", currentReviewMode());
+          if (durationField.value !== "") {
+            form.append("duration_seconds", durationField.value);
+          }
+          if (assetField.value.trim()) {
+            form.append("asset_location", assetField.value.trim());
+          }
+          for (const file of files) {
+            form.append("files", file, file.webkitRelativePath || file.name);
+          }
+          response = await fetch("/api/library/create-project", {
+            method: "POST",
+            body: form,
+          });
+        } else {
+          response = await fetch("/api/library/create-project", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              title,
+              asset_location: assetField.value.trim(),
+              duration_seconds: durationField.value === "" ? null : Number(durationField.value),
+              review_mode: currentReviewMode(),
+            }),
+          });
+        }
+        const data = await response.json().catch(() => ({}));
+        const detail = data.detail;
+        const message = (detail && detail.friendly_zh)
+          || (typeof detail === "string" ? detail : "")
+          || data.friendly_zh
+          || "创建失败";
+        if (!response.ok) {
+          feedback.textContent = message;
+          return;
+        }
+        if (data.imported_count) {
+          feedback.textContent = `已导入 ${data.imported_count} 个文件，正在进入流程页…`;
+        }
+        const suffix = new URLSearchParams(location.search).has("static") ? "?static=1" : "";
+        window.location.href = `${data.board_path}${suffix}`;
+      } catch {
+        feedback.textContent = "创建失败。请回聊天，让 Agent 创建项目并打开看板。";
+      } finally {
+        creatingProject = false;
+        createButton.disabled = false;
+      }
+    },
+  }, "开始创建项目");
+  const copyButton = el("button", {
+    class: "library-copy-chat",
+    type: "button",
+    onclick: async () => {
+      const nextPrompt = buildCreateProductVideoPrompt(currentReviewMode());
+      promptField.value = nextPrompt;
       const result = await copyCreatePrompt({
         clipboard: navigator.clipboard,
-        prompt,
+        prompt: nextPrompt,
       });
       if (result.ok) {
         feedback.textContent = "已复制，请回聊天粘贴并发送。";
@@ -90,17 +280,30 @@ function renderOnboarding(health, projectCount) {
       promptField.focus();
       promptField.select();
     },
-  }, "复制“创建商品片”请求");
+  }, "复制到聊天");
 
   onboarding.replaceChildren(
     el("div", { class: "library-onboarding-head" },
       el("div", {},
         el("h2", { id: "onboardingTitle" }, "创建新商品片"),
         el("p", {},
-          "Backlot 负责展示项目和生产证据；正式项目由 Agent 在聊天中创建。"),
+          "选评审方式、填主题，点开始创建后进入流程页按步确认。复制到聊天是退路。"),
       ),
-      copyButton,
+      createButton,
     ),
+    renderModeRoute(selectedReviewMode),
+    el("div", { class: "library-create-fields" },
+      themeField,
+      durationField,
+      el("div", { class: "library-asset-row" },
+        assetField,
+        el("label", { class: "library-file-btn" }, "选择文件", fileInput),
+        el("label", { class: "library-file-btn" }, "选择文件夹", folderInput),
+      ),
+      assetHint,
+      assetList,
+    ),
+    el("div", { class: "library-create-actions" }, copyButton),
     promptField,
     feedback,
     el("div", { class: "library-service-list", "aria-label": "服务信息" },
@@ -133,9 +336,13 @@ function card(p) {
 
   const meta = el("div", { class: "lb-meta" },
     el("span", { class: "chip" }, p.pipeline_type || LABELS.unknown),
+    p.review_mode_zh ? el("span", { class: "chip" }, p.review_mode_zh) : null,
+    p.user_stage_zh ? el("span", { class: "chip" }, p.user_stage_zh) : null,
+    p.production_tier_zh ? el("span", { class: "chip" }, `制作档 ${p.production_tier_zh}`) : null,
+    p.imported_asset_count ? el("span", { class: "chip" }, `${p.imported_asset_count} 个素材`) : null,
     p.scene_count ? el("span", { class: "chip" }, `${p.scene_count} ${LABELS.scenes}`) : null,
     p.render_count ? el("span", { class: "chip" }, `${p.render_count} ${LABELS.renders}`) : null,
-    el("span", { class: "when" }, fmtAgo(p.last_activity)),
+    el("span", { class: "when" }, p.last_activity ? fmtAgo(p.last_activity) : "刚刚"),
   );
 
   const staticSuffix = new URLSearchParams(location.search).has("static") ? "?static=1" : "";
@@ -161,7 +368,9 @@ async function render() {
   document.getElementById("liveText").textContent = liveCount
     ? `${liveCount} ${LABELS.LIVE}`
     : LABELS.IDLE;
-  renderOnboarding(health, projects.length);
+  if (!creatingProject) {
+    renderOnboarding(health, projects.length);
+  }
   grid.innerHTML = "";
   document.getElementById("empty").style.display = projects.length ? "none" : "block";
   for (const p of projects) grid.append(card(p));

@@ -277,6 +277,14 @@ def apply_project_export(
     marker["export_path"] = export_rel
     _write_marker(project_id, marker)
 
+    try:
+        from lib.library_create import remember_machine_seen
+        from lib.paths import REPO_ROOT
+
+        remember_machine_seen(repo_root=REPO_ROOT, latest_project_id=project_id)
+    except Exception:
+        pass
+
     applied = _finish_intent(intent)
     _persist_intent(project_id, applied)
     write_runner_status(

@@ -60,10 +60,17 @@ def _spawn_server(port: int):
     log_fh = open(log_path, "a", encoding="utf-8")
     log_fh.write(f"\n--- spawn port={port} ---\n")
     log_fh.flush()
+    from lib.paths import REPO_ROOT
+
+    env = os.environ.copy()
+    env.setdefault("OPENMONTAGE_P1_ALLOW_WRITES", "true")
+    env.setdefault("PYTHONUTF8", "1")
+    env.setdefault("OPENMONTAGE_PROJECTS_DIR", str(REPO_ROOT / "projects"))
     kwargs: dict = {
         "stdout": log_fh,
         "stderr": log_fh,
         "stdin": subprocess.DEVNULL,
+        "env": env,
     }
     if os.name == "nt":
         kwargs["creationflags"] = (
@@ -144,6 +151,13 @@ def cmd_open(project_id: str | None) -> int:
 def cmd_serve(port: int) -> int:
     import uvicorn
 
+    from lib.library_create import prepare_local_runtime, remember_machine_seen
+
+    prepare_local_runtime()
+    try:
+        remember_machine_seen()
+    except Exception:
+        pass
     uvicorn.run("backlot.server:app", host="127.0.0.1", port=port, log_level="warning")
     return 0
 

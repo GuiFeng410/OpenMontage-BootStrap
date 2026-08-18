@@ -548,8 +548,12 @@ def _stage_edit_gate_project(
 
 
 CREATE_PRODUCT_VIDEO_PROMPT = (
-    "请帮我创建一个新的商品宣传片项目。请按默认推荐引导我确认商品主题、时长、素材、"
-    "制作档位、预算和快速模式；创建后把 Backlot 项目网址发给我。"
+    "请帮我创建一个新的商品宣传片项目。请按普通评审引导我确认商品主题、时长、素材、"
+    "制作档位和预算；创建后把 Backlot 项目网址发给我。"
+)
+CREATE_PRODUCT_VIDEO_PROMPT_PRO = (
+    "请帮我创建一个新的商品宣传片项目。请按专业模式（七步都要我过目）引导我确认商品主题、时长、素材、"
+    "制作档位和预算；创建后把 Backlot 项目网址发给我。"
 )
 
 
@@ -591,11 +595,10 @@ def test_library_shows_service_and_projects_root(staged_backlot_server):
 
             onboarding = page.locator(".library-onboarding")
             expect(onboarding).to_contain_text("创建新商品片")
-            expect(onboarding).to_contain_text(
-                "正式项目由 Agent 在聊天中创建"
-            )
-            expect(page.get_by_role("button", name="复制“创建商品片”请求")).to_be_visible()
-            expect(onboarding).to_contain_text("回聊天发送")
+            expect(onboarding).to_contain_text("开始创建")
+            expect(page.get_by_role("button", name="开始创建项目")).to_be_visible()
+            expect(page.get_by_role("button", name="复制到聊天")).to_be_visible()
+            expect(onboarding).to_contain_text("进入流程页按步确认")
             project_count = page.locator(".lib-card").count()
             expect(onboarding).to_contain_text(
                 f"本地服务：{staged_backlot_server.removeprefix('http://')}"
@@ -640,7 +643,7 @@ def test_library_copy_create_prompt_success(staged_backlot_server):
 
             prompt = page.locator(".library-onboarding-prompt")
             expect(prompt).to_have_value(CREATE_PRODUCT_VIDEO_PROMPT)
-            page.get_by_role("button", name="复制“创建商品片”请求").click()
+            page.get_by_role("button", name="复制到聊天").click()
 
             expect(page.locator(".library-onboarding-feedback")).to_have_text(
                 "已复制，请回聊天粘贴并发送。"
@@ -672,7 +675,7 @@ def test_library_copy_fallback_keeps_text_visible(staged_backlot_server):
             )
             prompt = page.locator(".library-onboarding-prompt")
 
-            page.get_by_role("button", name="复制“创建商品片”请求").click()
+            page.get_by_role("button", name="复制到聊天").click()
 
             expect(page.locator(".library-onboarding-feedback")).to_have_text(
                 "无法自动复制，请选中下方文本并手动复制到聊天。"
@@ -684,6 +687,48 @@ def test_library_copy_fallback_keeps_text_visible(staged_backlot_server):
                 "(node) => node.selectionStart === 0 "
                 "&& node.selectionEnd === node.value.length"
             )
+        finally:
+            browser.close()
+
+
+def test_library_review_mode_updates_route_and_prompt(staged_backlot_server):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + "/?static=1",
+                wait_until="networkidle",
+            )
+
+            expect(page.get_by_role("radio", name="普通")).to_have_attribute(
+                "aria-checked", "true"
+            )
+            expect(page.locator(".library-mode-step")).to_have_count(5)
+            expect(page.locator(".library-mode-step.stop")).to_have_count(5)
+            expect(page.locator(".library-onboarding-prompt")).to_have_value(
+                CREATE_PRODUCT_VIDEO_PROMPT
+            )
+
+            page.get_by_role("radio", name="专业").click()
+
+            expect(page.get_by_role("radio", name="专业")).to_have_attribute(
+                "aria-checked", "true"
+            )
+            expect(page.locator(".library-mode-step.stop")).to_have_count(7)
+            expect(page.locator(".library-mode-step-action")).to_have_text(
+                ["需要你确认"] * 7
+            )
+            expect(page.locator(".library-onboarding-prompt")).to_have_value(
+                CREATE_PRODUCT_VIDEO_PROMPT_PRO
+            )
+            expect(page.locator(".library-mode-route")).to_contain_text("方案确认")
+            expect(page.locator(".library-mode-route")).to_contain_text("交付确认")
+
+            page.get_by_role("radio", name="极简").click()
+            expect(page.locator(".library-mode-step")).to_have_count(3)
+            expect(page.locator(".library-mode-step.stop")).to_have_count(3)
+            expect(page.locator(".library-mode-step.auto")).to_have_count(0)
         finally:
             browser.close()
 
@@ -702,7 +747,7 @@ def test_library_create_prompt_never_posts(staged_backlot_server):
                 staged_backlot_server + "/?static=1",
                 wait_until="networkidle",
             )
-            page.get_by_role("button", name="复制“创建商品片”请求").click()
+            page.get_by_role("button", name="复制到聊天").click()
             page.wait_for_timeout(100)
 
             assert not [

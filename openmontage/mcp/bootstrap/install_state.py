@@ -34,6 +34,7 @@ STATE_FIELDS = (
     "repo_root",
     "projects_dir",
     "latest_project_id",
+    "existing_project_count",
     "video_key_present",
     "video_key_names_present",
     "video_key_sources",
@@ -172,6 +173,7 @@ def _empty_state(repo_root: Path) -> dict[str, Any]:
         "repo_root": str(root),
         "projects_dir": projects,
         "latest_project_id": None,
+        "existing_project_count": 0,
         "video_key_present": False,
         "video_key_names_present": [],
         "video_key_sources": {"env_file": [], "process_env": []},
@@ -189,6 +191,24 @@ def _public_state(data: dict[str, Any], repo_root: Path) -> dict[str, Any]:
     if clean.get("video_key_names_present") is None:
         clean["video_key_names_present"] = []
     return clean
+
+
+def count_existing_projects(projects_dir: Path) -> int:
+    root = Path(projects_dir)
+    if not root.is_dir():
+        return 0
+    count = 0
+    try:
+        children = list(root.iterdir())
+    except OSError:
+        return 0
+    for child in children:
+        try:
+            if child.is_dir() and (child / "project.json").is_file():
+                count += 1
+        except OSError:
+            continue
+    return count
 
 
 def read_install_state(*, repo_root: Path) -> dict[str, Any]:
@@ -229,6 +249,8 @@ def snapshot_install_state(
     state = _public_state(current, repo_root)
     state["repo_root"] = str(Path(repo_root).resolve())
     state["projects_dir"] = os.environ.get("OPENMONTAGE_PROJECTS_DIR") or state.get("projects_dir") or ""
+    projects_dir = Path(state["projects_dir"] or (Path(repo_root) / "projects"))
+    state["existing_project_count"] = count_existing_projects(projects_dir)
     state["video_key_present"] = bool(scan["video_key_present"])
     state["video_key_names_present"] = list(scan["video_key_names_present"])
     state["video_key_sources"] = scan["video_key_sources"]

@@ -388,18 +388,24 @@ const CONTENT_VIEW_LABEL = {
 };
 
 export function commercialFocusStage(s, selectedStage = null) {
-  if (selectedStage) return selectedStage;
-  const awaiting = s.stages.find((x) => x.status === "awaiting_human");
+  const allowed = Array.isArray(s.commercial?.confirm_stop_ids) && s.commercial.confirm_stop_ids.length
+    ? new Set(s.commercial.confirm_stop_ids)
+    : null;
+  const stages = allowed
+    ? (s.stages || []).filter((x) => allowed.has(x.name))
+    : (s.stages || []);
+  if (selectedStage && (!allowed || allowed.has(selectedStage))) return selectedStage;
+  const awaiting = stages.find((x) => x.status === "awaiting_human");
   if (awaiting) return awaiting.name;
-  const active = s.stages.find((x) => x.status === "in_progress");
+  const active = stages.find((x) => x.status === "in_progress");
   if (active) return active.name;
-  // 全完成：默认不揉合集，落到分段制作视图；点终稿/交付才看合集
-  const known = s.stages.filter((x) => !x.undeclared);
+  const known = stages.filter((x) => !x.undeclared);
   if (known.length && known.every((x) => x.status === "completed")) {
-    return "segment_build";
+    return allowed ? "delivery_signoff" : "segment_build";
   }
   for (const name of Object.keys(STAGE_CONTENT_VIEW)) {
-    const st = s.stages.find((x) => x.name === name);
+    if (allowed && !allowed.has(name)) continue;
+    const st = stages.find((x) => x.name === name);
     if (st && ["pending", "in_progress", "failed"].includes(st.status)) return name;
   }
   return "brief_locked";

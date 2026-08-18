@@ -37,6 +37,7 @@ metadata:
 
 `openmontage/skills/openmontage-bootstrap-03-usercheck/references/commercial-video-15s-review.md`
 
+- **极简**：方案→素材→交付；素材通过后直接生成正式段，不做独立试片；只拦技术/费用/缺 Key。  
 - **普通**：方案→试片→初稿/问题片段；不强制逐 beat 分批卡。  
 - **专业**：按 3–4 个 beat 分批展示预览，AI 先做初审，用户反馈后先生成修改清单，并在用户回复 `1` 同意后才执行修改。默认只修改被指出的 beat；衔接问题才扩大到相邻片段。所有批次确认后，才能进行最终 Remotion 时间线合成。  
 - **比例**：遵守简报 `motion_mix` 作为推荐目标（软约束）；审查改方式后允许偏离。  
@@ -338,7 +339,11 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 
 适用：商品宣传，或重度付费视频。轻/中非商品可跳过试片硬闸，但仍遵守费用闸（若已写预算）。
 
-### B1 试片关（强制）
+### B1 试片关
+
+`production_profile.review_mode_preset=minimal`（库页极简）时：**跳过独立试片与试片人审**。`assets_gate=completed` 后直接生成正式第一段；用 `produce_probe_media` 检查可播/时长，费用闸与空 Key 仍停。技术失败或 generate 失败 → 暂停回聊天，不得假装画面已审通过。
+
+普通 / 专业（以及未写 preset 的旧项目）仍走下面强制试片关。
 
 试片也是 video generation。开始前必须确认 `assets_gate=completed` 并重算 unified matrix；只允许 approved 用户图/复用图/I2I 图作为 `ref_image`。任何开放状态都退回 03。
 

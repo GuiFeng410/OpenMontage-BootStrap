@@ -59,10 +59,13 @@ manual copy.
 
 - Library is localized to Chinese.
 - It displays the local service, project count and collapsed projects root.
-- “创建新商品片” copies a chat request; it does not create a project.
+- Review-mode picker (极简 / 普通 / 专业) previews only the confirmation
+  steps for that mode.
+- “开始创建项目”在填好主题后即可点；本机创建项目，不调付费接口。成功后跳到 `/p/<id>` 看板。
+- Copy-to-chat remains a fallback and includes the selected review mode.
+- If create fails (environment missing), the page explains and chat remains the fallback. The Agent still reads `.openmontage/install-state.json` so a finished install is not repeated.
+- Backlot `serve` writes/refreshes `.openmontage/install-state.json` (no secrets) so a new chat can see this machine already used the repo.
 - Clipboard failure keeps a selectable textarea.
-- Formal creation remains Agent/BootStrap in chat.
-- No create/upload POST exists.
 
 ## UI module ownership
 
@@ -77,7 +80,7 @@ manual copy.
 - `board-intent-submit.js`: POST `/intents` helper for pending `decision`
   intents; never posts `approval_bundle`.
 - `library.js`: Library cards, localized status labels and onboarding wiring.
-- `library-onboarding.js`: create-product-video prompt, service info and Clipboard helper.
+- `library-onboarding.js`: create-product-video prompt, review-mode route map, service info and Clipboard helper.
 - `library.css`: Library onboarding and empty-state styles.
 
 Existing selectors and behavior remain compatibility contracts, including

@@ -89,17 +89,32 @@ class TestBacklotServerApi:
     def test_health(self, client, projects_root):
         response = client.get("/api/health")
         assert response.status_code == 200
-        assert response.json() == {
-            "ok": True,
-            "app": "backlot",
-            "projects_dir": str(projects_root),
-        }
+        payload = response.json()
+        assert payload["ok"] is True
+        assert payload["app"] == "backlot"
+        assert payload["projects_dir"] == str(projects_root)
+        assert "verify_ready" in payload
+        assert "video_key_present" in payload
 
     def test_health_exposes_projects_root(self, client):
         payload = client.get("/api/health").json()
         assert payload["ok"] is True
         assert payload["app"] == "backlot"
         assert payload["projects_dir"]
+
+    def test_create_project_rejects_empty_title(self, client, monkeypatch):
+        from lib.library_create import LibraryCreateError
+
+        def boom(**kwargs):
+            raise LibraryCreateError("请先填写商品主题", code="missing_title")
+
+        monkeypatch.setattr("lib.library_create.create_library_project", boom)
+        response = client.post(
+            "/api/library/create-project",
+            json={"title": "", "review_mode": "normal"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "missing_title"
 
     def test_library_static_assets_and_css_cache_bust(self, client):
         css = client.get("/ui/library.css")

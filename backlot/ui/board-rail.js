@@ -68,6 +68,14 @@ function stageSub(st) {
   return "";
 }
 
+function visibleStages(s) {
+  if (!isCommercial(s)) return s.stages || [];
+  const ids = s.commercial?.confirm_stop_ids;
+  if (!Array.isArray(ids) || !ids.length) return s.stages || [];
+  const allowed = new Set(ids);
+  return (s.stages || []).filter((st) => allowed.has(st.name));
+}
+
 export function renderStageRail(s, {
   selectedStage,
   focusStageName,
@@ -75,8 +83,9 @@ export function renderStageRail(s, {
 }) {
   const rail = el("nav", { class: "rail" });
   const commercial = isCommercial(s);
+  const stages = visibleStages(s);
   let pendingIndex = 1;
-  for (const st of s.stages) {
+  for (const st of stages) {
     const cls = st.status === "completed" ? "done"
       : st.status === "in_progress" ? (st.stalled ? "active stalled" : "active")
       : st.status === "awaiting_human" ? "await"

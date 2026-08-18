@@ -82,6 +82,17 @@ function renderSlate(s) {
         el("span", { class: "chip" }, "商品片 · bootstrap-commercial"),
         s.commercial?.brief_summary?.duration_seconds
           ? el("span", { class: "chip" }, `${s.commercial.brief_summary.duration_seconds}s · ${s.commercial.brief_summary.review_mode_zh || ""}`)
+          : (s.commercial?.brief_summary?.review_mode_zh
+            ? el("span", { class: "chip" }, s.commercial.brief_summary.review_mode_zh)
+            : null),
+        s.commercial?.user_stage_zh
+          ? el("span", { class: "chip" }, s.commercial.user_stage_zh)
+          : null,
+        s.commercial?.brief_summary?.production_tier
+          ? el("span", { class: "chip" }, `制作档 ${s.commercial.brief_summary.production_tier}`)
+          : null,
+        s.commercial?.brief_summary?.imported_asset_count
+          ? el("span", { class: "chip" }, `已导入 ${s.commercial.brief_summary.imported_asset_count} 个文件`)
           : null,
         s.commercial?.brief_summary?.style_label_zh
           ? el("span", { class: "chip" }, s.commercial.brief_summary.style_label_zh)
