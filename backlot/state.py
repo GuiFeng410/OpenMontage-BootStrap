@@ -348,7 +348,9 @@ def _apply_board_stop_overlay(stages: list[dict], marker: dict[str, Any]) -> Non
     if not isinstance(stop, dict):
         return
     stage_name = str(stop.get("stage") or "").strip()
-    if not stage_name or stop.get("needs_user_decision") is not True:
+    if not stage_name:
+        return
+    if stop.get("needs_user_decision") is not True and not stop.get("producing_wait"):
         return
     cleaned = strip_recommend(stop)
     for stage in stages:
@@ -1604,7 +1606,20 @@ def _build_commercial_board(
         elif (assignment_matrix.get("assigned") or {}).get(beat_id):
             assignment_status = "user_asset"
         else:
-            assignment_status = "missing"
+            plan_gap = str(plan.get("gap_fill") or "")
+            plan_status = str(plan.get("assignment_status") or "")
+            plan_ref = str(plan.get("ref_image") or plan.get("ref") or "")
+            plan_ref_resolved = (
+                _resolve_commercial_image(project_dir, plan_ref) if plan_ref else None
+            )
+            if (
+                plan_gap == "user_upload"
+                and plan_status == "assigned"
+                and plan_ref_resolved
+            ):
+                assignment_status = "user_asset"
+            else:
+                assignment_status = "missing"
         reuse_status = (
             assignment_status
             if assignment_status in {"reuse_pending", "reuse_approved"}
@@ -1650,6 +1665,15 @@ def _build_commercial_board(
                     "provider": item.get("provider"),
                     "model": item.get("model"),
                 })
+        assignment_reason = assignment_reasons[assignment_status]
+        if (
+            assignment_status == "user_asset"
+            and not closed_user_paths
+            and not (assignment_matrix.get("assigned") or {}).get(beat_id)
+        ):
+            assignment_reason = (
+                "方案已锁定用户图；点「进入下一步」后写入账本并闭环。"
+            )
         beats.append({
             "beat": beat_id,
             "time": first_present(row.get("time"), plan.get("time")),
@@ -1682,7 +1706,7 @@ def _build_commercial_board(
             ),
             "assignment_status": assignment_status,
             "assignment_status_zh": assignment_status_zh[assignment_status],
-            "assignment_reason": assignment_reasons[assignment_status],
+            "assignment_reason": assignment_reason,
             "assignment_warning": assignment_warning,
             "assignment_warnings": card_warnings,
             "required_count": required_count,
@@ -1815,6 +1839,7 @@ def _build_commercial_board(
             "approval_note": meta.get("approval_note"),
             "examples_zh": meta.get("examples_zh"),
             "gap_plan": meta.get("gap_plan") if isinstance(meta.get("gap_plan"), dict) else None,
+            "producing_wait": bool(meta.get("producing_wait")),
         }
 
     def evidence_media(raw: Any) -> dict[str, Any]:
@@ -2185,6 +2210,16 @@ def _attach_commercial_board_echo(project_dir: Path, commercial: dict[str, Any])
     commercial["exported_at"] = marker.get("exported_at")
     commercial["completed"] = is_completed(marker)
     commercial["runner_status"] = read_runner_status(project_dir)
+    stop = marker.get("board_stop") if isinstance(marker.get("board_stop"), dict) else None
+    commercial["board_stop"] = stop
+    if stop and stop.get("producing_wait") and not commercial.get("decision"):
+        commercial["decision"] = {
+            "stage": stop.get("stage") or "delivery_signoff",
+            "title_zh": stop.get("decision_title_zh") or "制作中",
+            "prompt_zh": stop.get("decision_prompt_zh") or "",
+            "options": [],
+            "producing_wait": True,
+        }
 
 
 def _find_poster(project_dir: Path, state: dict) -> Optional[str]:

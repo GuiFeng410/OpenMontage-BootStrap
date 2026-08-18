@@ -174,6 +174,21 @@ test("summary contains pending wording, identity and numbered choices", () => {
   assert.doesNotMatch(summary, /已批准|正式批准|已执行/);
 });
 
+test("assets_gate summary uses start-produce wording", () => {
+  const selected = selectOption(
+    createDraft({
+      projectId: "jade",
+      stage: "assets_gate",
+      revision: "h1",
+    }),
+    "assets",
+    { id: "continue", label_zh: "开始出片" },
+  );
+  const summary = summarizeDraft(selected);
+  assert.match(summary, /点「开始出片」后请留在本页/);
+  assert.doesNotMatch(summary, /点「进入下一步」后请留在本页/);
+});
+
 test("a draft restores only for the same revision", () => {
   const storage = memoryStorage();
   const draft = selectOption(baseDraft(), "tier", {

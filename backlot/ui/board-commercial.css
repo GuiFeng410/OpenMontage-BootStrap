@@ -28,7 +28,12 @@
   gap: 8px;
   margin-bottom: 12px;
 }
-.commercial-intent-status-list { display: grid; gap: 6px; }
+.commercial-fold > summary {
+  cursor: pointer;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.commercial-fold[open] > summary { margin-bottom: 10px; }
 .commercial-intent-status-row { line-height: 1.5; }
 .commercial-pause-friendly { line-height: 1.55; }
 .commercial-pause-question { color: var(--text-2); line-height: 1.55; }

@@ -39,13 +39,35 @@ def projects_root(projects_dir: Path | None = None) -> Path:
     return Path(os.environ.get("OPENMONTAGE_PROJECTS_DIR") or DEFAULT_PROJECTS_DIR)
 
 
+PRODUCING_WAIT_ZH = (
+    "素材已确认。成片尚未就绪，请留在本页等待制作。"
+    "成片出现后即可在本页预览并导出。"
+)
+
+
+def primary_submit_label_zh(stage: str) -> str:
+    if stage == "assets_gate":
+        return "开始出片"
+    return "进入下一步"
+
+
+def final_video_ready(project_id: str, *, projects_dir: Path | None = None) -> bool:
+    path = projects_root(projects_dir) / project_id / "renders" / "final.mp4"
+    return path.is_file() and path.stat().st_size > 0
+
+
 def stop_options(stage: str) -> list[dict[str, str]]:
     label = STAGE_LABEL_ZH.get(stage, stage)
+    continue_label = primary_submit_label_zh(stage)
+    if stage == "assets_gate":
+        continue_desc = "确认素材无误后，按已锁定档位开始生成成片。"
+    else:
+        continue_desc = f"确认当前「{label}」内容，继续后面的步骤。"
     return [
         {
             "id": "continue",
-            "label_zh": "同意，进入下一步",
-            "description_zh": f"确认当前「{label}」内容，继续后面的步骤。",
+            "label_zh": continue_label if stage == "assets_gate" else "同意，进入下一步",
+            "description_zh": continue_desc,
         },
         {
             "id": "revise",
@@ -63,12 +85,28 @@ def stop_card_metadata(
 ) -> dict[str, Any]:
     label = STAGE_LABEL_ZH.get(stage, stage)
     prompt = f"请确认「{label}」后进入下一步。"
+    if stage == "assets_gate":
+        prompt = "请确认素材后开始出片。成片将出现在交付确认页。"
     metadata: dict[str, Any] = {
         "needs_user_decision": True,
         "decision_title_zh": label,
         "decision_prompt_zh": prompt,
         "decision_options": stop_options(stage),
     }
+    if stage == "delivery_signoff" and project_id:
+        if not final_video_ready(project_id, projects_dir=projects_dir):
+            return {
+                "needs_user_decision": False,
+                "producing_wait": True,
+                "decision_title_zh": "制作中",
+                "decision_prompt_zh": PRODUCING_WAIT_ZH,
+                "decision_options": [],
+            }
+        metadata["decision_prompt_zh"] = (
+            "成片已就绪，请在本页预览。确认后点「结束并导出项目」。"
+        )
+        metadata["decision_options"] = []
+        metadata["needs_user_decision"] = False
     if stage == "brief_locked" and project_id:
         from lib.board_gap_plan import build_gap_snapshot
 
@@ -109,11 +147,30 @@ def _preset_from_marker(marker: dict[str, Any]) -> str | None:
     )
 
 
+def _read_stage_checkpoint(
+    root: Path,
+    project_id: str,
+    name: str,
+    projects_dir: Path | None,
+) -> dict[str, Any] | None:
+    try:
+        return read_checkpoint(root, project_id, name)
+    except CheckpointValidationError:
+        if name == "delivery_signoff" and not final_video_ready(
+            project_id, projects_dir=projects_dir
+        ):
+            return {
+                "status": "in_progress",
+                "metadata": {"producing_wait": True},
+            }
+        raise
+
+
 def _stage_rows(project_id: str, projects_dir: Path | None = None) -> list[dict[str, Any]]:
     root = projects_root(projects_dir)
     rows: list[dict[str, Any]] = []
     for name in COMMERCIAL_STAGE_ORDER:
-        checkpoint = read_checkpoint(root, project_id, name)
+        checkpoint = _read_stage_checkpoint(root, project_id, name, projects_dir)
         status = "pending"
         metadata: dict[str, Any] = {}
         if isinstance(checkpoint, dict):
@@ -123,6 +180,22 @@ def _stage_rows(project_id: str, projects_dir: Path | None = None) -> list[dict[
                 metadata = maybe_meta
         rows.append({"name": name, "status": status, "metadata": metadata})
     return rows
+
+
+def _effective_stop_status(
+    name: str,
+    row: dict[str, Any],
+    project_id: str,
+    projects_dir: Path | None,
+) -> str:
+    status = str(row.get("status") or "pending")
+    if (
+        name == "delivery_signoff"
+        and status == "completed"
+        and not final_video_ready(project_id, projects_dir=projects_dir)
+    ):
+        return "in_progress"
+    return status
 
 
 def current_confirm_stop(
@@ -135,7 +208,7 @@ def current_confirm_stop(
     by_name = {row["name"]: row for row in _stage_rows(project_id, projects_dir)}
     for name in stops:
         row = by_name.get(name) or {}
-        if str(row.get("status") or "pending") != "completed":
+        if _effective_stop_status(name, row, project_id, projects_dir) != "completed":
             return name
     return None
 
@@ -157,7 +230,7 @@ def next_confirm_stop(
         if not passed:
             continue
         row = by_name.get(name) or {}
-        if str(row.get("status") or "pending") != "completed":
+        if _effective_stop_status(name, row, project_id, projects_dir) != "completed":
             return name
     return None
 
@@ -165,6 +238,14 @@ def next_confirm_stop(
 def _has_option_card(metadata: dict[str, Any]) -> bool:
     options = metadata.get("decision_options")
     return bool(metadata.get("needs_user_decision")) and isinstance(options, list) and bool(options)
+
+
+def _approval_kwargs_from_checkpoint(current: dict[str, Any]) -> dict[str, bool]:
+    """Preserve gate flags when patching metadata on an existing checkpoint."""
+    return {
+        "human_approval_required": bool(current.get("human_approval_required")),
+        "human_approved": bool(current.get("human_approved")),
+    }
 
 
 def write_stop_card(
@@ -175,7 +256,17 @@ def write_stop_card(
     projects_dir: Path | None = None,
 ) -> dict[str, Any]:
     root = projects_root(projects_dir)
-    current = read_checkpoint(root, project_id, stage) or {}
+    try:
+        current = read_checkpoint(root, project_id, stage) or {}
+    except CheckpointValidationError:
+        if stage == "delivery_signoff" and not final_video_ready(
+            project_id, projects_dir=projects_dir
+        ):
+            stale = root / project_id / f"checkpoint_{stage}.json"
+            stale.unlink(missing_ok=True)
+            current = {}
+        else:
+            raise
     status = str(current.get("status") or "in_progress")
     if status in {"", "pending"}:
         status = "in_progress"
@@ -185,15 +276,25 @@ def write_stop_card(
     write_kwargs = {
         "pipeline_type": str(current.get("pipeline_type") or pipeline_type),
         "metadata_patch": metadata,
-        "metadata_remove_keys": ("recommendation_zh", "examples_zh"),
+        "metadata_remove_keys": (
+            "recommendation_zh",
+            "examples_zh",
+            "minimal_plan_signoff",
+        ),
+        **_approval_kwargs_from_checkpoint(current),
     }
     if status == "completed":
-        return {
-            "path": str(root / project_id / f"checkpoint_{stage}.json"),
-            "stage": stage,
-            "status": "completed",
-            "skipped": True,
-        }
+        if stage == "delivery_signoff" and not final_video_ready(
+            project_id, projects_dir=projects_dir
+        ):
+            status = "in_progress"
+        else:
+            return {
+                "path": str(root / project_id / f"checkpoint_{stage}.json"),
+                "stage": stage,
+                "status": "completed",
+                "skipped": True,
+            }
     try:
         path, written, _marker = merge_write_checkpoint(
             root, project_id, stage, status, {}, **write_kwargs
@@ -235,6 +336,7 @@ def clear_stop_card(
         pipeline_type=str(current.get("pipeline_type") or pipeline_type),
         metadata_patch={"needs_user_decision": False},
         metadata_remove_keys=DECISION_STALE_KEYS,
+        **_approval_kwargs_from_checkpoint(current),
     )
 
 
@@ -247,7 +349,10 @@ def ensure_current_stop_card(
     stage = current_confirm_stop(project_id, marker, projects_dir=projects_dir)
     if not stage:
         return None
-    current = read_checkpoint(projects_root(projects_dir), project_id, stage) or {}
+    try:
+        current = read_checkpoint(projects_root(projects_dir), project_id, stage) or {}
+    except CheckpointValidationError:
+        current = {}
     metadata = current.get("metadata") if isinstance(current.get("metadata"), dict) else {}
     if _has_option_card(metadata) and "recommendation_zh" not in metadata:
         options = metadata.get("decision_options")

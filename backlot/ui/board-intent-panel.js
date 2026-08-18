@@ -16,6 +16,17 @@ import {
   submitDecisionIntent,
 } from "./board-intent-submit.js";
 
+function primarySubmitLabel(stage) {
+  return stage === "assets_gate" ? "开始出片" : "进入下一步";
+}
+
+function submittedFeedback(stage) {
+  if (stage === "assets_gate") {
+    return "已点开始出片，请留在本页等待本机处理。";
+  }
+  return "已进入下一步，请留在本页等待本机处理。";
+}
+
 const GAP_ACTIONS = [
   { id: "upload", label_zh: "补传", description_zh: "稍后在素材检查页上传。" },
   { id: "i2i", label_zh: "图生图", description_zh: "锁定生图模型；同意方案后才生成。" },
@@ -101,7 +112,7 @@ function renderGapPlan({
     }
   }
   if (!gaps.length) {
-    block.append(el("div", { class: "gap-plan-enough" }, "图已够，确认即可进入下一步。"));
+    block.append(el("div", { class: "gap-plan-enough" }, "图已够，确认方案后进入素材检查。"));
     return block;
   }
   block.append(el("div", { class: "gap-plan-label" }, "缺口四选（每段一项）"));
@@ -304,7 +315,7 @@ export function renderDecisionIntentPanel({
         type: "button",
         class: "commercial-intent-submit",
         disabled: "",
-      }, "进入下一步"),
+      }, primarySubmitLabel(stage)),
       el("button", {
         type: "button",
         onclick: () => {
@@ -322,7 +333,7 @@ export function renderDecisionIntentPanel({
     const note = el("textarea", {
       class: "commercial-intent-note",
       rows: "3",
-      placeholder: "选填意见。不填也可以直接进入下一步。",
+      placeholder: `选填意见。不填也可以直接${primarySubmitLabel(stage)}。`,
       "aria-label": "选填意见",
       oninput: (event) => {
         draft = setDraftNote(draft, event.currentTarget.value);
@@ -367,7 +378,7 @@ export function renderDecisionIntentPanel({
           });
           const result = await submitDecisionIntent({ intent });
           feedback.textContent = result.ok
-            ? "已进入下一步，请留在本页等待本机处理。"
+            ? submittedFeedback(stage)
             : "提交失败，请留在本页重试。";
         } catch {
           feedback.textContent = "提交失败，请留在本页重试。";
@@ -375,7 +386,7 @@ export function renderDecisionIntentPanel({
           submitButton.disabled = false;
         }
       },
-    }, ready ? "进入下一步" : "请先完成缺口选择");
+    }, ready ? primarySubmitLabel(stage) : "请先完成缺口选择");
     body.append(el("div", { class: "commercial-intent-basket" },
       el("div", { class: "commercial-intent-basket-head" },
         el("b", {}, "本步确认"),
@@ -389,7 +400,7 @@ export function renderDecisionIntentPanel({
   body.append(el("div", { class: "commercial-chat-only" },
     stale
       ? "选择已过期，请先清空并重选。"
-      : "点「进入下一步」后请留在本页。意见可不填。"));
+      : `点「${primarySubmitLabel(stage)}」后请留在本页。意见可不填。`));
   return el("div", { id: panelId, class: "notice commercial-notice" },
     el("span", {
       class: "commercial-intent-icon",

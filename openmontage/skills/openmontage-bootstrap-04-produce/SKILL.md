@@ -73,7 +73,7 @@ metadata:
 3. 试片、专业批次、初稿和交付需要用户裁定时，先用 `produce_write_checkpoint` 写入当前阶段证据：`artifacts_json` 带阶段产物，`metadata_json` 带当前唯一决策、选项、推荐、回复示例和 `partial_progress`，`cost_snapshot_json` 带累计费用。
 4. 网页可用时，完整审查卡、候选、抽帧、费用明细放网页；聊天只发“网址或阶段句 + 当前一个问题 + 推荐 + 回复示例”。网页打不开时仍须先发出同一完整 URL，再退回完整 Grill 卡，流程继续。禁止用「看板暂不可用」代替发链接。
 5. 用户在聊天回复后，先 `produce_append_decision` 保存用户原话，再 `produce_approve_checkpoint`；审批调用默认合并当前 checkpoint，禁止以空 artifacts 覆盖证据。
-6. 网页始终只读。不得要求用户在网页点击审批，不得从页面静默进入下一批或付费调用。
+6. 网页点选只写 intent；浏览器不 apply、不读 `.env`、不调付费 API。本机 runner 按已锁简报执行（含开烧）。**主路径不要求用户回聊天走 04。** 极简：素材检查通过后生成正式段；交付页能看成片后再「结束并导出」。聊天出片时 Agent 读本 Skill、调同一套 `produce_*`。
 
 ### 阶段封板（强制 · 与 03 同协议）
 
@@ -188,11 +188,11 @@ produce_list_intents
 7. provider/model/runtime 变化或第 4 条任一费用/质量变化发生时，立即暂停并一次只问一个问题；变更决定须按原 `category + subject` 追加，不得静默替换。
 8. `delivery_signoff` 永远写 `awaiting_human` 并停下等待签收。
 
-快速模式只减少中间打断，不得跳过证据物化、生成图审查、unified matrix、`assets_gate=completed`、试片、项目 preflight、provider registry/MCP availability、费用闸、付费调用确认或最终签收。网页继续只读。
+快速模式只减少中间打断，不得跳过证据物化、生成图审查、unified matrix、`assets_gate=completed`、试片、项目 preflight、provider registry/MCP availability、费用闸、付费调用确认或最终签收。浏览器不调付费 API；开烧与审批由本机 runner 消费 intent。
 
 ### 快速模式 v2（执行）
 
-`fast_track_v1` 项目继续走上一节冻结流程；只有最新合法 `approval_policy.selected="fast_track_v2"` 的项目走本循环。禁止把「直接出片」当审批证据；面板提交也只产生待确认 intent，网页只写 intent，不在浏览器 apply。本机 runner（随 `backlot open`）可 `produce_runner_tick` 代 plan/apply 并写下一网页停点；成功后请用户留在本页点「进入下一步」，不要说「回聊天继续出片」。本轮不写推荐、不调付费生视频。聊天口令「确认面板选择」仍是退路。
+`fast_track_v1` 项目继续走上一节冻结流程；只有最新合法 `approval_policy.selected="fast_track_v2"` 的项目走本循环。禁止把「直接出片」当审批证据；面板提交也只产生待确认 intent，网页只写 intent，不在浏览器 apply。本机 runner（随 `backlot open`）可 `produce_runner_tick` 代 plan/apply 并写下一网页停点或开始制作。成功后请用户留在本页：方案确认点「进入下一步」，素材检查点「开始出片」。不要说「回聊天继续出片」。聊天口令「确认面板选择」仍是退路。
 
 ```text
 produce_plan_approval_bundle
@@ -341,7 +341,7 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 
 ### B1 试片关
 
-`production_profile.review_mode_preset=minimal`（库页极简）时：**跳过独立试片与试片人审**。`assets_gate=completed` 后直接生成正式第一段；用 `produce_probe_media` 检查可播/时长，费用闸与空 Key 仍停。技术失败或 generate 失败 → 暂停回聊天，不得假装画面已审通过。
+`production_profile.review_mode_preset=minimal`（库页极简）时：**跳过独立试片与试片人审**。`assets_gate=completed` 后直接生成正式段；用 `produce_probe_media` 检查可播/时长，费用闸与空 Key 仍停。技术失败或 generate 失败 → **暂停在看板本页**，不得假装画面已审通过。
 
 普通 / 专业（以及未写 preset 的旧项目）仍走下面强制试片关。
 

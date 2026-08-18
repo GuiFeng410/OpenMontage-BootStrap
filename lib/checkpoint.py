@@ -285,8 +285,11 @@ def _validate_commercial_media_file(
     status: str,
     artifacts: dict[str, Any],
     project_dir: Optional[Path],
+    *,
+    minimal_plan_signoff: bool = False,
 ) -> None:
     """Ensure reviewable commercial media exists inside the current project."""
+    del minimal_plan_signoff  # Plan/15: no video-less delivery signoff
     requirement = _COMMERCIAL_MEDIA_REQUIREMENTS.get(stage)
     if (
         pipeline_type != "bootstrap-commercial"
@@ -956,7 +959,32 @@ def _enforce_commercial_stage_order(
         return
 
     stages = get_pipeline_stages(pipeline_type)
-    prior_stages = stages[:stages.index(stage)]
+    prior_stages = stages[: stages.index(stage)]
+
+    confirm_stages: set[str] | None = None
+    marker_path = pipeline_dir / project_id / PROJECT_MARKER_FILENAME
+    try:
+        from lib.review_interrupt import confirm_stop_ids, normalize_review_preset
+
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+        profile = (
+            marker.get("production_profile")
+            if isinstance(marker, dict)
+            else {}
+        )
+        if not isinstance(profile, dict):
+            profile = {}
+        preset = normalize_review_preset(
+            profile.get("review_mode_preset") or profile.get("review_mode")
+        )
+        if preset:
+            confirm_stages = set(confirm_stop_ids(preset))
+    except (OSError, json.JSONDecodeError, UnicodeError, ValueError):
+        confirm_stages = None
+
+    if confirm_stages is not None:
+        prior_stages = [name for name in prior_stages if name in confirm_stages]
+
     incomplete: list[str] = []
     for prior_stage in prior_stages:
         path = _checkpoint_path(pipeline_dir, project_id, prior_stage)

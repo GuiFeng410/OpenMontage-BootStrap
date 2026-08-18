@@ -131,6 +131,41 @@ def _consume_decision(
                     code="brief_lock_failed",
                     safe_message="方案已选出，但本机无法写入合法规划。请留在本页刷新后重试。",
                 ) from exc
+    elif stage == "assets_gate":
+        from lib.board_assets_gate import AssetsGateError, seal_assets_gate
+        from lib.board_gap_plan import stop_action_from_intent
+
+        if stop_action_from_intent(raw) != "revise":
+            try:
+                seal_result = seal_assets_gate(project_id, projects_dir=PROJECTS_DIR)
+                lock_result = {
+                    "action": "continue",
+                    "artifacts": seal_result.get("artifacts") or {},
+                }
+            except AssetsGateError as exc:
+                raise approval_bundle.ApprovalBundleError(
+                    str(exc),
+                    code=exc.code,
+                    safe_message=exc.safe_message,
+                ) from exc
+        else:
+            lock_result = {"action": "revise", "artifacts": {}}
+    elif stage == "delivery_signoff":
+        from lib.board_gap_plan import stop_action_from_intent
+
+        delivery_action = stop_action_from_intent(raw)
+        if delivery_action != "revise" and not _has_final(project_id):
+            raise approval_bundle.ApprovalBundleError(
+                "final video missing",
+                code="final_video_required",
+                safe_message=(
+                    "成片尚未就绪，请留在本页等待制作。有成片后即可预览并导出。"
+                ),
+            )
+        lock_result = {
+            "action": "revise" if delivery_action == "revise" else "continue",
+            "artifacts": {},
+        }
     planned = approval_bundle.plan_approval_bundle(
         project_id,
         intent_id,
@@ -149,6 +184,136 @@ def _consume_decision(
         "intent_id": intent_id,
         "stop_action": (lock_result or {}).get("action") or "continue",
     }
+
+
+def _load_plan_artifacts_from_disk(project_id: str) -> dict[str, Any] | None:
+    project_dir = PROJECTS_DIR / project_id
+    art_dir = project_dir / "artifacts"
+    keys = ("gap_plan", "brief", "asset_precheck", "video_plan", "segment_cards")
+    artifacts: dict[str, Any] = {}
+    for key in keys:
+        path = art_dir / f"{key}.json"
+        if not path.is_file():
+            return None
+        try:
+            loaded = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return None
+        if not isinstance(loaded, dict):
+            return None
+        artifacts[key] = loaded
+    return artifacts
+
+
+def _has_applied_stage_intent(project_id: str, stage: str) -> bool:
+    intents_dir = PROJECTS_DIR / project_id / "intents"
+    if not intents_dir.is_dir():
+        return False
+    for path in sorted(intents_dir.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if str(data.get("stage") or "") != stage:
+            continue
+        if str(data.get("status") or "") != "applied":
+            continue
+        if data.get("intent_type") in {"decision", "approval_bundle"}:
+            return True
+    return False
+
+
+def _has_applied_brief_locked_intent(project_id: str) -> bool:
+    return _has_applied_stage_intent(project_id, "brief_locked")
+
+
+def _recover_stuck_assets_gate(
+    project_id: str,
+    marker: dict[str, Any],
+) -> bool:
+    from lib.checkpoint import read_checkpoint
+    from lib.board_assets_gate import plan_allows_auto_seal, seal_assets_gate
+
+    checkpoint = read_checkpoint(PROJECTS_DIR, project_id, "assets_gate")
+    if not isinstance(checkpoint, dict) or checkpoint.get("status") == "completed":
+        return False
+    project_dir = PROJECTS_DIR / project_id
+    if not plan_allows_auto_seal(project_dir):
+        return False
+    if not _has_applied_stage_intent(project_id, "assets_gate"):
+        return False
+    try:
+        seal_assets_gate(project_id, projects_dir=PROJECTS_DIR)
+        board_advance.advance_after_apply(
+            project_id,
+            "assets_gate",
+            marker,
+            projects_dir=PROJECTS_DIR,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _recover_stuck_brief_locked(
+    project_id: str,
+    marker: dict[str, Any],
+) -> bool:
+    """Complete brief_locked when plan artifacts exist but checkpoint was not advanced."""
+    from lib.checkpoint import read_checkpoint
+
+    checkpoint = read_checkpoint(PROJECTS_DIR, project_id, "brief_locked")
+    if not isinstance(checkpoint, dict) or checkpoint.get("status") == "completed":
+        return False
+    artifacts = _load_plan_artifacts_from_disk(project_id)
+    if not artifacts or not _has_applied_brief_locked_intent(project_id):
+        return False
+    try:
+        _complete_brief_locked(project_id, artifacts)
+        board_advance.advance_after_apply(
+            project_id,
+            "brief_locked",
+            marker,
+            projects_dir=PROJECTS_DIR,
+        )
+        return True
+    except Exception:
+        return False
+
+
+def _recover_stuck_delivery_signoff(
+    project_id: str,
+    marker: dict[str, Any],
+) -> bool:
+    """Reopen delivery when it was marked completed without a final video."""
+    if _has_final(project_id):
+        return False
+    current = board_advance.current_confirm_stop(
+        project_id, marker, projects_dir=PROJECTS_DIR
+    )
+    if current != "delivery_signoff":
+        return False
+    stop = marker.get("board_stop") if isinstance(marker.get("board_stop"), dict) else {}
+    from lib.checkpoint import CheckpointValidationError, read_checkpoint
+
+    try:
+        checkpoint = read_checkpoint(PROJECTS_DIR, project_id, "delivery_signoff")
+    except CheckpointValidationError:
+        checkpoint = {"status": "completed"}
+    already_waiting = bool(stop.get("producing_wait")) and (
+        not isinstance(checkpoint, dict) or checkpoint.get("status") != "completed"
+    )
+    if already_waiting:
+        return False
+    try:
+        seeded = board_advance.ensure_current_stop_card(
+            project_id, marker, projects_dir=PROJECTS_DIR
+        )
+        return bool(seeded)
+    except Exception:
+        return False
 
 
 def tick(
@@ -239,8 +404,25 @@ def tick(
             if next_stop:
                 actions.append("next_stop")
 
+    remaining_early = _list_pending(project_id)
+    recovered = False
+    if not remaining_early and "next_stop" not in actions:
+        marker = board_advance.read_marker(
+            project_id, projects_dir=PROJECTS_DIR
+        ) or marker
+        recovered = _recover_stuck_brief_locked(project_id, marker)
+        if not recovered:
+            recovered = _recover_stuck_assets_gate(project_id, marker)
+        if not recovered:
+            recovered = _recover_stuck_delivery_signoff(project_id, marker)
+        if recovered:
+            actions.append("recover_stuck_stage")
+            marker = board_advance.read_marker(
+                project_id, projects_dir=PROJECTS_DIR
+            ) or marker
+
     seeded = None
-    if "approval_bundle" not in actions:
+    if "approval_bundle" not in actions and not recovered:
         try:
             marker = board_advance.read_marker(
                 project_id, projects_dir=PROJECTS_DIR
@@ -273,6 +455,7 @@ def tick(
         return {"project_id": project_id, **status, "actions": actions}
 
     remaining = _list_pending(project_id)
+    marker = board_advance.read_marker(project_id, projects_dir=PROJECTS_DIR) or marker
     if remaining:
         status = {
             "phase": PHASE_QUEUED,
@@ -280,16 +463,45 @@ def tick(
             "friendly_zh": "选择已提交，本机排队处理中，请留在本页。",
         }
     elif "next_stop" in actions:
+        wait_copy = str((marker.get("board_stop") or {}).get("decision_prompt_zh") or "")
+        next_stage = str((marker.get("board_stop") or {}).get("stage") or "")
+        if (marker.get("board_stop") or {}).get("producing_wait"):
+            friendly = wait_copy or board_advance.PRODUCING_WAIT_ZH
+        else:
+            submit = board_advance.primary_submit_label_zh(next_stage)
+            friendly = (
+                f"面板选择已生效。下一停点已在本页，请点「{submit}」。"
+            )
         status = {
             "phase": PHASE_PRODUCING,
             "runner_alive": runner_alive,
-            "friendly_zh": "面板选择已生效。下一停点已在本页，请点「进入下一步」。本机不会静默付费生视频。",
+            "friendly_zh": friendly,
         }
     elif "seed_stop" in actions or seeded:
+        seed_stage = str((marker.get("board_stop") or {}).get("stage") or "brief_locked")
+        submit = board_advance.primary_submit_label_zh(seed_stage)
         status = {
             "phase": PHASE_PRODUCING,
             "runner_alive": runner_alive,
-            "friendly_zh": "已锁定制作档。请在本页确认当前停点后点「进入下一步」。本机不会静默付费生视频。",
+            "friendly_zh": f"已锁定制作档。请在本页确认当前停点后点「{submit}」。",
+        }
+    elif recovered:
+        rec_stage = str((marker.get("board_stop") or {}).get("stage") or "")
+        if (marker.get("board_stop") or {}).get("producing_wait"):
+            friendly = board_advance.PRODUCING_WAIT_ZH
+        else:
+            submit = board_advance.primary_submit_label_zh(rec_stage)
+            friendly = f"方案已补写完成。下一停点已在本页，请点「{submit}」。"
+        status = {
+            "phase": PHASE_PRODUCING,
+            "runner_alive": runner_alive,
+            "friendly_zh": friendly,
+        }
+    elif actions and not marker.get("board_stop"):
+        status = {
+            "phase": PHASE_IDLE,
+            "runner_alive": runner_alive,
+            "friendly_zh": "当前没有待确认停点。成片出现后请在本页预览并点「结束并导出项目」。",
         }
     elif actions:
         status = {

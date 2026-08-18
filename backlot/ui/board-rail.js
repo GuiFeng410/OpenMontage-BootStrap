@@ -19,8 +19,10 @@ function stageWasCompletedBefore(st) {
 }
 
 function stageSubZh(st) {
-  if (st.status === "awaiting_human") return "等你在本页确认\n点进入下一步继续";
-  if (stageNeedsDecision(st)) return "等你在本页确认\n点进入下一步继续";
+  if (st?.metadata?.producing_wait) return "制作中\n请留在本页等待成片";
+  const nextHint = st?.name === "assets_gate" ? "点开始出片继续" : "点进入下一步继续";
+  if (st.status === "awaiting_human") return `等你在本页确认\n${nextHint}`;
+  if (stageNeedsDecision(st)) return `等你在本页确认\n${nextHint}`;
   if (st.status === "in_progress" && stageWasCompletedBefore(st)) {
     return st.stalled
       ? `重试中·此前已通过\n可能卡住 · ${st.stalled_minutes} 分钟无活动`

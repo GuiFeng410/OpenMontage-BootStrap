@@ -39,7 +39,7 @@ metadata:
 
 ## Scope
 
-**做：** 环境就绪后先扫视频 Key，默认电商宣传片。主题说清则 init 项目并立刻给 Backlot 网址；缺时长/图/预算再问一句。需求不清时再对齐主题与档位，再按档细化，再确认分段规划（商品片落在 Backlot「方案确认 / 素材检查」，见「商品片 ↔ 七阶段」；对用户不必死叫表 1/2/3）。表 3 前先输出 `beat × 所需画面 × 候选图片` 覆盖矩阵，表 3 确认后在 `assets_gate` 关闭补传/I2I/复用/降级与审图子闸。完整分析与选项放网页，聊天一次只问当前一项。只有 `assets_gate=completed` 才交接 `04-produce`。
+**做：** 环境就绪后先扫视频 Key，默认电商宣传片。主题说清则 init 项目并立刻给 Backlot 网址；缺时长/图/预算再问一句。需求不清时再对齐主题与档位，再按档细化，再确认分段规划（商品片落在 Backlot「方案确认 / 素材检查」，见「商品片 ↔ 七阶段」；对用户不必死叫表 1/2/3）。表 3 前先输出 `beat × 所需画面 × 候选图片` 覆盖矩阵，表 3 确认后在 `assets_gate` 关闭补传/I2I/复用/降级与审图子闸。完整分析与选项放网页，聊天一次只问当前一项。网页主路径：素材检查通过后由本机 runner 按已锁简报开烧，**不要把人从看板赶回聊天走 04**。用户主动在聊天出片时，才在 `assets_gate=completed` 后读 `04-produce`。
 
 **不做：** 未明确要求时先推荐轻度 Demo；跳过确认直接 compose；三张表堆在同一条消息；静默填 Key / 调 Stock / 付费 API；伪造用户原话；有视频 Key 就自动开烧；静默换视频渠道；轻度/中度出示付费视频渠模表；表 3 强塞全文旁白；商品片（含重度商品）跳过 `references/product-prompt-template.md` 或 `references/asset-preprocess-gate.md`；以“总张数够”代替 Beat 覆盖；缺图时静默图生图、静默复用或静默硬烧佩戴支；把 Pixverse/video provider 当生图 provider；把未 approved 候选交给 04。
 
@@ -243,7 +243,7 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 
 ### Backlot B2 面板 intent / 快速模式 v2
 
-商品片首轮正式选择可在 Backlot 面板勾选后点击「进入下一步」（旧称「提交待确认」）；网页只写待确认 interaction intent，不代表批准，也不得在浏览器直接 apply。主路径是网页停点：本机 runner apply 后写下一停点卡片；本轮不写推荐、不调付费生视频。聊天口令「确认面板选择」仅作退路。
+商品片首轮正式选择可在 Backlot 面板勾选后点击「进入下一步」；素材检查闭环后主按钮为「开始出片」。网页只写待确认 interaction intent，不代表批准，也不得在浏览器直接 apply。主路径是网页停点：本机 runner apply 后写下一停点或开始制作。聊天口令「确认面板选择」仅作退路。不要把人从看板赶回聊天走 04。
 
 聊天中**只认完全一致的口令** `确认面板选择`。`直接出片`、`好的`、`确认` 都不是面板 intent 的审批证据；其中「直接出片」仍只打开上一节 v1.0 完整确认卡，不能代替该口令。
 
@@ -262,7 +262,7 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 
 新的商品片快速授权统一写 `selected="fast_track_v2"`；记录选项时用 `option_id="fast_track_v2"`，后续 checkpoint metadata 的 `approval_source` 也写 `fast_track_v2`。已有项目中的 `fast_track_v1` 继续按历史协议只读并保持有效：禁止改写历史，也不得仅因 v2 上线要求用户重新授权。
 
-v2 仍遵守既有硬门：网页只读、聊天一次只问一个问题、不静默付费、不静默换渠道/模型，所有生成图必须经过用户审查。完整 evaluate 推进规则见 reference §0.5.1 与 04-produce「快速模式 v2（执行）」。
+v2 仍遵守既有硬门：浏览器不调付费 API、聊天一次只问一个问题、不静默付费、不静默换渠道/模型，所有生成图必须经过用户审查。完整 evaluate 推进规则见 reference §0.5.1 与 04-produce「快速模式 v2（执行）」。
 
 ## 商品片 ↔ 七阶段（强制对照）
 
@@ -279,7 +279,7 @@ v2 仍遵守既有硬门：网页只读、聊天一次只问一个问题、不�
 | 6 | `final_compose` 合成终稿 | **04** | — | 合成进度/技术检查 | 一般不强制问 |
 | 7 | `delivery_signoff` 交付确认 | **04** | — | 终稿合集、质量与累计费用 | 最终签收（三档都停） |
 
-**极简执行（强制）：** `review_mode_preset=minimal` 时，04 在 `assets_gate=completed` 后直接生成正式第一段（不是额外试片）。用 `produce_probe_media` 做技术闸；费用闸、空 Key、生成失败 → 暂停回聊天。禁止假装机器已审「好不好看」。
+**极简执行（强制）：** `review_mode_preset=minimal` 时，素材检查通过后直接生成正式段（不是额外试片），交付页看成片。用 `produce_probe_media` 做技术闸；费用闸、空 Key、生成失败 → **暂停在看板本页**（刷新可用性 / 重试），不要赶回聊天。禁止假装机器已审「好不好看」。
 
 **方案确认阶段内的推荐推进顺序（弹性）：**
 

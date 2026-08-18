@@ -106,7 +106,7 @@ export function summarizeDraft(draft) {
   const note = draft.note.trim();
   if (note) lines.push(`备注：${note}`);
   lines.push(
-    "点「进入下一步」后请留在本页。",
+    `点「${draft.stage === "assets_gate" ? "开始出片" : "进入下一步"}」后请留在本页。`,
     "以上选择仍在等待确认，尚未正式执行。",
   );
   return lines.join("\n");

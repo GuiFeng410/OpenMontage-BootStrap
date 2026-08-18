@@ -28,11 +28,21 @@ export function formatIntentStatusLine(item) {
 
 function renderIntentStatus(list) {
   if (!Array.isArray(list) || !list.length) return null;
-  const body = el("div", { class: "commercial-intent-status-list" });
+  const latestByStage = new Map();
   for (const item of list) {
+    if (!item || item.status === "superseded") continue;
+    const stage = String(item.stage || "unknown");
+    latestByStage.set(stage, item);
+  }
+  const rows = Array.from(latestByStage.values());
+  if (!rows.length) return null;
+  const body = el("div", { class: "commercial-intent-status-list" });
+  for (const item of rows) {
     body.append(el("div", { class: "commercial-intent-status-row" }, formatIntentStatusLine(item)));
   }
-  return el("div", { class: "notice commercial-intent-status" }, body);
+  return el("details", { class: "notice commercial-intent-status commercial-fold" },
+    el("summary", {}, `面板选择记录（${rows.length}）`),
+    body);
 }
 
 function renderFastTrackPause(pause) {
@@ -83,9 +93,34 @@ function renderFinalVideo(projectId, finalVideo) {
 export function renderAwaitingNotice(s, context) {
   const awaiting = s.stages.find((x) => x.status === "awaiting_human") ||
     (isCommercial(s) ? s.stages.find(stageNeedsDecision) : null);
-  if (!awaiting) return null;
+  if (!awaiting) {
+    const producing = s.commercial?.decision?.producing_wait
+      || s.commercial?.board_stop?.producing_wait;
+    if (isCommercial(s) && producing) {
+      const dec = s.commercial?.decision || {};
+      return el("div", { class: "notice commercial-notice" },
+        el("span", { style: "font-size:calc(16px * var(--fs-scale))" }, "◈"),
+        el("div", { class: "commercial-decision-body" },
+          el("b", {}, "制作中"),
+          el("div", {
+            class: "commercial-decision-prompt",
+            style: "white-space:pre-line",
+          }, dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。")));
+    }
+    return null;
+  }
   if (isCommercial(s)) {
     const dec = s.commercial?.decision;
+    if (dec?.producing_wait) {
+      return el("div", { class: "notice commercial-notice" },
+        el("span", { style: "font-size:calc(16px * var(--fs-scale))" }, "◈"),
+        el("div", { class: "commercial-decision-body" },
+          el("b", {}, "制作中"),
+          el("div", {
+            class: "commercial-decision-prompt",
+            style: "white-space:pre-line",
+          }, dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。")));
+    }
     const prompt = dec?.prompt_zh || "请在本页确认后进入下一步。";
     const examples = dec?.examples_zh;
     const options = Array.isArray(dec?.options) ? dec.options : [];
@@ -286,7 +321,12 @@ function renderCommercialAssetPrecheck(s, context) {
     ["已扫描图片", summary.total_images != null ? `${summary.total_images} 张` : null],
     ["低分辨率", summary.low_resolution_count ? `${summary.low_resolution_count} 张` : "无"],
     ["重复文件", summary.duplicate_group_count ? `${summary.duplicate_group_count} 组` : "无"],
-    ["识图辅助", summary.vision_enriched ? `已启用${summary.vision_model ? ` · ${summary.vision_model}` : ""}` : null],
+    [
+      "分类方式",
+      summary.vision_enriched
+        ? `识图模型${summary.vision_model ? ` · ${summary.vision_model}` : ""}`
+        : "仅文件扫描（未调用识图模型）",
+    ],
   ].filter(([, value]) => value != null);
   const body = el("div", { class: "panel-body commercial-summary" });
   for (const [label, value] of rows) {
@@ -311,7 +351,10 @@ function renderCommercialAssetPrecheck(s, context) {
   return el("div", { class: "panel commercial-precheck-panel" },
     el("div", { class: "panel-head" },
       el("h2", {}, view === "assets" ? "素材检查 · 预检" : "素材预检"),
-      el("span", { class: "meta" }, view === "assets" ? "用户素材安排" : "方案确认前置")),
+      el("span", { class: "meta" },
+        view === "assets"
+          ? "文件扫描 · 分辨率/重复检测"
+          : "方案确认前置")),
     body);
 }
 
@@ -1070,6 +1113,15 @@ function renderSseBanner(s, context) {
     }, "刷新"));
 }
 
+function shouldHideMinimalAssetPanels(s) {
+  const preset = s.commercial?.review_mode_preset
+    || s.commercial?.brief_summary?.review_mode_preset
+    || s.commercial?.brief_summary?.review_mode;
+  if (preset !== "minimal") return false;
+  const assetsGate = (s.stages || []).find((x) => x.name === "assets_gate");
+  return assetsGate?.status === "completed";
+}
+
 export function renderCommercialBoard(s, context) {
   const aside = el("aside", { class: "commercial-aside" });
   const summary = renderCommercialSummary(s);
@@ -1101,7 +1153,15 @@ export function renderCommercialBoard(s, context) {
       if (typeof context.requestRender === "function") context.requestRender();
     },
   });
-  if (tierPanel) main.append(tierPanel);
+  if (tierPanel) {
+    if (s.commercial?.brief_summary?.production_tier) {
+      main.append(el("details", { class: "commercial-fold commercial-tier-fold" },
+        el("summary", {}, `制作档位（已锁定：${s.commercial.brief_summary.production_tier}）`),
+        tierPanel));
+    } else {
+      main.append(tierPanel);
+    }
+  }
   const intentStatus = renderIntentStatus(s.commercial?.interaction_intents);
   if (intentStatus) main.append(intentStatus);
   const runner = renderRunnerStatus(s.commercial?.runner_status);
@@ -1130,9 +1190,10 @@ export function renderCommercialBoard(s, context) {
         "。点击顶栏阶段可切换，避免各阶段产物混在一起。")));
   }
   const view = commercialContentView(s, context.selectedStage);
-  const precheck = renderCommercialAssetPrecheck(s, context);
-  const assetPool = view === "assets" ? renderCommercialAssets(s) : null;
-  const unusedAssets = view === "assets" ? renderCommercialUnusedAssets(s) : null;
+  const hideAssetPanels = shouldHideMinimalAssetPanels(s);
+  const precheck = hideAssetPanels ? null : renderCommercialAssetPrecheck(s, context);
+  const assetPool = hideAssetPanels || view !== "assets" ? null : renderCommercialAssets(s);
+  const unusedAssets = hideAssetPanels || view !== "assets" ? null : renderCommercialUnusedAssets(s);
   const beats = renderCommercialBeats(s, context);
   const players = renderCommercialPlayers(s, context);
   const stageEvidence = renderCommercialStageEvidence(s, context);
