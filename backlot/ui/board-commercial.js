@@ -82,11 +82,13 @@ function renderFinalVideo(projectId, finalVideo) {
   if (!finalVideo?.exists || !finalVideo.path) return null;
   const src = mediaURL(projectId, finalVideo.path);
   return el("div", { class: "notice commercial-final-video" },
+    el("b", {}, "成片预览"),
+    el("div", { class: "hint" }, "可在本页播放。确认后点顶栏「结束并导出项目」，不必回聊天。"),
     el("video", { controls: "", src, preload: "metadata", playsinline: "" }),
     el("a", {
       class: "commercial-final-download",
       href: src,
-      download: "",
+      download: "final.mp4",
     }, "下载终稿"));
 }
 
@@ -105,7 +107,7 @@ export function renderAwaitingNotice(s, context) {
           el("div", {
             class: "commercial-decision-prompt",
             style: "white-space:pre-line",
-          }, dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。")));
+          }, dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。大约需要几分钟。")));
     }
     return null;
   }
@@ -119,7 +121,7 @@ export function renderAwaitingNotice(s, context) {
           el("div", {
             class: "commercial-decision-prompt",
             style: "white-space:pre-line",
-          }, dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。")));
+          }, dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。大约需要几分钟。")));
     }
     const prompt = dec?.prompt_zh || "请在本页确认后进入下一步。";
     const examples = dec?.examples_zh;
@@ -136,6 +138,16 @@ export function renderAwaitingNotice(s, context) {
         storage: window.sessionStorage,
         onDraftChange: context.requestRender,
       });
+    }
+    if (s.commercial?.final_video?.exists) {
+      return el("div", { class: "notice commercial-notice" },
+        el("span", { style: "font-size:calc(16px * var(--fs-scale))" }, "✓"),
+        el("div", { class: "commercial-decision-body" },
+          el("b", {}, "交付确认"),
+          el("div", {
+            class: "commercial-decision-prompt",
+            style: "white-space:pre-line",
+          }, prompt || "成片已就绪，请在本页预览。确认后点顶栏「结束并导出项目」。")));
     }
     return el("div", { class: "notice commercial-notice" },
       el("span", { style: "font-size:calc(16px * var(--fs-scale))" }, "◈"),
@@ -1169,7 +1181,6 @@ export function renderCommercialBoard(s, context) {
   const pause = renderFastTrackPause(s.commercial?.fast_track_pause);
   if (pause) main.append(pause);
   const finalVideo = renderFinalVideo(s.project_id, s.commercial?.final_video);
-  if (finalVideo) main.append(finalVideo);
   const sseBanner = renderSseBanner(s, context);
   if (sseBanner) main.append(sseBanner);
   const legacyNotice = renderCommercialLegacyNotice(s);
@@ -1203,6 +1214,7 @@ export function renderCommercialBoard(s, context) {
   if (beats) main.append(beats);
   if (stageEvidence) main.append(stageEvidence);
   if (players) main.append(players);
+  if (finalVideo) main.prepend(finalVideo);
   if (!beats && !players && !summary && !precheck && !assetPool) {
     main.append(el("div", { class: "hint" },
       "中文证据区数据未加载。请 ", el("b", {}, "重启 Backlot 服务"), " 后刷新页面（", el("code", {}, "python -m backlot serve"), "）。"));

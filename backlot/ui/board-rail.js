@@ -20,6 +20,9 @@ function stageWasCompletedBefore(st) {
 
 function stageSubZh(st) {
   if (st?.metadata?.producing_wait) return "制作中\n请留在本页等待成片";
+  if (st?.name === "delivery_signoff" && st.status !== "completed") {
+    return "成片已就绪\n本页预览后点结束并导出";
+  }
   const nextHint = st?.name === "assets_gate" ? "点开始出片继续" : "点进入下一步继续";
   if (st.status === "awaiting_human") return `等你在本页确认\n${nextHint}`;
   if (stageNeedsDecision(st)) return `等你在本页确认\n${nextHint}`;

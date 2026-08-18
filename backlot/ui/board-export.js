@@ -1,24 +1,26 @@
 import { el } from "./lib.js";
 import {
   buildExportIntent,
-  EXPORT_PHRASE,
   submitDecisionIntent,
 } from "./board-intent-submit.js";
 
 export function renderExportButton(s) {
   if (s?.pipeline?.pipeline_type !== "bootstrap-commercial") return null;
   const completed = Boolean(s.commercial?.completed);
+  const ready = Boolean(s.commercial?.final_video?.exists);
   const feedbackId = `export-feedback:${s.project_id}`;
   const button = el("button", {
     type: "button",
     class: "edit-tab-btn export-tab-btn" + (completed ? " done" : ""),
-    disabled: completed ? "" : null,
+    disabled: completed || !ready ? "" : null,
     title: completed
       ? "这个项目已经结束并导出"
-      : "把成片拷到本项目 exports/，并标记完成。没成片不会静默当完成。",
+      : ready
+        ? "把成片拷到本项目 exports/，并标记完成。"
+        : "成片出现后即可在本页导出。没有成片不会标记完成。",
   }, completed ? "已结束并导出" : "结束并导出项目");
 
-  if (!completed) {
+  if (!completed && ready) {
     button.addEventListener("click", async () => {
       button.disabled = true;
       const slot = document.getElementById(feedbackId);
@@ -28,10 +30,10 @@ export function renderExportButton(s) {
         if (slot) {
           slot.textContent = result.ok
             ? "已提交结束导出。请留在本页等待本机处理。"
-            : `提交失败。请回聊天发送：${EXPORT_PHRASE}`;
+            : "提交失败。请留在本页刷新后重试。";
         }
       } catch {
-        if (slot) slot.textContent = `提交失败。请回聊天发送：${EXPORT_PHRASE}`;
+        if (slot) slot.textContent = "提交失败。请留在本页刷新后重试。";
       } finally {
         button.disabled = false;
       }

@@ -40,7 +40,7 @@
 .commercial-runner-phase { font-weight: 600; }
 .commercial-final-video video {
   width: 100%;
-  max-height: min(360px, 40vh);
+  max-height: min(480px, 52vh);
   background: #000;
   border-radius: 6px;
 }

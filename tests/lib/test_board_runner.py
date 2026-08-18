@@ -14,10 +14,17 @@ from tests.lib.test_project_export import _export_intent, _write_project
 
 
 def _patch_projects(monkeypatch, root: Path) -> None:
+    import lib.board_produce as board_produce
+
     monkeypatch.setattr(ii, "PROJECTS_DIR", root)
     monkeypatch.setattr(pe, "PROJECTS_DIR", root)
     monkeypatch.setattr(runner, "PROJECTS_DIR", root)
+    monkeypatch.setattr(board_produce, "PROJECTS_DIR", root)
     monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(root))
+
+
+def _stub_compose_start(_edit, _manifest, _output=""):
+    return {"job_id": "compose-job-1", "output_path": "renders/final.mp4", "status": "queued"}
 
 
 def test_tick_exports_when_final_exists(monkeypatch, tmp_path):
@@ -130,14 +137,17 @@ def test_tick_keeps_failure_on_page(monkeypatch, tmp_path):
 def test_runner_modules_do_not_call_paid_generate() -> None:
     runner_src = Path(runner.__file__).read_text(encoding="utf-8")
     advance_src = Path(board_advance.__file__).read_text(encoding="utf-8")
-    from lib import board_gap_plan
+    from lib import board_gap_plan, board_produce
 
     gap_src = Path(board_gap_plan.__file__).read_text(encoding="utf-8")
+    produce_src = Path(board_produce.__file__).read_text(encoding="utf-8")
     for blob in (runner_src, advance_src, gap_src):
         assert "video_generate" not in blob
+    for blob in (runner_src, advance_src, gap_src, produce_src):
         assert "image_generate" not in blob
         assert "tts_generate" not in blob
         assert "stock_download" not in blob
+    assert "video_generate" in produce_src
 
 
 def test_tick_recovers_stuck_brief_locked(monkeypatch, tmp_path):
@@ -260,15 +270,104 @@ def test_tick_reopens_delivery_completed_without_video(monkeypatch, tmp_path):
         production_profile={"review_mode_preset": "minimal"},
     )
     _patch_projects(monkeypatch, root)
+    monkeypatch.setattr(
+        "openmontage.mcp.media.tools.compose_start",
+        _stub_compose_start,
+    )
     _seed_minimal_ready_for_delivery(root, "demo-pro")
     _write_bogus_delivery_completed(project)
     result = runner.tick("demo-pro", append_decision=lambda *_: {})
     assert "recover_stuck_stage" in result["actions"]
-    assert "成片尚未就绪" in result["friendly_zh"]
+    assert "produce_start" in result["actions"]
+    assert result["phase"] == "producing"
+    assert "正在按锁定轻度合成" in result["friendly_zh"]
     overlay = json.loads((project / "project.json").read_text(encoding="utf-8"))
     assert overlay["board_stop"]["producing_wait"] is True
     delivery = json.loads(
         (project / "checkpoint_delivery_signoff.json").read_text(encoding="utf-8")
     )
     assert delivery["status"] != "completed"
+
+
+def test_tick_starts_light_compose_after_assets_gate(monkeypatch, tmp_path):
+    from tests.lib.test_board_advance import _seed_minimal_ready_for_delivery
+
+    root = tmp_path / "projects"
+    project = _write_project(
+        root,
+        production_profile={
+            "review_mode_preset": "minimal",
+            "production_tier": "light",
+        },
+    )
+    _patch_projects(monkeypatch, root)
+    calls = {"n": 0}
+
+    def stub(*_args, **_kwargs):
+        calls["n"] += 1
+        return {"job_id": "compose-job-1", "output_path": "renders/final.mp4"}
+
+    monkeypatch.setattr("openmontage.mcp.media.tools.compose_start", stub)
+    _seed_minimal_ready_for_delivery(root, "demo-pro")
+    result = runner.tick("demo-pro", append_decision=lambda *_: {})
+    assert "produce_start" in result["actions"]
+    assert result["phase"] == "producing"
+    assert calls["n"] == 1
+    job = json.loads(
+        (project / "artifacts" / "produce_job.json").read_text(encoding="utf-8")
+    )
+    assert job["status"] == "queued"
+    assert job["engine"] == "compose"
+    assert "1–3 分钟" in result["friendly_zh"]
+
+
+def test_tick_heavy_without_key_stays_paused(monkeypatch, tmp_path):
+    import lib.board_produce as board_produce
+    from tests.lib.test_board_advance import _seed_minimal_ready_for_delivery
+
+    root = tmp_path / "projects"
+    project = _write_project(
+        root,
+        production_profile={
+            "review_mode_preset": "minimal",
+            "production_tier": "heavy",
+            "provider": "agnes",
+            "video_channel": "agnes",
+        },
+    )
+    _patch_projects(monkeypatch, root)
+    monkeypatch.setattr(board_produce, "_present_key_names", lambda: set())
+    monkeypatch.setattr(
+        "openmontage.mcp.media.tools.compose_start",
+        lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no compose")),
+    )
+    _seed_minimal_ready_for_delivery(root, "demo-pro")
+    result = runner.tick("demo-pro", append_decision=lambda *_: {})
+    assert "produce_paused" in result["actions"]
+    assert result["phase"] == "paused"
+    assert "不降为轻度" in result["friendly_zh"]
+    marker = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    assert marker["production_profile"]["production_tier"] == "heavy"
+
+
+def test_tick_opens_delivery_when_final_exists(monkeypatch, tmp_path):
+    root = tmp_path / "projects"
+    project = _write_project(
+        root,
+        production_profile={
+            "review_mode_preset": "minimal",
+            "production_tier": "light",
+        },
+    )
+    (project / "renders" / "final.mp4").write_bytes(b"film")
+    _patch_projects(monkeypatch, root)
+    result = runner.tick("demo-pro", append_decision=lambda *_: {})
+    assert result["phase"] == "ready"
+    assert "delivery_ready" in result["actions"]
+    assert "结束并导出" in result["friendly_zh"]
+    overlay = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    assert overlay["board_stop"]["stage"] == "delivery_signoff"
+    assert overlay["board_stop"].get("producing_wait") is not True
+    assert overlay["board_stop"]["decision_options"] == []
+    assert overlay["board_stop"]["needs_user_decision"] is False
 

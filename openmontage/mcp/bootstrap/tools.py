@@ -1500,7 +1500,7 @@ def produce_apply_project_export(
 
 
 def produce_runner_tick(project_id: str = "") -> dict[str, Any]:
-    """Consume pending panel/export intents on this machine. Does not call paid generate."""
+    """Consume pending panel/export intents and local light compose. Does not call paid generate."""
     from lib.board_runner import tick_all
     from lib.interaction_intents import UnknownProjectError
     from lib.project_export import ProjectExportError

@@ -1,8 +1,9 @@
 """Local Backlot-side consumer for pending interaction intents.
 
-The browser only writes intents. This runner applies panel decisions and
-end-and-export requests, then records board-visible progress. It does not
-call paid generate APIs and does not silently switch providers.
+The browser only writes intents. This runner applies panel decisions,
+starts local light compose after minimal assets_gate, and handles
+end-and-export. It does not call paid generate APIs and does not
+silently switch providers.
 """
 
 from __future__ import annotations
@@ -13,6 +14,7 @@ from typing import Any, Callable
 
 import lib.approval_bundle as approval_bundle
 import lib.board_advance as board_advance
+import lib.board_produce as board_produce
 import lib.interaction_intents as intents
 import lib.project_export as project_export
 from lib.paths import PROJECTS_DIR
@@ -160,6 +162,7 @@ def _consume_decision(
                 code="final_video_required",
                 safe_message=(
                     "成片尚未就绪，请留在本页等待制作。有成片后即可预览并导出。"
+                    "不必回聊天。"
                 ),
             )
         lock_result = {
@@ -445,22 +448,67 @@ def tick(
         except Exception:
             seeded = None
 
+    produce = {"action": "", "status": ""}
+    try:
+        marker = board_advance.read_marker(
+            project_id, projects_dir=PROJECTS_DIR
+        ) or marker
+        produce = board_produce.sync_produce(
+            project_id, marker, projects_dir=PROJECTS_DIR
+        )
+        if produce.get("action"):
+            actions.append(str(produce["action"]))
+    except Exception:
+        produce = {"action": "", "status": ""}
+
     if _has_final(project_id):
+        try:
+            opened = board_advance.open_delivery_preview(
+                project_id, projects_dir=PROJECTS_DIR
+            )
+            if opened.get("ok"):
+                actions.append("delivery_ready")
+        except Exception:
+            pass
         status = {
             "phase": PHASE_READY,
             "runner_alive": runner_alive,
-            "friendly_zh": "成片已在本页。要结束这单，请点「结束并导出项目」。",
+            "friendly_zh": board_advance.DELIVERY_READY_ZH,
         }
         project_export.write_runner_status(project_id, status)
         return {"project_id": project_id, **status, "actions": actions}
 
     remaining = _list_pending(project_id)
     marker = board_advance.read_marker(project_id, projects_dir=PROJECTS_DIR) or marker
+    produce_job = produce.get("job") if isinstance(produce.get("job"), dict) else {}
+    produce_status = str(produce.get("status") or produce_job.get("status") or "")
+    produce_copy = str(produce_job.get("friendly_zh") or "")
     if remaining:
         status = {
             "phase": PHASE_QUEUED,
             "runner_alive": runner_alive,
             "friendly_zh": "选择已提交，本机排队处理中，请留在本页。",
+        }
+    elif produce_status == board_produce.STATUS_PAUSED:
+        status = {
+            "phase": PHASE_PAUSED,
+            "runner_alive": runner_alive,
+            "friendly_zh": produce_copy or "制作已暂停。请留在本页刷新可用性，不要改档除非你要求。",
+        }
+    elif produce_status == board_produce.STATUS_FAILED:
+        status = {
+            "phase": PHASE_PAUSED,
+            "runner_alive": runner_alive,
+            "friendly_zh": produce_copy or "制作失败，请留在本页查看原因。",
+        }
+    elif produce_status in {
+        board_produce.STATUS_QUEUED,
+        board_produce.STATUS_RUNNING,
+    }:
+        status = {
+            "phase": PHASE_PRODUCING,
+            "runner_alive": runner_alive,
+            "friendly_zh": produce_copy or board_advance.PRODUCING_WAIT_ZH,
         }
     elif "next_stop" in actions:
         wait_copy = str((marker.get("board_stop") or {}).get("decision_prompt_zh") or "")

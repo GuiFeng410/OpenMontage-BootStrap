@@ -43,6 +43,61 @@ PRODUCING_WAIT_ZH = (
     "素材已确认。成片尚未就绪，请留在本页等待制作。"
     "成片出现后即可在本页预览并导出。"
 )
+LIGHT_COMPOSE_WAIT_ZH = (
+    "素材已确认。本机正在合成成片，大约 1–3 分钟。"
+    "请留在本页。成片出现后即可在本页预览并导出。"
+)
+DELIVERY_READY_ZH = (
+    "成片已就绪，请在本页预览播放。确认后点顶栏「结束并导出项目」。不必回聊天。"
+)
+
+
+def producing_wait_copy_zh(
+    marker: dict[str, Any] | None = None,
+    *,
+    project_id: str = "",
+    projects_dir: Path | None = None,
+) -> str:
+    profile = marker.get("production_profile") if isinstance(marker, dict) else {}
+    if not isinstance(profile, dict):
+        profile = {}
+    tier = str(profile.get("production_tier") or "light").strip().lower()
+    if tier == "light":
+        return LIGHT_COMPOSE_WAIT_ZH
+    if tier == "heavy":
+        count = 3
+        if project_id:
+            plan = _read_plan_segment_count(project_id, projects_dir)
+            if plan:
+                count = plan
+        return heavy_wait_copy_zh(count)
+    return PRODUCING_WAIT_ZH
+
+
+def heavy_wait_copy_zh(segment_count: int = 3) -> str:
+    n = max(1, int(segment_count or 3))
+    lo = max(8, n * 4)
+    hi = max(20, n * 7)
+    return (
+        f"已锁定重度。本机按已锁渠道分段生成成片，大约 {lo}–{hi} 分钟。"
+        "排队或限流时可能更长。请留在本页。成片出现后即可预览并导出。"
+    )
+
+
+def _read_plan_segment_count(
+    project_id: str, projects_dir: Path | None = None
+) -> int:
+    path = projects_root(projects_dir) / project_id / "artifacts" / "video_plan.json"
+    if not path.is_file():
+        return 0
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return 0
+    segs = data.get("segments") if isinstance(data, dict) else None
+    if not isinstance(segs, list):
+        return 0
+    return len([item for item in segs if isinstance(item, dict)])
 
 
 def primary_submit_label_zh(stage: str) -> str:
@@ -95,18 +150,21 @@ def stop_card_metadata(
     }
     if stage == "delivery_signoff" and project_id:
         if not final_video_ready(project_id, projects_dir=projects_dir):
+            marker = read_marker(project_id, projects_dir=projects_dir)
             return {
                 "needs_user_decision": False,
                 "producing_wait": True,
                 "decision_title_zh": "制作中",
-                "decision_prompt_zh": PRODUCING_WAIT_ZH,
+                "decision_prompt_zh": producing_wait_copy_zh(
+                    marker, project_id=project_id, projects_dir=projects_dir
+                ),
                 "decision_options": [],
             }
-        metadata["decision_prompt_zh"] = (
-            "成片已就绪，请在本页预览。确认后点「结束并导出项目」。"
-        )
+        metadata["decision_title_zh"] = "交付确认"
+        metadata["decision_prompt_zh"] = DELIVERY_READY_ZH
         metadata["decision_options"] = []
         metadata["needs_user_decision"] = False
+        metadata["producing_wait"] = False
     if stage == "brief_locked" and project_id:
         from lib.board_gap_plan import build_gap_snapshot
 
@@ -403,6 +461,24 @@ def advance_after_apply(
         projects_dir=projects_dir,
     )
     return nxt
+
+
+def open_delivery_preview(
+    project_id: str,
+    *,
+    projects_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Switch the board to delivery preview only when final.mp4 exists."""
+    if not final_video_ready(project_id, projects_dir=projects_dir):
+        return {"ok": False, "skipped": True}
+    marker = read_marker(project_id, projects_dir=projects_dir)
+    written = write_stop_card(
+        project_id,
+        "delivery_signoff",
+        pipeline_type=str(marker.get("pipeline_type") or "bootstrap-commercial"),
+        projects_dir=projects_dir,
+    )
+    return {"ok": True, "stage": "delivery_signoff", **written}
 
 
 def write_board_stop_overlay(

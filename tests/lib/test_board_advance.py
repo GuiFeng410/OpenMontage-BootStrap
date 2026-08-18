@@ -52,6 +52,58 @@ def test_delivery_without_final_is_producing_wait(tmp_path: Path) -> None:
     assert meta["producing_wait"] is True
     assert meta["needs_user_decision"] is False
     assert meta["decision_options"] == []
+    assert "1–3 分钟" in meta["decision_prompt_zh"]
+
+
+def test_delivery_without_final_heavy_uses_range_not_light_wait(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    _write_project(root)
+    project = root / "shop-demo"
+    marker = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    marker["production_profile"]["production_tier"] = "heavy"
+    (project / "project.json").write_text(
+        json.dumps(marker, ensure_ascii=False), encoding="utf-8"
+    )
+    (project / "artifacts").mkdir(parents=True, exist_ok=True)
+    (project / "artifacts" / "video_plan.json").write_text(
+        json.dumps(
+            {"segments": [{"id": "a"}, {"id": "b"}, {"id": "c"}]},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    meta = stop_card_metadata(
+        "delivery_signoff", "shop-demo", projects_dir=root
+    )
+    assert meta["producing_wait"] is True
+    assert "重度" in meta["decision_prompt_zh"]
+    assert "分钟" in meta["decision_prompt_zh"]
+    assert "1–3 分钟" not in meta["decision_prompt_zh"]
+
+
+def test_delivery_with_final_is_preview_not_continue(tmp_path: Path) -> None:
+    from lib.board_advance import DELIVERY_READY_ZH, open_delivery_preview
+
+    root = tmp_path / "projects"
+    _write_project(root)
+    renders = root / "shop-demo" / "renders"
+    renders.mkdir()
+    (renders / "final.mp4").write_bytes(b"film")
+    meta = stop_card_metadata(
+        "delivery_signoff", "shop-demo", projects_dir=root
+    )
+    assert meta.get("producing_wait") is not True
+    assert meta["needs_user_decision"] is False
+    assert meta["decision_options"] == []
+    assert "结束并导出" in meta["decision_prompt_zh"]
+    opened = open_delivery_preview("shop-demo", projects_dir=root)
+    assert opened["ok"] is True
+    overlay = json.loads(
+        (root / "shop-demo" / "project.json").read_text(encoding="utf-8")
+    )["board_stop"]
+    assert overlay["stage"] == "delivery_signoff"
+    assert overlay.get("producing_wait") is not True
+    assert DELIVERY_READY_ZH in overlay["decision_prompt_zh"]
 
 
 def test_strip_recommend_drops_badge_fields() -> None:
