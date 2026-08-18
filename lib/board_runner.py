@@ -7,6 +7,7 @@ call paid generate APIs and does not silently switch providers.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import Any, Callable
 
@@ -50,6 +51,43 @@ def _consume_export(project_id: str, pending: list[dict[str, Any]]) -> dict[str,
     )
 
 
+def _peek_intent(project_id: str, intent_id: str) -> dict[str, Any]:
+    path = intents._intent_path(intents._project_dir(project_id), intent_id)
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _complete_brief_locked(
+    project_id: str,
+    artifacts: dict[str, Any],
+) -> None:
+    from lib.checkpoint import merge_write_checkpoint
+
+    merge_write_checkpoint(
+        PROJECTS_DIR,
+        project_id,
+        "brief_locked",
+        "completed",
+        {
+            "brief": artifacts["brief"],
+            "asset_precheck": artifacts["asset_precheck"],
+            "video_plan": artifacts["video_plan"],
+            "segment_cards": artifacts["segment_cards"],
+        },
+        pipeline_type="bootstrap-commercial",
+        human_approval_required=True,
+        human_approved=True,
+        metadata_patch={
+            "needs_user_decision": False,
+            "approval_source": "panel_intent",
+        },
+        metadata_remove_keys=board_advance.DECISION_STALE_KEYS,
+    )
+
+
 def _consume_decision(
     project_id: str,
     pending: list[dict[str, Any]],
@@ -66,6 +104,33 @@ def _consume_decision(
     item = decisions[-1]
     intent_id = str(item["intent_id"])
     revision = str(item["revision"])
+    raw = _peek_intent(project_id, intent_id)
+    stage = str(raw.get("stage") or item.get("stage") or "")
+    lock_result: dict[str, Any] | None = None
+    if stage == "brief_locked":
+        from lib.board_gap_plan import GapPlanError, lock_gap_plan_from_intent
+
+        try:
+            lock_result = lock_gap_plan_from_intent(
+                project_id,
+                raw,
+                projects_dir=PROJECTS_DIR,
+            )
+        except GapPlanError as exc:
+            raise approval_bundle.ApprovalBundleError(
+                str(exc),
+                code=exc.code,
+                safe_message=exc.safe_message,
+            ) from exc
+        if lock_result.get("action") == "continue" and lock_result.get("artifacts"):
+            try:
+                _complete_brief_locked(project_id, lock_result["artifacts"])
+            except Exception as exc:
+                raise approval_bundle.ApprovalBundleError(
+                    str(exc),
+                    code="brief_lock_failed",
+                    safe_message="方案已选出，但本机无法写入合法规划。请留在本页刷新后重试。",
+                ) from exc
     planned = approval_bundle.plan_approval_bundle(
         project_id,
         intent_id,
@@ -82,6 +147,7 @@ def _consume_decision(
         "planned": planned,
         "applied": applied,
         "intent_id": intent_id,
+        "stop_action": (lock_result or {}).get("action") or "continue",
     }
 
 
@@ -160,12 +226,14 @@ def tick(
                 marker = board_advance.read_marker(
                     project_id, projects_dir=PROJECTS_DIR
                 ) or marker
-                next_stop = board_advance.advance_after_apply(
-                    project_id,
-                    applied_stage or "brief_locked",
-                    marker,
-                    projects_dir=PROJECTS_DIR,
-                )
+                stop_action = str(applied.get("stop_action") or "continue")
+                if stop_action != "revise":
+                    next_stop = board_advance.advance_after_apply(
+                        project_id,
+                        applied_stage or "brief_locked",
+                        marker,
+                        projects_dir=PROJECTS_DIR,
+                    )
             except Exception:
                 next_stop = None
             if next_stop:

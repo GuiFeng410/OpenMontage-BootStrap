@@ -5,6 +5,7 @@ import {
   clearDraft,
   createDraft,
   decisionRevision,
+  gapPlanReady,
   inspectStoredDraft,
   restoreDraft,
   saveDraft,
@@ -316,4 +317,33 @@ test("clearDraft removes only the exact project-stage key", () => {
     storage.getItem("backlot.intent-draft.v1:opal:brief_locked"),
     "keep-project",
   );
+});
+
+test("gapPlanReady requires four-way choices before continue", () => {
+  const gapPlan = {
+    image_key_present: true,
+    gaps: [{ beat_id: "B02" }],
+  };
+  const empty = baseDraft();
+  assert.equal(gapPlanReady(empty, gapPlan), true);
+  const continueOnly = selectOption(empty, "brief_locked::current", {
+    id: "continue",
+    label_zh: "同意，进入下一步",
+  });
+  assert.equal(gapPlanReady(continueOnly, gapPlan), false);
+  const withGap = selectOption(continueOnly, "gap::B02", {
+    id: "skip",
+    label_zh: "不补",
+  });
+  assert.equal(gapPlanReady(withGap, gapPlan), true);
+  const i2i = selectOption(continueOnly, "gap::B02", {
+    id: "i2i",
+    label_zh: "图生图",
+  });
+  assert.equal(gapPlanReady(i2i, gapPlan), false);
+  const withModel = selectOption(i2i, "gap_model::B02", {
+    id: "dashscope",
+    label_zh: "通义万相",
+  });
+  assert.equal(gapPlanReady(withModel, gapPlan), true);
 });

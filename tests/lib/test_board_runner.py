@@ -130,7 +130,10 @@ def test_tick_keeps_failure_on_page(monkeypatch, tmp_path):
 def test_runner_modules_do_not_call_paid_generate() -> None:
     runner_src = Path(runner.__file__).read_text(encoding="utf-8")
     advance_src = Path(board_advance.__file__).read_text(encoding="utf-8")
-    for blob in (runner_src, advance_src):
+    from lib import board_gap_plan
+
+    gap_src = Path(board_gap_plan.__file__).read_text(encoding="utf-8")
+    for blob in (runner_src, advance_src, gap_src):
         assert "video_generate" not in blob
         assert "image_generate" not in blob
         assert "tts_generate" not in blob

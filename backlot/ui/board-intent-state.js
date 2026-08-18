@@ -112,6 +112,33 @@ export function summarizeDraft(draft) {
   return lines.join("\n");
 }
 
+export function selectedOptionId(draft, decisionKey) {
+  const hit = (draft?.selections || []).find((item) => item.decision_key === decisionKey);
+  return hit?.option_id || "";
+}
+
+export function gapPlanReady(draft, gapPlan) {
+  const continuePicked = (draft?.selections || []).some(
+    (item) => String(item.decision_key || "").endsWith("::current")
+      && item.option_id === "continue",
+  );
+  const gaps = Array.isArray(gapPlan?.gaps) ? gapPlan.gaps : [];
+  if (!continuePicked || !gaps.length) return true;
+  for (const gap of gaps) {
+    const beatId = gap.beat_id;
+    const choice = selectedOptionId(draft, `gap::${beatId}`);
+    if (!choice) return false;
+    if (choice === "i2i") {
+      if (!gapPlan.image_key_present) return false;
+      if (!selectedOptionId(draft, `gap_model::${beatId}`)) return false;
+    }
+    if (choice === "reuse" && !selectedOptionId(draft, `gap_reuse::${beatId}`)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function saveDraft(storage, draft) {
   try {
     storage.setItem(

@@ -55,14 +55,35 @@ def stop_options(stage: str) -> list[dict[str, str]]:
     ]
 
 
-def stop_card_metadata(stage: str) -> dict[str, Any]:
+def stop_card_metadata(
+    stage: str,
+    project_id: str = "",
+    *,
+    projects_dir: Path | None = None,
+) -> dict[str, Any]:
     label = STAGE_LABEL_ZH.get(stage, stage)
-    return {
+    prompt = f"请确认「{label}」后进入下一步。"
+    metadata: dict[str, Any] = {
         "needs_user_decision": True,
         "decision_title_zh": label,
-        "decision_prompt_zh": f"请确认「{label}」后进入下一步。",
+        "decision_prompt_zh": prompt,
         "decision_options": stop_options(stage),
     }
+    if stage == "brief_locked" and project_id:
+        from lib.board_gap_plan import build_gap_snapshot
+
+        snapshot = build_gap_snapshot(project_id, projects_dir=projects_dir)
+        metadata["gap_plan"] = snapshot
+        if snapshot.get("enough"):
+            metadata["decision_prompt_zh"] = (
+                "现有图片已覆盖各段所需画面。确认方案后进入素材检查。"
+            )
+        else:
+            metadata["decision_prompt_zh"] = (
+                "有画面缺口。请为每段选择：补传 / 图生图 / 复用 / 不补。"
+                "选图生图还要定生图模型。确认后锁定计划，本页不展示生成结果。"
+            )
+    return metadata
 
 
 def strip_recommend(raw: Any) -> Any:
@@ -157,7 +178,9 @@ def write_stop_card(
     status = str(current.get("status") or "in_progress")
     if status in {"", "pending"}:
         status = "in_progress"
-    metadata = strip_recommend(stop_card_metadata(stage))
+    metadata = strip_recommend(
+        stop_card_metadata(stage, project_id, projects_dir=projects_dir)
+    )
     write_kwargs = {
         "pipeline_type": str(current.get("pipeline_type") or pipeline_type),
         "metadata_patch": metadata,
@@ -286,7 +309,9 @@ def write_board_stop_overlay(
     data = read_marker(project_id, projects_dir=projects_dir)
     data["board_stop"] = {
         "stage": stage,
-        **strip_recommend(stop_card_metadata(stage)),
+        **strip_recommend(
+            stop_card_metadata(stage, project_id, projects_dir=projects_dir)
+        ),
     }
     path.write_text(
         json.dumps(data, ensure_ascii=False, indent=2) + "\n",

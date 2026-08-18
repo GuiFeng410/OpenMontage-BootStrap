@@ -1814,6 +1814,7 @@ def _build_commercial_board(
             "options": meta.get("decision_options") if isinstance(meta.get("decision_options"), list) else [],
             "approval_note": meta.get("approval_note"),
             "examples_zh": meta.get("examples_zh"),
+            "gap_plan": meta.get("gap_plan") if isinstance(meta.get("gap_plan"), dict) else None,
         }
 
     def evidence_media(raw: Any) -> dict[str, Any]:

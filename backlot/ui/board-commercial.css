@@ -75,7 +75,31 @@
   outline: 3px solid var(--amber);
   outline-offset: 2px;
 }
-.commercial-decision-option:disabled { cursor: not-allowed; opacity: .65; }
+.commercial-decision-option.disabled { cursor: not-allowed; opacity: .65; }
+.gap-plan { display: grid; gap: 10px; margin-top: 12px; }
+.gap-plan-label,
+.gap-plan-sublabel { color: var(--text-2); font-size: calc(12px * var(--fs-scale)); }
+.gap-plan-enough { color: var(--text-2); }
+.gap-covered-row,
+.gap-beat-head {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  flex-wrap: wrap;
+}
+.gap-beat-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--surface-2);
+}
+.gap-choice-row {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+}
 .commercial-decision-option.recommended { border-color: var(--amber); background: var(--amber-dim); }
 .commercial-decision-option.selected {
   border-color: var(--green);
