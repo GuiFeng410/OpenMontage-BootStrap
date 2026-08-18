@@ -87,7 +87,8 @@
   align-items: baseline;
   flex-wrap: wrap;
 }
-.gap-beat-card {
+.gap-beat-card,
+.gap-image-model {
   display: grid;
   gap: 8px;
   padding: 10px;

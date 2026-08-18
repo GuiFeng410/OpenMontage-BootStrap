@@ -341,9 +341,24 @@ test("gapPlanReady requires four-way choices before continue", () => {
     label_zh: "图生图",
   });
   assert.equal(gapPlanReady(i2i, gapPlan), false);
-  const withModel = selectOption(i2i, "gap_model::B02", {
+  const withModel = selectOption(i2i, "image_model::project", {
     id: "dashscope",
     label_zh: "通义万相",
   });
   assert.equal(gapPlanReady(withModel, gapPlan), true);
+  const twoGaps = {
+    image_key_present: true,
+    gaps: [{ beat_id: "B02" }, { beat_id: "B03" }],
+  };
+  const bothI2i = selectOption(
+    selectOption(continueOnly, "gap::B02", { id: "i2i", label_zh: "图生图" }),
+    "gap::B03",
+    { id: "i2i", label_zh: "图生图" },
+  );
+  assert.equal(gapPlanReady(bothI2i, twoGaps), false);
+  const shared = selectOption(bothI2i, "image_model::project", {
+    id: "agnes",
+    label_zh: "Agnes 生图",
+  });
+  assert.equal(gapPlanReady(shared, twoGaps), true);
 });

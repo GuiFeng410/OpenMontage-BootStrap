@@ -118,6 +118,16 @@ def resolve_commercial_video_model(
     return picked
 
 
+def _empty_image_flags() -> dict[str, Any]:
+    from lib.board_gap_plan import list_commercial_image_models
+
+    return {
+        "image_key_present": False,
+        "image_key_names_present": [],
+        "image_models": list_commercial_image_models([]),
+    }
+
+
 def public_install_flags(*, repo_root: Path | None = None) -> dict[str, Any]:
     root = Path(repo_root or REPO_ROOT)
     listed = install_state_mod.read_install_state(repo_root=root)
@@ -134,6 +144,7 @@ def public_install_flags(*, repo_root: Path | None = None) -> dict[str, Any]:
             "video_key_names_present": names,
             "stock_key_names_present": list(state.get("stock_key_names_present") or []),
             "video_models": list_commercial_video_models(names),
+            **_empty_image_flags(),
         }
     return {
         "install_state_exists": bool(listed.get("exists")),
@@ -170,6 +181,22 @@ def remember_machine_seen(
     )
 
 
+def _image_flags(
+    *,
+    repo_root: Path,
+    environ: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    from lib.board_gap_plan import list_commercial_image_models, scan_image_key_names
+
+    names = scan_image_key_names(repo_root=repo_root, environ=environ)
+    models = list_commercial_image_models(names)
+    return {
+        "image_key_present": any(item.get("available") for item in models),
+        "image_key_names_present": names,
+        "image_models": models,
+    }
+
+
 def _flags_from_live_scan(
     *,
     repo_root: Path,
@@ -184,6 +211,7 @@ def _flags_from_live_scan(
         "video_key_names_present": names,
         "stock_key_names_present": list(stock["stock_key_names_present"]),
         "video_models": list_commercial_video_models(names),
+        **_image_flags(repo_root=repo_root, environ=environ),
     }
 
 
@@ -209,6 +237,10 @@ def refresh_key_availability(
     flags = public_install_flags(repo_root=root)
     video_ok = bool(flags["video_key_present"])
     stock_ok = bool(flags["stock_key_present"])
+    image_ok = bool(flags.get("image_key_present"))
+    image_count = sum(
+        1 for item in flags.get("image_models") or [] if item.get("available")
+    )
     if video_ok and stock_ok:
         friendly = "已刷新：重度与中度均可用。"
     elif video_ok:
@@ -217,6 +249,12 @@ def refresh_key_availability(
         friendly = "已刷新：中度可用。重度还需要视频模型 Key。"
     else:
         friendly = "已刷新：尚未检测到视频或素材 Key。写入仓根 .env 后再点刷新。"
+    if image_ok:
+        friendly += f" 已检测到 {image_count} 个可用生图模型。"
+        if image_count > 1:
+            friendly += " 方案页若选图生图，全片共用其中一个。"
+    else:
+        friendly += " 尚未检测到生图 Key；方案页「图生图」不可执行。"
     return {
         "ok": True,
         **flags,

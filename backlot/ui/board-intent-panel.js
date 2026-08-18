@@ -107,9 +107,11 @@ function renderGapPlan({
   block.append(el("div", { class: "gap-plan-label" }, "缺口四选（每段一项）"));
   const reusePaths = Array.isArray(gapPlan.reuse_paths) ? gapPlan.reuse_paths : [];
   const models = Array.isArray(gapPlan.image_models) ? gapPlan.image_models : [];
+  let anyI2i = false;
   for (const gap of gaps) {
     const beatId = gap.beat_id;
     const choice = selectedOptionId(draftRef.draft, `gap::${beatId}`);
+    if (choice === "i2i") anyI2i = true;
     const card = el("div", { class: "gap-beat-card" },
       el("div", { class: "gap-beat-head" },
         el("b", {}, gap.beat_id || ""),
@@ -131,22 +133,6 @@ function renderGapPlan({
             : action.description_zh,
       })),
     }));
-    if (choice === "i2i" && gapPlan.image_key_present) {
-      card.append(el("div", { class: "gap-plan-sublabel" }, "生图模型"));
-      card.append(renderChoiceRow({
-        draftRef,
-        storage,
-        onDraftChange,
-        decisionKey: `gap_model::${beatId}`,
-        stale,
-        options: models.map((item) => ({
-          id: item.id,
-          label_zh: item.label_zh || item.id,
-          disabled: !item.available,
-          description_zh: item.available ? "" : "未填入 Key",
-        })),
-      }));
-    }
     if (choice === "reuse" && reusePaths.length) {
       card.append(el("div", { class: "gap-plan-sublabel" }, "复用哪张"));
       card.append(renderChoiceRow({
@@ -163,7 +149,43 @@ function renderGapPlan({
     }
     block.append(card);
   }
+  if (anyI2i && gapPlan.image_key_present) {
+    ensureDefaultImageModel(draftRef, storage, gapPlan, models);
+    const availableCount = models.filter((item) => item.available).length;
+    block.append(el("div", { class: "gap-image-model" },
+      el("div", { class: "gap-plan-label" }, "生图模型（全片共用）"),
+      el("div", { class: "gap-plan-sublabel" },
+        availableCount > 1
+          ? "检测到多个可用 Key，请点选一个。不标推荐，锁定后不静默更换。"
+          : "锁定后各段图生图都用这一模型。"),
+      renderChoiceRow({
+        draftRef,
+        storage,
+        onDraftChange,
+        decisionKey: "image_model::project",
+        stale,
+        options: models.map((item) => ({
+          id: item.id,
+          label_zh: item.label_zh || item.id,
+          disabled: !item.available,
+          description_zh: item.available ? "" : "未填入 Key",
+        })),
+      })));
+  }
   return block;
+}
+
+function ensureDefaultImageModel(draftRef, storage, gapPlan, models) {
+  if (selectedOptionId(draftRef.draft, "image_model::project")) return;
+  const defaultId = gapPlan.default_image_model
+    || (models.find((item) => item.available) || {}).id;
+  const spec = models.find((item) => item.id === defaultId && item.available);
+  if (!spec) return;
+  draftRef.draft = selectOption(draftRef.draft, "image_model::project", {
+    id: spec.id,
+    label_zh: spec.label_zh || spec.id,
+  });
+  saveDraft(storage, draftRef.draft);
 }
 
 function revisionFor({ projectId, stage, decision }) {
@@ -242,13 +264,20 @@ export function renderDecisionIntentPanel({
     optionList.append(button);
   }
 
+  const draftRef = { draft };
+  const handleDraftChange = (next) => {
+    draft = next;
+    draftRef.draft = next;
+    if (typeof onDraftChange === "function") onDraftChange(next);
+  };
   const gapPlanBlock = renderGapPlan({
     gapPlan: decision?.gap_plan,
-    draftRef: { draft },
+    draftRef,
     storage,
-    onDraftChange,
+    onDraftChange: handleDraftChange,
     stale,
   });
+  draft = draftRef.draft;
 
   const body = el("div", { class: "commercial-decision-body" },
     el("b", {}, `【需要你决定】${item.title}`),
@@ -325,7 +354,7 @@ export function renderDecisionIntentPanel({
       disabled: ready ? null : "",
       onclick: async () => {
         if (!gapPlanReady(draft, decision?.gap_plan)) {
-          feedback.textContent = "请为每个缺口选一项；图生图还要选模型。";
+          feedback.textContent = "请为每个缺口选一项；图生图还要选全片共用的生图模型。";
           return;
         }
         submitButton.disabled = true;

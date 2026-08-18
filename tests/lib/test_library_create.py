@@ -25,6 +25,10 @@ def test_flags_default_not_ready(tmp_path: Path) -> None:
     assert flags["video_models"][0]["available"] is False
     assert flags["video_models"][1]["id"] == "hy-video-1.5"
     assert flags["video_models"][2]["id"] == "pixverse-video-v6.0"
+    image_ids = [item["id"] for item in flags["image_models"]]
+    assert image_ids[0] == "dashscope"
+    assert "agnes" in image_ids
+    assert "pixverse" not in image_ids
 
 
 def test_tokenhub_alias_unlocks_hunyuan_and_pixverse() -> None:
@@ -145,6 +149,32 @@ def test_refresh_then_keys_become_available(tmp_path: Path, monkeypatch: pytest.
     dumped = str(filled)
     assert "th-secret-do-not-leak-aaa" not in dumped
     assert "px-secret-do-not-leak-bbb" not in dumped
+
+
+def test_refresh_reports_multiple_image_models_without_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    (tmp_path / ".env-example.md").write_text(EXAMPLE, encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        "DASHSCOPE_API_KEY=sk-dash-secret-do-not-leak\n"
+        "AGNES_API_KEY=ag-secret-do-not-leak\n"
+        "FAL_KEY=fal-secret-do-not-leak\n",
+        encoding="utf-8",
+    )
+    filled = refresh_key_availability(repo_root=tmp_path, environ={})
+    assert filled["image_key_present"] is True
+    models = {item["id"]: item for item in filled["image_models"]}
+    assert models["dashscope"]["available"] is True
+    assert models["agnes"]["available"] is True
+    assert models["flux"]["available"] is True
+    available_count = sum(1 for item in filled["image_models"] if item.get("available"))
+    assert available_count >= 3
+    assert "全片共用" in filled["friendly_zh"]
+    dumped = str(filled)
+    assert "sk-dash-secret-do-not-leak" not in dumped
+    assert "ag-secret-do-not-leak" not in dumped
+    assert "fal-secret-do-not-leak" not in dumped
 
 
 def test_start_production_blocks_heavy_without_video_key(

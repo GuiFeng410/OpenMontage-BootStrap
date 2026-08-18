@@ -12,6 +12,7 @@ from lib.board_advance import ensure_current_stop_card, stop_card_metadata
 from lib.board_gap_plan import (
     GapPlanError,
     build_gap_snapshot,
+    default_commercial_image_model,
     list_commercial_image_models,
     lock_gap_plan_from_intent,
 )
@@ -56,6 +57,20 @@ def test_image_catalog_excludes_pixverse() -> None:
     ids = [item["id"] for item in list_commercial_image_models()]
     assert "pixverse" not in ids
     assert "dashscope" in ids
+
+
+def test_default_image_model_prefers_agnes_when_multiple_keys() -> None:
+    rows = list_commercial_image_models(
+        ["DASHSCOPE_API_KEY", "AGNES_API_KEY", "FAL_KEY"]
+    )
+    picked = default_commercial_image_model(rows)
+    assert picked is not None
+    assert picked["id"] == "agnes"
+    dash_only = default_commercial_image_model(
+        list_commercial_image_models(["DASHSCOPE_API_KEY"])
+    )
+    assert dash_only is not None
+    assert dash_only["id"] == "dashscope"
 
 
 def test_no_images_means_gaps(tmp_path: Path) -> None:
@@ -107,6 +122,7 @@ def test_i2i_available_when_dashscope_key_in_env(tmp_path: Path) -> None:
     assert snap["image_key_present"] is True
     models = {item["id"]: item for item in snap["image_models"]}
     assert models["dashscope"]["available"] is True
+    assert snap["default_image_model"] == "dashscope"
 
 
 def test_continue_without_gap_choice_is_blocked(tmp_path: Path) -> None:
@@ -149,6 +165,64 @@ def test_i2i_without_key_is_blocked(tmp_path: Path) -> None:
             environ={},
         )
     assert caught.value.code == "i2i_unavailable"
+
+
+def test_i2i_without_shared_model_is_blocked(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    _write_project(root)
+    with pytest.raises(GapPlanError) as caught:
+        lock_gap_plan_from_intent(
+            "shop-demo",
+            _intent(
+                [
+                    {"decision_key": "brief_locked::current", "option_id": "continue"},
+                    {"decision_key": "gap::B01", "option_id": "i2i"},
+                    {"decision_key": "gap::B02", "option_id": "skip"},
+                    {"decision_key": "gap::B03", "option_id": "skip"},
+                ]
+            ),
+            projects_dir=root,
+            repo_root=tmp_path,
+            environ={"DASHSCOPE_API_KEY": "sk-test-not-secret"},
+        )
+    assert caught.value.code == "i2i_model_required"
+
+
+def test_lock_i2i_uses_one_shared_model_for_all_gaps(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    project = _write_project(root)
+    result = lock_gap_plan_from_intent(
+        "shop-demo",
+        _intent(
+            [
+                {"decision_key": "brief_locked::current", "option_id": "continue"},
+                {"decision_key": "gap::B01", "option_id": "i2i"},
+                {"decision_key": "gap::B02", "option_id": "i2i"},
+                {"decision_key": "gap::B03", "option_id": "skip"},
+                {"decision_key": "image_model::project", "option_id": "agnes"},
+            ]
+        ),
+        projects_dir=root,
+        repo_root=tmp_path,
+        environ={
+            "DASHSCOPE_API_KEY": "sk-dash-not-secret",
+            "AGNES_API_KEY": "ag-not-secret",
+        },
+    )
+    assert result["action"] == "continue"
+    locked = json.loads((project / "artifacts" / "gap_plan.json").read_text(encoding="utf-8"))
+    assert locked["image_model"] == "agnes"
+    by_beat = {row["beat_id"]: row for row in locked["gaps"]}
+    assert by_beat["B01"]["i2i_model"] == "agnes"
+    assert by_beat["B02"]["i2i_model"] == "agnes"
+    assert by_beat["B03"]["i2i_model"] is None
+    marker = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    assert marker["production_profile"]["image_model"] == "agnes"
+    assert "video_model" not in marker["production_profile"]
+    plan = json.loads((project / "artifacts" / "video_plan.json").read_text(encoding="utf-8"))
+    segs = {row["beat"]: row for row in plan["segments"]}
+    assert segs["B01"]["provider"] == "agnes"
+    assert segs["B02"]["provider"] == "agnes"
 
 
 def test_lock_skip_writes_plan_without_generate(tmp_path: Path) -> None:

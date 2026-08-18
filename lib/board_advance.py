@@ -81,7 +81,8 @@ def stop_card_metadata(
         else:
             metadata["decision_prompt_zh"] = (
                 "有画面缺口。请为每段选择：补传 / 图生图 / 复用 / 不补。"
-                "选图生图还要定生图模型。确认后锁定计划，本页不展示生成结果。"
+                "选了图生图后全片共用一个生图模型；有多个 Key 时请点选。"
+                "确认后锁定计划，本页不展示生成结果。"
             )
     return metadata
 

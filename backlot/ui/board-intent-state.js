@@ -130,11 +130,19 @@ export function gapPlanReady(draft, gapPlan) {
     if (!choice) return false;
     if (choice === "i2i") {
       if (!gapPlan.image_key_present) return false;
-      if (!selectedOptionId(draft, `gap_model::${beatId}`)) return false;
     }
     if (choice === "reuse" && !selectedOptionId(draft, `gap_reuse::${beatId}`)) {
       return false;
     }
+  }
+  const needsI2i = gaps.some(
+    (gap) => selectedOptionId(draft, `gap::${gap.beat_id}`) === "i2i",
+  );
+  if (needsI2i && !selectedOptionId(draft, "image_model::project")) {
+    const legacy = gaps.some(
+      (gap) => selectedOptionId(draft, `gap_model::${gap.beat_id}`),
+    );
+    if (!legacy) return false;
   }
   return true;
 }

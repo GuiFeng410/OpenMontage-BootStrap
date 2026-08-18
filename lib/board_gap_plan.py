@@ -13,6 +13,7 @@ from lib.paths import REPO_ROOT
 from openmontage.mcp.bootstrap import install_state as install_state_mod
 
 GAP_ACTIONS = ("upload", "i2i", "reuse", "skip")
+IMAGE_MODEL_DECISION_KEY = "image_model::project"
 ACTION_LABEL_ZH = {
     "upload": "补传",
     "i2i": "图生图",
@@ -94,6 +95,22 @@ def list_commercial_image_models(
             }
         )
     return rows
+
+
+def default_commercial_image_model(
+    models: list[dict[str, Any]] | None = None,
+    *,
+    key_names_present: list[str] | tuple[str, ...] | None = None,
+) -> dict[str, Any] | None:
+    """First usable image model. Prefer Agnes (native I2I). Never labeled 推荐."""
+    rows = models if models is not None else list_commercial_image_models(key_names_present)
+    available = [item for item in rows if item.get("available")]
+    if not available:
+        return None
+    for item in available:
+        if item.get("id") == "agnes":
+            return item
+    return available[0]
 
 
 def scan_image_key_names(
@@ -261,6 +278,7 @@ def build_gap_snapshot(
     key_names = scan_image_key_names(repo_root=repo_root, environ=environ)
     models = list_commercial_image_models(key_names)
     image_key_present = any(item.get("available") for item in models)
+    default_model = default_commercial_image_model(models)
     reuse_paths = [str(item["path"]) for item in covered if item.get("path")]
     return {
         "version": "1.0",
@@ -268,7 +286,10 @@ def build_gap_snapshot(
         "enough": not gaps,
         "duration_seconds": duration,
         "image_key_present": image_key_present,
+        "image_key_names_present": key_names,
         "image_models": models,
+        "default_image_model": None if default_model is None else default_model["id"],
+        "image_model": None,
         "reuse_paths": reuse_paths,
         "covered": covered,
         "gaps": gaps,
@@ -300,6 +321,25 @@ def stop_action_from_intent(intent: dict[str, Any]) -> str:
     return "continue"
 
 
+def _shared_image_model_id(
+    values: dict[str, str],
+    models: dict[str, dict[str, Any]],
+) -> str:
+    model_id = values.get(IMAGE_MODEL_DECISION_KEY, "")
+    if not model_id:
+        for key, option_id in values.items():
+            if key.startswith("gap_model::") and option_id:
+                model_id = option_id
+                break
+    spec = models.get(model_id)
+    if not spec or not spec.get("available"):
+        raise GapPlanError(
+            "选了图生图，请再选一个已填入 Key 的生图模型。全片共用一个，有多个 Key 时请点选。",
+            code="i2i_model_required",
+        )
+    return model_id
+
+
 def _choices_from_intent(
     snapshot: dict[str, Any],
     intent: dict[str, Any],
@@ -312,6 +352,7 @@ def _choices_from_intent(
         if isinstance(item, dict)
     }
     reuse_ok = {str(path) for path in snapshot.get("reuse_paths") or []}
+    needs_i2i = False
     filled: list[dict[str, Any]] = []
     for gap in snapshot.get("gaps") or []:
         beat_id = str(gap.get("beat_id") or "")
@@ -334,14 +375,7 @@ def _choices_from_intent(
                     "图生图需要生图 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」，或改选其它做法。",
                     code="i2i_unavailable",
                 )
-            model_id = values.get(f"gap_model::{beat_id}", "")
-            spec = models.get(model_id)
-            if not spec or not spec.get("available"):
-                raise GapPlanError(
-                    f"「{gap.get('need_zh') or beat_id}」选了图生图，请再选一个已填入 Key 的生图模型。",
-                    code="i2i_model_required",
-                )
-            row["i2i_model"] = model_id
+            needs_i2i = True
         if choice == "reuse":
             reuse_path = values.get(f"gap_reuse::{beat_id}", "")
             if reuse_path not in reuse_ok:
@@ -351,6 +385,11 @@ def _choices_from_intent(
                 )
             row["reuse_path"] = reuse_path
         filled.append(row)
+    shared_model = _shared_image_model_id(values, models) if needs_i2i else None
+    if shared_model:
+        for row in filled:
+            if row["choice"] == "i2i":
+                row["i2i_model"] = shared_model
     return filled
 
 
@@ -496,10 +535,15 @@ def _plan_artifacts(
         ),
         "segments": card_segments,
     }
+    shared_model = next(
+        (item.get("i2i_model") for item in filled_gaps if item.get("choice") == "i2i"),
+        None,
+    )
     locked = {
         **snapshot,
         "locked": True,
         "locked_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
+        "image_model": shared_model,
         "gaps": filled_gaps,
         "rows": rows,
     }
@@ -539,4 +583,21 @@ def lock_gap_plan_from_intent(
     _write_json(art_dir / "asset_precheck.json", artifacts["asset_precheck"])
     _write_json(art_dir / "video_plan.json", artifacts["video_plan"])
     _write_json(art_dir / "segment_cards.json", artifacts["segment_cards"])
+    _write_image_model_profile(
+        project_dir,
+        artifacts["gap_plan"].get("image_model"),
+    )
     return {"action": "continue", "snapshot": artifacts["gap_plan"], "artifacts": artifacts}
+
+
+def _write_image_model_profile(project_dir: Path, model_id: str | None) -> None:
+    if not model_id:
+        return
+    marker_path = project_dir / "project.json"
+    marker = _read_json(marker_path)
+    profile = marker.get("production_profile")
+    if not isinstance(profile, dict):
+        profile = {}
+    profile["image_model"] = str(model_id)
+    marker["production_profile"] = profile
+    _write_json(marker_path, marker)
