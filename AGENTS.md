@@ -58,7 +58,7 @@
 - 逻辑分层（不搬家）：[`PRODUCT_MAP.md`](PRODUCT_MAP.md)
 - 发布清单：[`distribution/manifests/release-manifest.json`](distribution/manifests/release-manifest.json)
 - **本机状态文件（v0.6）：** 仓根 `.openmontage/install-state.json`（gitignore，**不提交、不写密钥**）
-  - 字段：`verify_ready`、`repo_root`、`projects_dir`、`latest_project_id`、`existing_project_count`、`video_key_present`（及非空变量名）
+  - 字段：`verify_ready`、`repo_root`、`projects_dir`、`latest_project_id`、`existing_project_count`、`video_key_present`、`stock_key_present`（及非空变量名）
   - MCP：`read_install_state` / `scan_video_keys` / `snapshot_install_state` / `ensure_env_file`；`verify_ready` 通过后会写入
   - **不会随 git clone / pull 出现**（gitignore）。会在：02 `verify_ready`、库页成功创建、Backlot `serve` 启动时写入或刷新
   - **开口 / 网页创建前先读此文件。** `verify_ready` 为真 → 禁止再走安装话术，必须给看板网址；文件不存在但 `projects/` 已有 `project.json` → 已用过本仓，禁止再 clone，仍按 `verify_ready` 决定是否走 02；文件不存在且无项目 → 01/02

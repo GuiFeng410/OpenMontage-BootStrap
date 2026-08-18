@@ -918,7 +918,7 @@ def test_intent_basket_summary_contains_selected_option_and_pending_copy(
             assert "确认面板选择" in value
             assert "尚未正式执行" in value
             expect(page.locator(".commercial-chat-only")).to_contain_text(
-                "点提交后请留在本页。若进度无变化，再回聊天发送“确认面板选择”。"
+                "点「进入下一步」后请留在本页。意见可不填。"
             )
         finally:
             browser.close()
@@ -1139,10 +1139,10 @@ def test_commercial_submit_intent_posts_pending(staged_backlot_server):
             page.locator(
                 '.commercial-decision-option[data-option-id="medium"]'
             ).click()
-            page.get_by_role("button", name="提交待确认", exact=True).click()
+            page.get_by_role("button", name="进入下一步", exact=True).click()
 
             expect(page.locator(".commercial-intent-feedback")).to_have_text(
-                "已提交。请留在本页等待本机处理。"
+                "已进入下一步，请留在本页等待本机处理。"
             )
             assert len(posted) == 1
             assert posted[0]["intent_type"] == "decision"
@@ -1182,9 +1182,9 @@ def test_commercial_submit_never_writes_checkpoint(staged_backlot_server):
             page.locator(
                 '.commercial-decision-option[data-option-id="heavy"]'
             ).click()
-            page.get_by_role("button", name="提交待确认", exact=True).click()
+            page.get_by_role("button", name="进入下一步", exact=True).click()
             expect(page.locator(".commercial-intent-feedback")).to_have_text(
-                "已提交。请留在本页等待本机处理。"
+                "已进入下一步，请留在本页等待本机处理。"
             )
 
             posts = [url for method, url in requests if method == "POST"]
@@ -1222,10 +1222,10 @@ def test_commercial_submit_failure_falls_back_to_copy(staged_backlot_server):
             summary = page.locator(".commercial-intent-summary")
             before = summary.input_value()
 
-            page.get_by_role("button", name="提交待确认", exact=True).click()
+            page.get_by_role("button", name="进入下一步", exact=True).click()
 
             expect(page.locator(".commercial-intent-feedback")).to_have_text(
-                "提交失败，请复制上方摘要并回聊天发送。"
+                "提交失败，请留在本页重试。"
             )
             expect(summary).to_be_visible()
             assert summary.input_value() == before
@@ -1319,7 +1319,7 @@ def test_commercial_board_shows_fast_track_pause_zh(staged_backlot_server):
             expect(pause).to_be_visible()
             expect(pause).to_contain_text("有生成图待批量审图。")
             expect(pause).to_contain_text("请在聊天确认这批生成图？")
-            expect(pause).to_contain_text("请回聊天")
+            expect(pause).to_contain_text("可在看板继续选")
             expect(page.get_by_role("button", name="批准")).to_have_count(0)
         finally:
             browser.close()
@@ -2618,7 +2618,7 @@ def test_eventsource_failure_falls_back_to_polling_without_page_reload(
             assert "renders/poll-ready.mp4" in (
                 page.locator(".render-hero video").get_attribute("src") or ""
             )
-            assert "等你聊天确认" in page.locator(".stage").filter(
+            assert "等你在本页确认" in page.locator(".stage").filter(
                 has_text="试片确认"
             ).inner_text()
             assert "自动轮询" in page.locator(".sse-banner").inner_text()

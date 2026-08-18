@@ -22,7 +22,8 @@
 .commercial-intent-status,
 .commercial-fast-track-pause,
 .commercial-runner-status,
-.commercial-final-video {
+.commercial-final-video,
+.commercial-tier-panel {
   display: grid;
   gap: 8px;
   margin-bottom: 12px;
@@ -445,4 +446,51 @@
   .commercial-beat-card.mode-assets .beat-media {
     max-height: min(150px, 22vh);
   }
+}
+
+.tier-panel-head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  align-items: baseline;
+}
+.tier-panel-status,
+.tier-panel-copy { color: var(--text-2); line-height: 1.55; }
+.tier-picker-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.tier-picker-option {
+  display: grid;
+  gap: 4px;
+  width: 100%;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: var(--surface-2);
+  color: var(--text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tier-picker-option span { color: var(--text-2); font-size: calc(12px * var(--fs-scale)); }
+.tier-picker-option.selected {
+  border-color: var(--green);
+  background: var(--green-dim);
+}
+.tier-panel-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.tier-refresh-btn,
+.tier-start-btn {
+  border: 1px solid var(--line, var(--border));
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font: inherit;
+}
+.tier-refresh-btn { background: var(--surface-3); color: var(--text-1); }
+.tier-start-btn { background: var(--green-dim); color: var(--text); }
+.tier-panel-feedback { line-height: 1.55; }
+@media (max-width: 640px) {
+  .tier-picker-options { grid-template-columns: 1fr; }
 }

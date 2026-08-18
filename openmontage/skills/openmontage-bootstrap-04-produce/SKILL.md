@@ -196,7 +196,7 @@ produce_list_intents
 
 ```text
 produce_plan_approval_bundle
-→ 用户点「提交待确认」（本机 runner apply）或聊天口令 确认面板选择
+→ 用户点「进入下一步」（旧称「提交待确认」；本机 runner apply）或聊天口令 确认面板选择
 → produce_apply_approval_bundle(confirm_phrase=确认面板选择)
 → loop:
     produce_fast_track_evaluate

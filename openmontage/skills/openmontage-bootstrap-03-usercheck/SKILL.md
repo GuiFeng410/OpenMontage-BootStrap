@@ -243,7 +243,7 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 
 ### Backlot B2 面板 intent / 快速模式 v2
 
-商品片首轮正式选择可在 Backlot 面板勾选后点击「提交待确认」；网页仍然只读，这一步只创建待确认 interaction intent，不代表批准，也不得在浏览器直接 apply。
+商品片首轮正式选择可在 Backlot 面板勾选后点击「进入下一步」（旧称「提交待确认」）；网页只写待确认 interaction intent，不代表批准，也不得在浏览器直接 apply。主路径留在本页；聊天口令是退路。
 
 聊天中**只认完全一致的口令** `确认面板选择`。`直接出片`、`好的`、`确认` 都不是面板 intent 的审批证据；其中「直接出片」仍只打开上一节 v1.0 完整确认卡，不能代替该口令。
 

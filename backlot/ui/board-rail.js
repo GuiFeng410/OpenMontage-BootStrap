@@ -18,7 +18,7 @@ function stageWasCompletedBefore(st) {
 }
 
 function stageSubZh(st) {
-  if (st.status === "awaiting_human") return "等你聊天确认\n在聊天里回复继续";
+  if (st.status === "awaiting_human") return "等你在本页确认\n点进入下一步继续";
   if (st.status === "in_progress" && stageWasCompletedBefore(st)) {
     return st.stalled
       ? `重试中·此前已通过\n可能卡住 · ${st.stalled_minutes} 分钟无活动`

@@ -114,7 +114,7 @@ function renderModeRoute(mode) {
     el("p", { class: "library-mode-summary" }, route.summary_zh),
     steps,
     el("p", { class: "library-mode-note" },
-      "只列出需要你确认的步骤。其余本机接着走。轻度/中度/重度是花钱档位，进流程后再确认。"),
+      "只列出需要你确认的步骤。其余本机接着走。轻度/中度/重度在进入流程页后选择。"),
   );
 }
 

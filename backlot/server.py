@@ -2,7 +2,9 @@
 
 The watcher observes ``projects/`` with watchfiles; on any change it bumps a
 per-project version and wakes SSE subscribers, who tell the browser to
-refetch state. The server never writes to project directories.
+refetch state. Paid generate is never called here. Local writes are limited
+to library create, Key refresh snapshots, start-production marker fields,
+and intents/.
 """
 
 from __future__ import annotations
@@ -194,6 +196,38 @@ def create_app() -> FastAPI:
             "runner_alive": _runner_alive(),
             **flags,
         }
+
+    @app.post("/api/keys/refresh")
+    async def keys_refresh() -> dict:
+        from lib.library_create import refresh_key_availability
+
+        return await asyncio.to_thread(refresh_key_availability)
+
+    @app.post("/api/project/{project_id}/start-production")
+    async def start_production_endpoint(project_id: str, request: Request) -> JSONResponse:
+        from lib.library_create import LibraryCreateError, start_production
+
+        _safe_project_dir(project_id)
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid JSON body")
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="body must be a JSON object")
+        try:
+            result = await asyncio.to_thread(
+                start_production,
+                project_id=project_id,
+                production_tier=str(payload.get("production_tier") or ""),
+            )
+        except LibraryCreateError as exc:
+            raise HTTPException(
+                status_code=exc.http_status,
+                detail={"code": exc.code, "friendly_zh": exc.friendly_zh},
+            ) from exc
+        _invalidate_summary(project_id)
+        hub.publish(project_id)
+        return JSONResponse(content=result)
 
     # Library create is a local write: it calls produce_init_project after
     # install-state.verify_ready, and never calls paid generate APIs.

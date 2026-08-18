@@ -75,8 +75,9 @@ manual copy.
 - `board-commercial.js`: commercial evidence views and media guards.
 - `board-replay.js`: replay state, controls and projected views.
 - `board-intent-state.js`: pure decision-draft, revision and storage helpers.
+- `board-tier.js`: commercial production-tier picker, Key refresh, start lock.
 - `board-intent-panel.js`: commercial option buttons, copy fallback, and
-  「提交待确认」.
+  「进入下一步」.
 - `board-intent-submit.js`: POST `/intents` helper for pending `decision`
   intents; never posts `approval_bundle`.
 - `library.js`: Library cards, localized status labels and onboarding wiring.
@@ -90,8 +91,8 @@ boundaries.
 
 ## B2 interaction / fast-track v2 boundary
 
-- Panel button is 「提交待确认」. Success copy is
-  `已提交。请留在本页等待本机处理。`
+- Panel button is 「进入下一步」 (legacy name 「提交待确认」). Success copy is
+  `已进入下一步，请留在本页等待本机处理。`
 - The page never shows 「批准」「立即创建」「开始生成」「已生效」.
 - Chat confirmation for panel intents is exactly `确认面板选择` (fallback).
   「直接出片」 is not approval evidence.

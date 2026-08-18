@@ -17,6 +17,8 @@ from openmontage.mcp.common.errors import ConfigError, DoctorError
 
 REVIEW_MODE_IDS = frozenset({"minimal", "normal", "pro"})
 DEFAULT_REVIEW_MODE = "normal"
+PRODUCTION_TIERS = frozenset({"light", "medium", "heavy"})
+TIER_LABEL_ZH = {"light": "轻", "medium": "中", "heavy": "重"}
 MAX_DURATION = 75
 MAX_ASSET_FILES = 40
 MAX_ASSET_BYTES = 25 * 1024 * 1024
@@ -42,6 +44,10 @@ def public_install_flags(*, repo_root: Path | None = None) -> dict[str, Any]:
         "install_state_exists": bool(listed.get("exists")),
         "verify_ready": bool(state.get("verify_ready")),
         "video_key_present": bool(state.get("video_key_present")),
+        "stock_key_present": bool(state.get("stock_key_present")),
+        "video_key_names_present": list(state.get("video_key_names_present") or []),
+        "stock_key_names_present": list(state.get("stock_key_names_present") or []),
+        "scanned_at": state.get("scanned_at"),
         "latest_project_id": state.get("latest_project_id"),
         "existing_project_count": counted or int(state.get("existing_project_count") or 0),
     }
@@ -70,6 +76,120 @@ def remember_machine_seen(
         verify_ready=verify_ready,
         latest_project_id=latest_project_id,
     )
+
+
+def _flags_from_live_scan(
+    *,
+    repo_root: Path,
+    environ: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    video = install_state_mod.scan_video_keys(repo_root=repo_root, environ=environ)
+    stock = install_state_mod.scan_stock_keys(repo_root=repo_root, environ=environ)
+    return {
+        "video_key_present": bool(video["video_key_present"]),
+        "stock_key_present": bool(stock["stock_key_present"]),
+        "video_key_names_present": list(video["video_key_names_present"]),
+        "stock_key_names_present": list(stock["stock_key_names_present"]),
+    }
+
+
+def refresh_key_availability(
+    *,
+    repo_root: Path | None = None,
+    environ: dict[str, str] | None = None,
+    load_dotenv_file: bool = True,
+) -> dict[str, Any]:
+    """Re-scan .env on disk. Never returns Key values."""
+    root = Path(repo_root or REPO_ROOT)
+    prepare_local_runtime(repo_root=root)
+    if load_dotenv_file and environ is None:
+        env_path = root / ".env"
+        if env_path.is_file():
+            from dotenv import load_dotenv
+
+            load_dotenv(env_path, override=True)
+    snap = install_state_mod.snapshot_install_state(
+        repo_root=root,
+        environ=environ,
+    )
+    flags = public_install_flags(repo_root=root)
+    video_ok = bool(flags["video_key_present"])
+    stock_ok = bool(flags["stock_key_present"])
+    if video_ok and stock_ok:
+        friendly = "已刷新：重度与中度均可用。"
+    elif video_ok:
+        friendly = "已刷新：重度可用。中度还需要 Pexels 或 Pixabay Key。"
+    elif stock_ok:
+        friendly = "已刷新：中度可用。重度还需要视频模型 Key。"
+    else:
+        friendly = "已刷新：尚未检测到视频或素材 Key。写入仓根 .env 后再点刷新。"
+    return {
+        "ok": True,
+        **flags,
+        "video_key_names_present": list(snap["state"].get("video_key_names_present") or []),
+        "stock_key_names_present": list(snap["state"].get("stock_key_names_present") or []),
+        "scanned_at": snap["state"].get("scanned_at"),
+        "friendly_zh": friendly,
+        "note_zh": "只报告变量名是否非空，不返回 Key 值。",
+    }
+
+
+def start_production(
+    *,
+    project_id: str,
+    production_tier: str,
+    repo_root: Path | None = None,
+    environ: dict[str, str] | None = None,
+) -> dict[str, Any]:
+    """Lock production tier on project.json. Never calls paid generate."""
+    root = Path(repo_root or REPO_ROOT)
+    projects = prepare_local_runtime(repo_root=root)
+    pid = str(project_id or "").strip()
+    if not pid or any(c in pid for c in "/\\:") or pid in {".", ".."}:
+        raise LibraryCreateError("无效的项目编号", code="bad_project")
+    project_dir = projects / pid
+    marker_path = project_dir / "project.json"
+    if not marker_path.is_file():
+        raise LibraryCreateError("找不到该项目", code="unknown_project", http_status=404)
+    tier = str(production_tier or "").strip()
+    if tier not in PRODUCTION_TIERS:
+        raise LibraryCreateError("请选择轻度、中度或重度", code="bad_tier")
+    keys = _flags_from_live_scan(repo_root=root, environ=environ)
+    if tier == "heavy" and not keys["video_key_present"]:
+        raise LibraryCreateError(
+            "重度需要视频模型 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」。",
+            code="missing_video_key",
+        )
+    if tier == "medium" and not keys["stock_key_present"]:
+        raise LibraryCreateError(
+            "中度需要素材库 Key（Pexels 或 Pixabay）。请写入仓根 .env 后点「已填入 Key，刷新可用性」。",
+            code="missing_stock_key",
+        )
+    marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    if not isinstance(marker, dict):
+        raise LibraryCreateError("项目标记损坏", code="bad_marker")
+    profile = dict(marker.get("production_profile") or {})
+    profile["production_tier"] = tier
+    profile["production_start_requested_at"] = _now_iso()
+    marker["production_profile"] = profile
+    marker_path.write_text(
+        json.dumps(marker, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    try:
+        remember_machine_seen(repo_root=root, latest_project_id=pid)
+    except Exception:
+        pass
+    label = TIER_LABEL_ZH[tier]
+    return {
+        "ok": True,
+        "project_id": pid,
+        "production_tier": tier,
+        "production_tier_zh": label,
+        "video_key_present": keys["video_key_present"],
+        "stock_key_present": keys["stock_key_present"],
+        "friendly_zh": f"已锁定制作档「{label}」，可以从当前停点继续。本页不会直接调付费接口。",
+    }
 
 
 def _now_iso() -> str:
@@ -242,9 +362,9 @@ def create_library_project(
             )
             if flags["video_key_present"]
             else (
-                f"已创建项目，导入 {len(imported)} 个本地文件。当前没有视频 Key，付费生视频前请回聊天补 Key。"
+                f"已创建项目，导入 {len(imported)} 个本地文件。当前没有视频 Key，重度请先在流程页补 Key 并刷新。"
                 if imported
-                else "已创建项目。当前没有视频 Key，付费生视频前请回聊天补 Key。"
+                else "已创建项目。当前没有视频 Key，重度请先在流程页补 Key 并刷新。"
             )
         ),
         "request_id": str(uuid4()),

@@ -1,6 +1,7 @@
 import { el, fmtMoney, fmtMoneyCny, mediaURL, thumbURL } from "./lib.js";
 import { stageNeedsDecision } from "./board-rail.js";
 import { renderDecisionIntentPanel } from "./board-intent-panel.js";
+import { renderProductionTierPanel } from "./board-tier.js";
 
 export function isCommercial(state) {
   return state?.pipeline?.pipeline_type === "bootstrap-commercial";
@@ -41,7 +42,7 @@ function renderFastTrackPause(pause) {
     pause.current_question
       ? el("div", { class: "commercial-pause-question" }, pause.current_question)
       : null,
-    el("div", { class: "commercial-chat-only" }, "暂停原因写在本页；可在看板继续选，或回聊天回答。"));
+    el("div", { class: "commercial-chat-only" }, "暂停原因写在本页；可在看板继续选。"));
 }
 
 function renderRunnerStatus(status) {
@@ -54,7 +55,7 @@ function renderRunnerStatus(status) {
     paused: "暂停，要你选",
     ready: "已出片",
     exported: "已导出",
-    needs_chat: "请回聊天继续",
+    needs_chat: "请在本页刷新或补 Key 后继续",
     idle: "本机空闲",
   }[phase] || phase;
   return el("div", { class: "notice commercial-runner-status" },
@@ -1083,6 +1084,18 @@ export function renderCommercialBoard(s, context) {
   if (activity) aside.append(activity);
 
   const main = el("div", { class: "main-col" });
+  const tierPanel = renderProductionTierPanel({
+    projectId: s.project_id,
+    lockedTier: s.commercial?.brief_summary?.production_tier,
+    requestRender: () => {
+      if (typeof context.requestRefresh === "function") {
+        context.requestRefresh();
+        return;
+      }
+      if (typeof context.requestRender === "function") context.requestRender();
+    },
+  });
+  if (tierPanel) main.append(tierPanel);
   const intentStatus = renderIntentStatus(s.commercial?.interaction_intents);
   if (intentStatus) main.append(intentStatus);
   const runner = renderRunnerStatus(s.commercial?.runner_status);

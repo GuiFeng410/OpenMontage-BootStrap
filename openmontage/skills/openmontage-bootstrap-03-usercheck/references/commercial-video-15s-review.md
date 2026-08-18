@@ -170,7 +170,7 @@
 
 ### 0.5.1 快速模式 v2（面板 intent）
 
-**触发：** 用户在面板「提交待确认」后发送完全一致的口令 `确认面板选择`，或 Agent 已通过 `produce_list_interaction_intents` 列到待确认 interaction intent。页面只提交 pending `decision`，不审批、不写审批包。Agent 仍须先 `produce_plan_approval_bundle`：该工具用项目证据把同一 `intent_id` 的 `decision` 提升为完整 §6.3 `approval_bundle`，再展示一份中文摘要，然后以 `produce_apply_approval_bundle(confirm_phrase="确认面板选择")` 应用。列表为空、项目证据不足、plan/apply 失败、revision drift 或 expired 时不得 apply，回退完整确认卡 / Grill；用户也可回到 B1 copy-summary（文案摘要）逐项确认。
+**触发：** 用户在面板点「进入下一步」（旧称「提交待确认」）后，本机 runner 消费 intent；聊天退路仍是完全一致的口令 `确认面板选择`，或 Agent 已通过 `produce_list_interaction_intents` 列到待确认 interaction intent。页面只提交 pending `decision`，不审批、不写审批包。Agent 仍须先 `produce_plan_approval_bundle`：该工具用项目证据把同一 `intent_id` 的 `decision` 提升为完整 §6.3 `approval_bundle`，再展示一份中文摘要，然后以 `produce_apply_approval_bundle(confirm_phrase="确认面板选择")` 应用。列表为空、项目证据不足、plan/apply 失败、revision drift 或 expired 时不得 apply，回退完整确认卡 / Grill；用户也可回到 B1 copy-summary（文案摘要）逐项确认。
 
 新的授权写入 `selected="fast_track_v2"`、`option_id="fast_track_v2"`，checkpoint metadata 写 `approval_source="fast_track_v2"`。历史 `fast_track_v1` 继续只读有效，不改写、不迁移，也不要求重新授权。「直接出片」仍只打开 §0.5 v1.0 卡，不是审批证据。
 

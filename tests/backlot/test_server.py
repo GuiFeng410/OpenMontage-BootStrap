@@ -95,6 +95,48 @@ class TestBacklotServerApi:
         assert payload["projects_dir"] == str(projects_root)
         assert "verify_ready" in payload
         assert "video_key_present" in payload
+        assert "stock_key_present" in payload
+
+    def test_keys_refresh_never_returns_secret_values(self, client, monkeypatch):
+        monkeypatch.setattr(
+            "lib.library_create.refresh_key_availability",
+            lambda **kwargs: {
+                "ok": True,
+                "video_key_present": True,
+                "stock_key_present": True,
+                "video_key_names_present": ["TOKENHUB_API_KEY"],
+                "stock_key_names_present": ["PEXELS_API_KEY"],
+                "friendly_zh": "已刷新：重度与中度均可用。",
+                "note_zh": "只报告变量名是否非空，不返回 Key 值。",
+            },
+        )
+        response = client.post("/api/keys/refresh")
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert payload["video_key_present"] is True
+        assert payload["stock_key_present"] is True
+        assert "secret" not in response.text.lower()
+
+    def test_start_production_rejects_heavy_without_key(self, client, projects_root, monkeypatch):
+        from lib.library_create import LibraryCreateError
+
+        def boom(**kwargs):
+            raise LibraryCreateError(
+                "重度需要视频模型 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」。",
+                code="missing_video_key",
+            )
+
+        monkeypatch.setattr("lib.library_create.start_production", boom)
+        project = projects_root / "shop-demo"
+        project.mkdir()
+        (project / "project.json").write_text("{}", encoding="utf-8")
+        response = client.post(
+            "/api/project/shop-demo/start-production",
+            json={"production_tier": "heavy"},
+        )
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "missing_video_key"
 
     def test_health_exposes_projects_root(self, client):
         payload = client.get("/api/health").json()

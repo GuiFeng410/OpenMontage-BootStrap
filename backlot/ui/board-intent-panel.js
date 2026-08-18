@@ -11,7 +11,6 @@ import {
 } from "./board-intent-state.js";
 import {
   buildDecisionIntent,
-  CONFIRM_PHRASE,
   submitDecisionIntent,
 } from "./board-intent-submit.js";
 
@@ -131,7 +130,7 @@ export function renderDecisionIntentPanel({
         type: "button",
         class: "commercial-intent-submit",
         disabled: "",
-      }, "提交待确认"),
+      }, "进入下一步"),
       el("button", {
         type: "button",
         onclick: () => {
@@ -144,13 +143,13 @@ export function renderDecisionIntentPanel({
       class: "commercial-intent-summary",
       readonly: "",
       rows: "8",
-      "aria-label": "待确认聊天摘要",
+      "aria-label": "待确认摘要（退路）",
     });
     const note = el("textarea", {
       class: "commercial-intent-note",
       rows: "3",
-      placeholder: "可选备注（例如：保留片尾品牌标识）",
-      "aria-label": "待确认备注",
+      placeholder: "选填意见。不填也可以直接进入下一步。",
+      "aria-label": "选填意见",
       oninput: (event) => {
         draft = setDraftNote(draft, event.currentTarget.value);
         saveDraft(storage, draft);
@@ -166,11 +165,11 @@ export function renderDecisionIntentPanel({
         try {
           if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
           await navigator.clipboard.writeText(summary.value);
-          feedback.textContent = "摘要已复制，请回聊天发送。";
+          feedback.textContent = "摘要已复制。请留在本页。";
         } catch {
           summary.focus();
           summary.select();
-          feedback.textContent = "复制失败，请手动选择上方摘要并复制。";
+          feedback.textContent = "复制失败，请手动选择上方摘要。";
         }
       },
     }, "复制聊天摘要");
@@ -188,29 +187,29 @@ export function renderDecisionIntentPanel({
           });
           const result = await submitDecisionIntent({ intent });
           feedback.textContent = result.ok
-            ? "已提交。请留在本页等待本机处理。"
-            : `提交失败，请复制上方摘要并回聊天发送：${CONFIRM_PHRASE}`;
+            ? "已进入下一步，请留在本页等待本机处理。"
+            : "提交失败，请留在本页重试。";
         } catch {
-          feedback.textContent = "提交失败，请复制上方摘要并回聊天发送。";
+          feedback.textContent = "提交失败，请留在本页重试。";
         } finally {
           submitButton.disabled = false;
         }
       },
-    }, "提交待确认");
+    }, "进入下一步");
     body.append(el("div", { class: "commercial-intent-basket" },
       el("div", { class: "commercial-intent-basket-head" },
-        el("b", {}, "待确认篮子"),
+        el("b", {}, "本步确认"),
         el("span", {}, projectTitle || projectId)),
       summary,
       note,
-      el("div", { class: "commercial-intent-actions" }, copyButton, submitButton),
+      el("div", { class: "commercial-intent-actions" }, submitButton, copyButton),
       feedback));
   }
 
   body.append(el("div", { class: "commercial-chat-only" },
     stale
       ? "选择已过期，请先清空并重选。"
-      : "点提交后请留在本页。若进度无变化，再回聊天发送“确认面板选择”。"));
+      : "点「进入下一步」后请留在本页。意见可不填。"));
   return el("div", { id: panelId, class: "notice commercial-notice" },
     el("span", {
       class: "commercial-intent-icon",

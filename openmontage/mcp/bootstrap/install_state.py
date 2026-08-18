@@ -12,6 +12,7 @@ from typing import Any
 STATE_RELATIVE = Path(".openmontage") / "install-state.json"
 STATE_VERSION = 1
 VIDEO_SECTION_MARK = "## 【二、视频生成专项服务】"
+STOCK_KEY_NAMES = ("PEXELS_API_KEY", "PIXABAY_API_KEY")
 ENV_ASSIGN_RE = re.compile(r"^(?:export\s+)?([A-Z][A-Z0-9_]+)\s*=")
 KEYISH_RE = re.compile(r"(?:KEY|TOKEN|SECRET)$")
 EXCLUDE_NAME_MARKERS = ("OSS_", "ALIYUN_")
@@ -38,6 +39,9 @@ STATE_FIELDS = (
     "video_key_present",
     "video_key_names_present",
     "video_key_sources",
+    "stock_key_present",
+    "stock_key_names_present",
+    "stock_key_sources",
     "scanned_names",
     "scanned_at",
 )
@@ -131,29 +135,50 @@ def process_env_filled_names(names: list[str], environ: dict[str, str] | None = 
     return filled
 
 
-def scan_video_keys(*, repo_root: Path, environ: dict[str, str] | None = None) -> dict[str, Any]:
-    root = Path(repo_root).resolve()
-    example_path = root / ".env-example.md"
-    env_path = root / ".env"
-    example_text = example_path.read_text(encoding="utf-8") if example_path.is_file() else ""
-    names = video_channel_names_from_example(example_text)
-    env_text = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
-    from_file = parse_dotenv_filled_names(env_text, names)
-    from_proc = process_env_filled_names(names, environ)
-    present = []
+def _merge_present(from_file: list[str], from_proc: list[str]) -> list[str]:
+    present: list[str] = []
     seen: set[str] = set()
     for name in from_file + from_proc:
         if name in seen:
             continue
         seen.add(name)
         present.append(name)
-    return {
+    return present
+
+
+def _scan_named_keys(
+    *,
+    repo_root: Path,
+    names: list[str],
+    environ: dict[str, str] | None = None,
+) -> tuple[list[str], list[str], list[str], dict[str, Any]]:
+    root = Path(repo_root).resolve()
+    env_path = root / ".env"
+    env_text = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
+    from_file = parse_dotenv_filled_names(env_text, names)
+    from_proc = process_env_filled_names(names, environ)
+    present = _merge_present(from_file, from_proc)
+    meta = {
         "repo_root": str(root),
-        "example_path": str(example_path),
         "env_path": str(env_path),
-        "example_exists": example_path.is_file(),
         "env_file_exists": env_path.is_file(),
-        "scanned_names": names,
+        "scanned_names": list(names),
+    }
+    return from_file, from_proc, present, meta
+
+
+def scan_video_keys(*, repo_root: Path, environ: dict[str, str] | None = None) -> dict[str, Any]:
+    root = Path(repo_root).resolve()
+    example_path = root / ".env-example.md"
+    example_text = example_path.read_text(encoding="utf-8") if example_path.is_file() else ""
+    names = video_channel_names_from_example(example_text)
+    from_file, from_proc, present, meta = _scan_named_keys(
+        repo_root=root, names=names, environ=environ
+    )
+    return {
+        **meta,
+        "example_path": str(example_path),
+        "example_exists": example_path.is_file(),
         "video_key_present": bool(present),
         "video_key_names_present": present,
         "video_key_sources": {
@@ -161,6 +186,22 @@ def scan_video_keys(*, repo_root: Path, environ: dict[str, str] | None = None) -
             "process_env": from_proc,
         },
         "note_zh": "只报告变量名是否非空，不返回 Key 值。空 Key 禁止付费 generate。",
+    }
+
+
+def scan_stock_keys(*, repo_root: Path, environ: dict[str, str] | None = None) -> dict[str, Any]:
+    from_file, from_proc, present, meta = _scan_named_keys(
+        repo_root=repo_root, names=list(STOCK_KEY_NAMES), environ=environ
+    )
+    return {
+        **meta,
+        "stock_key_present": bool(present),
+        "stock_key_names_present": present,
+        "stock_key_sources": {
+            "env_file": from_file,
+            "process_env": from_proc,
+        },
+        "note_zh": "只报告 Pexels/Pixabay 变量名是否非空，不返回 Key 值。",
     }
 
 
@@ -177,6 +218,9 @@ def _empty_state(repo_root: Path) -> dict[str, Any]:
         "video_key_present": False,
         "video_key_names_present": [],
         "video_key_sources": {"env_file": [], "process_env": []},
+        "stock_key_present": False,
+        "stock_key_names_present": [],
+        "stock_key_sources": {"env_file": [], "process_env": []},
         "scanned_names": [],
         "scanned_at": None,
     }
@@ -190,6 +234,8 @@ def _public_state(data: dict[str, Any], repo_root: Path) -> dict[str, Any]:
     clean["version"] = STATE_VERSION
     if clean.get("video_key_names_present") is None:
         clean["video_key_names_present"] = []
+    if clean.get("stock_key_names_present") is None:
+        clean["stock_key_names_present"] = []
     return clean
 
 
@@ -245,6 +291,7 @@ def snapshot_install_state(
     environ: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     scan = scan_video_keys(repo_root=repo_root, environ=environ)
+    stock = scan_stock_keys(repo_root=repo_root, environ=environ)
     current = read_install_state(repo_root=repo_root)["state"]
     state = _public_state(current, repo_root)
     state["repo_root"] = str(Path(repo_root).resolve())
@@ -254,6 +301,9 @@ def snapshot_install_state(
     state["video_key_present"] = bool(scan["video_key_present"])
     state["video_key_names_present"] = list(scan["video_key_names_present"])
     state["video_key_sources"] = scan["video_key_sources"]
+    state["stock_key_present"] = bool(stock["stock_key_present"])
+    state["stock_key_names_present"] = list(stock["stock_key_names_present"])
+    state["stock_key_sources"] = stock["stock_key_sources"]
     state["scanned_names"] = list(scan["scanned_names"])
     state["scanned_at"] = _now_iso()
     if verify_ready is not None:
@@ -268,7 +318,8 @@ def snapshot_install_state(
     tmp.replace(path)
     dumped = path.read_text(encoding="utf-8")
     env = environ or os.environ
-    for name in state["video_key_names_present"]:
+    checked = list(state["video_key_names_present"]) + list(state["stock_key_names_present"])
+    for name in checked:
         secret = env.get(name, "")
         if secret and _is_filled(secret) and len(secret.strip()) >= 8 and secret in dumped:
             raise RuntimeError("install-state.json must not contain secret values")
@@ -276,4 +327,5 @@ def snapshot_install_state(
         "path": str(path),
         "state": state,
         "scan": scan,
+        "stock_scan": stock,
     }

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from openmontage.mcp.bootstrap.install_state import (
     parse_dotenv_filled_names,
+    scan_stock_keys,
     scan_video_keys,
     snapshot_install_state,
     video_channel_names_from_example,
@@ -71,6 +72,29 @@ def test_scan_and_snapshot_never_write_secret_values(tmp_path, monkeypatch) -> N
     assert snap["state"]["existing_project_count"] == 0
     assert snap["state"]["video_key_present"] is True
     assert "TOKENHUB_API_KEY" in snap["state"]["video_key_names_present"]
+
+
+def test_scan_stock_keys_and_snapshot_never_write_secret_values(
+    tmp_path, monkeypatch
+) -> None:
+    (tmp_path / ".env-example.md").write_text(EXAMPLE, encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        "PEXELS_API_KEY=px-secret-do-not-leak-789\nPIXABAY_API_KEY=\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    monkeypatch.delenv("PIXABAY_API_KEY", raising=False)
+
+    scan = scan_stock_keys(repo_root=tmp_path, environ={})
+    assert scan["stock_key_present"] is True
+    assert scan["stock_key_names_present"] == ["PEXELS_API_KEY"]
+    assert "px-secret-do-not-leak-789" not in str(scan)
+
+    snap = snapshot_install_state(repo_root=tmp_path, environ={})
+    text = (tmp_path / ".openmontage" / "install-state.json").read_text(encoding="utf-8")
+    assert "px-secret-do-not-leak-789" not in text
+    assert snap["state"]["stock_key_present"] is True
+    assert "PEXELS_API_KEY" in snap["state"]["stock_key_names_present"]
 
 
 def test_snapshot_counts_existing_projects(tmp_path, monkeypatch) -> None:
