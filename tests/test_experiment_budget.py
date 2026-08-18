@@ -8,7 +8,10 @@ from pathlib import Path
 import pytest
 
 from lib.experiment_budget import (
+    clamp_ai_share_pct,
+    format_motion_mix_zh,
     merge_experiment_fields_into_profile,
+    motion_mix_from_ai_share_pct,
     motion_mix_info,
     needs_budget_choice_confirm,
     needs_single_call_cost_tip,
@@ -79,12 +82,25 @@ def test_cny_display_uses_usd_ledger() -> None:
 
 
 def test_motion_mix_defaults_and_soft_plan() -> None:
-    assert normalize_motion_mix(None) == "1:1"
+    assert normalize_motion_mix(None) == "0:1"
     assert motion_mix_info("2:1")["warn_slideshow"] is True
     plan = recommended_ai_seconds(60, "1:1")
     assert plan["ai_seconds_target"] == 30
     assert plan["ai_seconds_min"] == 21
     assert plan["ai_seconds_max"] == 39
+
+
+def test_ai_share_pct_maps_to_planned_mix() -> None:
+    assert clamp_ai_share_pct(57) == 60
+    assert clamp_ai_share_pct(None) == 100
+    assert motion_mix_from_ai_share_pct(50) == "1:1"
+    assert motion_mix_from_ai_share_pct(70) == "1:2"
+    assert motion_mix_from_ai_share_pct(100) == "0:1"
+    assert motion_mix_from_ai_share_pct(30) == "2:1"
+    assert format_motion_mix_zh(ai_share_pct=70) == "AI 约 70% / 运镜约 30%"
+    assert format_motion_mix_zh(motion_mix="1:1") == "AI 约 50% / 运镜约 50%"
+    plan = recommended_ai_seconds(20, "1:1", ai_share_pct=70)
+    assert plan["ai_seconds_target"] == 14.0
 
 
 def test_merge_defaults_review_and_candidate() -> None:
@@ -96,10 +112,10 @@ def test_merge_defaults_review_and_candidate() -> None:
     assert profile["budget_cny"] == 8
     assert profile["pricing_note"] == "experimental_api_budget_cap_not_selling_price"
     assert profile["is_hard_gate"] is False
-    assert profile["motion_mix"] == "1:1"
+    assert profile["motion_mix"] == "0:1"
     assert profile["motion_mix_source"] == "default_recommend"
     assert profile["label_zh"] == "标准"
-    assert profile["motion_mix_label_zh"] == "推荐（普通默认）"
+    assert profile["motion_mix_label_zh"] == "默认（几乎全 AI）"
 
 
 def test_set_profile_persists_experiment_fields(sandbox: Path) -> None:
@@ -123,7 +139,7 @@ def test_set_profile_persists_experiment_fields(sandbox: Path) -> None:
     assert profile["motion_target_band"] == "60s_high_motion"
     assert profile["motion_mix"] == "1:2"
     assert profile["motion_mix_source"] == "user_selected"
-    assert profile["ai_share_pct"] == 67
+    assert profile["ai_share_pct"] == 70
     marker = json.loads((sandbox / "exp1" / "project.json").read_text(encoding="utf-8"))
     assert marker["production_profile"]["api_budget_tier"] == "standard"
     assert marker["production_profile"]["motion_mix"] == "1:2"

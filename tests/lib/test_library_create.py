@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import pytest
@@ -5,6 +6,7 @@ import pytest
 from lib.library_create import (
     LibraryCreateError,
     create_library_project,
+    list_commercial_video_models,
     public_install_flags,
     refresh_key_availability,
     slug_project_id,
@@ -19,6 +21,34 @@ def test_flags_default_not_ready(tmp_path: Path) -> None:
     assert flags["verify_ready"] is False
     assert flags["video_key_present"] is False
     assert flags["stock_key_present"] is False
+    assert flags["video_models"][0]["id"] == "agnes-video-v2.0"
+    assert flags["video_models"][0]["available"] is False
+    assert flags["video_models"][1]["id"] == "hy-video-1.5"
+    assert flags["video_models"][2]["id"] == "pixverse-video-v6.0"
+
+
+def test_tokenhub_alias_unlocks_hunyuan_and_pixverse() -> None:
+    models = {item["id"]: item for item in list_commercial_video_models(["TENCENT_TOKENHUB_API_KEY"])}
+    assert models["agnes-video-v2.0"]["available"] is False
+    assert models["hy-video-1.5"]["available"] is True
+    assert models["pixverse-video-v6.0"]["available"] is True
+
+
+def test_flags_live_scan_env_ignores_stale_install_state(tmp_path: Path) -> None:
+    snapshot_install_state(repo_root=tmp_path, verify_ready=True, environ={})
+    (tmp_path / ".env-example.md").write_text(EXAMPLE, encoding="utf-8")
+    (tmp_path / ".env").write_text(
+        "TOKENHUB_API_KEY=th-secret-do-not-leak-live\n",
+        encoding="utf-8",
+    )
+    flags = public_install_flags(repo_root=tmp_path)
+    assert flags["video_key_present"] is True
+    assert "TOKENHUB_API_KEY" in flags["video_key_names_present"]
+    models = {item["id"]: item for item in flags["video_models"]}
+    assert models["hy-video-1.5"]["available"] is True
+    assert models["pixverse-video-v6.0"]["available"] is True
+    assert models["agnes-video-v2.0"]["available"] is False
+    assert "th-secret-do-not-leak-live" not in str(flags)
 
 
 def test_create_requires_title(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -78,6 +108,7 @@ def test_slug_falls_back_for_chinese_title() -> None:
 EXAMPLE = """
 ## 【二、视频生成专项服务】
 
+AGNES_API_KEY=
 TOKENHUB_API_KEY=
 KLING_API_KEY=
 """
@@ -178,3 +209,73 @@ def test_start_production_locks_light_and_heavy_when_keys_present(
     assert '"production_tier": "heavy"' in marker
     assert "th-secret-do-not-leak-ccc" not in marker
     assert "th-secret-do-not-leak-ccc" not in str(heavy)
+
+
+def test_start_production_persists_ai_share_pct(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    project_dir = _write_ready_project(tmp_path)
+    (tmp_path / ".env").write_text(
+        "TOKENHUB_API_KEY=th-secret-do-not-leak-eee\nPEXELS_API_KEY=px-secret-do-not-leak-fff\n",
+        encoding="utf-8",
+    )
+    heavy = start_production(
+        project_id="shop-demo",
+        production_tier="heavy",
+        ai_share_pct=70,
+        video_model="pixverse-video-v6.0",
+        repo_root=tmp_path,
+        environ={},
+    )
+    assert heavy["ai_share_pct"] == 70
+    assert heavy["motion_mix"] == "1:2"
+    assert heavy["video_model"] == "pixverse-video-v6.0"
+    assert heavy["video_channel"] == "tokenhub"
+    marker = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
+    assert marker["production_profile"]["ai_share_pct"] == 70
+    assert marker["production_profile"]["motion_mix"] == "1:2"
+    assert marker["production_profile"]["video_model"] == "pixverse-video-v6.0"
+
+
+def test_start_production_defaults_to_first_available_model(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    project_dir = _write_ready_project(tmp_path)
+    (tmp_path / ".env").write_text(
+        "AGNES_API_KEY=ag-secret-do-not-leak\nTOKENHUB_API_KEY=th-secret-do-not-leak-ggg\n",
+        encoding="utf-8",
+    )
+    heavy = start_production(
+        project_id="shop-demo",
+        production_tier="heavy",
+        repo_root=tmp_path,
+        environ={},
+    )
+    assert heavy["video_model"] == "agnes-video-v2.0"
+    assert heavy["ai_share_pct"] == 100
+    assert heavy["motion_mix"] == "0:1"
+    marker = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
+    assert marker["production_profile"]["video_model"] == "agnes-video-v2.0"
+    assert marker["production_profile"]["ai_video"] == "enabled"
+
+
+def test_start_production_rejects_model_without_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    _write_ready_project(tmp_path)
+    (tmp_path / ".env").write_text(
+        "TOKENHUB_API_KEY=th-secret-do-not-leak-hhh\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(LibraryCreateError) as caught:
+        start_production(
+            project_id="shop-demo",
+            production_tier="heavy",
+            video_model="agnes-video-v2.0",
+            repo_root=tmp_path,
+            environ={},
+        )
+    assert caught.value.code == "missing_model_key"

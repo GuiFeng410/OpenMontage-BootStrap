@@ -188,6 +188,7 @@ function renderCommercialSummary(s) {
     ["时长", b.duration_seconds ? `${b.duration_seconds}s` : null],
     ["制作档位", b.production_tier],
     ["视频渠道", b.video_channel],
+    ["视频模型", b.video_model_zh],
     ["评审模式", b.review_mode_zh],
     ["画面构成", b.motion_mix_zh],
     ["实验预算", b.budget_cny != null ? fmtMoneyCny(b.budget_cny) : null],
@@ -1087,7 +1088,13 @@ export function renderCommercialBoard(s, context) {
   const tierPanel = renderProductionTierPanel({
     projectId: s.project_id,
     lockedTier: s.commercial?.brief_summary?.production_tier,
+    lockedAiSharePct: s.commercial?.brief_summary?.ai_share_pct,
+    lockedMotionMix: s.commercial?.brief_summary?.motion_mix,
+    lockedVideoModel: s.commercial?.brief_summary?.video_model,
     requestRender: () => {
+      if (typeof context.requestRender === "function") context.requestRender();
+    },
+    requestRefresh: () => {
       if (typeof context.requestRefresh === "function") {
         context.requestRefresh();
         return;

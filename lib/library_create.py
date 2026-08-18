@@ -10,6 +10,11 @@ from pathlib import Path
 from typing import Any, Iterable
 from uuid import uuid4
 
+from lib.experiment_budget import (
+    DEFAULT_AI_SHARE_PCT,
+    clamp_ai_share_pct,
+    motion_mix_from_ai_share_pct,
+)
 from lib.paths import REPO_ROOT
 from openmontage.mcp.bootstrap import install_state as install_state_mod
 from openmontage.mcp.bootstrap import tools as bootstrap_tools
@@ -19,6 +24,29 @@ REVIEW_MODE_IDS = frozenset({"minimal", "normal", "pro"})
 DEFAULT_REVIEW_MODE = "normal"
 PRODUCTION_TIERS = frozenset({"light", "medium", "heavy"})
 TIER_LABEL_ZH = {"light": "轻", "medium": "中", "heavy": "重"}
+COMMERCIAL_VIDEO_MODELS: tuple[dict[str, Any], ...] = (
+    {
+        "id": "agnes-video-v2.0",
+        "channel": "agnes",
+        "label_zh": "Agnes",
+        "key_names": ("AGNES_API_KEY", "AGNES_AI_API_KEY"),
+        "capability_zh": "超长自动切段拼接。",
+    },
+    {
+        "id": "hy-video-1.5",
+        "channel": "tokenhub",
+        "label_zh": "TokenHub·混元",
+        "key_names": ("TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"),
+        "capability_zh": "单段时长由模型定，长片自动拼接。",
+    },
+    {
+        "id": "pixverse-video-v6.0",
+        "channel": "tokenhub",
+        "label_zh": "TokenHub·Pixverse",
+        "key_names": ("TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"),
+        "capability_zh": "默认可约 5 秒一段，长片自动拼接。",
+    },
+)
 MAX_DURATION = 75
 MAX_ASSET_FILES = 40
 MAX_ASSET_BYTES = 25 * 1024 * 1024
@@ -34,19 +62,83 @@ class LibraryCreateError(Exception):
         self.friendly_zh = message
 
 
+def list_commercial_video_models(
+    key_names_present: Iterable[str] | None = None,
+) -> list[dict[str, Any]]:
+    present = {str(name) for name in (key_names_present or [])}
+    models: list[dict[str, Any]] = []
+    for spec in COMMERCIAL_VIDEO_MODELS:
+        models.append(
+            {
+                "id": spec["id"],
+                "channel": spec["channel"],
+                "label_zh": spec["label_zh"],
+                "available": any(name in present for name in spec["key_names"]),
+                "capability_zh": spec["capability_zh"],
+            }
+        )
+    return models
+
+
+def default_commercial_video_model(
+    models: list[dict[str, Any]] | None = None,
+    *,
+    key_names_present: Iterable[str] | None = None,
+) -> dict[str, Any] | None:
+    rows = models if models is not None else list_commercial_video_models(key_names_present)
+    for item in rows:
+        if item.get("available"):
+            return item
+    return None
+
+
+def resolve_commercial_video_model(
+    raw_id: str | None,
+    *,
+    key_names_present: Iterable[str] | None = None,
+) -> dict[str, Any]:
+    models = list_commercial_video_models(key_names_present)
+    wanted = str(raw_id or "").strip()
+    if wanted:
+        picked = next((item for item in models if item["id"] == wanted), None)
+        if picked is None:
+            raise LibraryCreateError("请选择已接线的视频模型", code="bad_video_model")
+        if not picked["available"]:
+            raise LibraryCreateError(
+                "该模型尚未填入 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」，或改选其它模型。",
+                code="missing_model_key",
+            )
+        return picked
+    picked = default_commercial_video_model(models)
+    if picked is None:
+        raise LibraryCreateError(
+            "重度需要视频模型 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」。",
+            code="missing_video_key",
+        )
+    return picked
+
+
 def public_install_flags(*, repo_root: Path | None = None) -> dict[str, Any]:
     root = Path(repo_root or REPO_ROOT)
     listed = install_state_mod.read_install_state(repo_root=root)
     state = listed.get("state") if isinstance(listed.get("state"), dict) else {}
     projects = Path(os.environ.get("OPENMONTAGE_PROJECTS_DIR") or (root / "projects"))
     counted = install_state_mod.count_existing_projects(projects)
+    try:
+        live = _flags_from_live_scan(repo_root=root)
+    except Exception:
+        names = list(state.get("video_key_names_present") or [])
+        live = {
+            "video_key_present": bool(state.get("video_key_present")),
+            "stock_key_present": bool(state.get("stock_key_present")),
+            "video_key_names_present": names,
+            "stock_key_names_present": list(state.get("stock_key_names_present") or []),
+            "video_models": list_commercial_video_models(names),
+        }
     return {
         "install_state_exists": bool(listed.get("exists")),
         "verify_ready": bool(state.get("verify_ready")),
-        "video_key_present": bool(state.get("video_key_present")),
-        "stock_key_present": bool(state.get("stock_key_present")),
-        "video_key_names_present": list(state.get("video_key_names_present") or []),
-        "stock_key_names_present": list(state.get("stock_key_names_present") or []),
+        **live,
         "scanned_at": state.get("scanned_at"),
         "latest_project_id": state.get("latest_project_id"),
         "existing_project_count": counted or int(state.get("existing_project_count") or 0),
@@ -85,11 +177,13 @@ def _flags_from_live_scan(
 ) -> dict[str, Any]:
     video = install_state_mod.scan_video_keys(repo_root=repo_root, environ=environ)
     stock = install_state_mod.scan_stock_keys(repo_root=repo_root, environ=environ)
+    names = list(video["video_key_names_present"])
     return {
         "video_key_present": bool(video["video_key_present"]),
         "stock_key_present": bool(stock["stock_key_present"]),
-        "video_key_names_present": list(video["video_key_names_present"]),
+        "video_key_names_present": names,
         "stock_key_names_present": list(stock["stock_key_names_present"]),
+        "video_models": list_commercial_video_models(names),
     }
 
 
@@ -138,6 +232,8 @@ def start_production(
     *,
     project_id: str,
     production_tier: str,
+    ai_share_pct: int | float | str | None = None,
+    video_model: str | None = None,
     repo_root: Path | None = None,
     environ: dict[str, str] | None = None,
 ) -> dict[str, Any]:
@@ -165,12 +261,38 @@ def start_production(
             "中度需要素材库 Key（Pexels 或 Pixabay）。请写入仓根 .env 后点「已填入 Key，刷新可用性」。",
             code="missing_stock_key",
         )
+    picked_model: dict[str, Any] | None = None
+    if tier == "heavy":
+        picked_model = resolve_commercial_video_model(
+            video_model,
+            key_names_present=keys["video_key_names_present"],
+        )
     marker = json.loads(marker_path.read_text(encoding="utf-8"))
     if not isinstance(marker, dict):
         raise LibraryCreateError("项目标记损坏", code="bad_marker")
     profile = dict(marker.get("production_profile") or {})
     profile["production_tier"] = tier
     profile["production_start_requested_at"] = _now_iso()
+    locked_pct: int | None = None
+    if tier == "heavy":
+        existing_pct = profile.get("ai_share_pct")
+        default_pct = (
+            int(existing_pct) if existing_pct is not None else DEFAULT_AI_SHARE_PCT
+        )
+        locked_pct = clamp_ai_share_pct(ai_share_pct, default=default_pct)
+        profile["ai_share_pct"] = locked_pct
+        profile["motion_mix"] = motion_mix_from_ai_share_pct(locked_pct)
+        profile["motion_mix_source"] = "user_selected"
+        profile["ai_video"] = "enabled"
+        if picked_model is None:
+            raise LibraryCreateError(
+                "重度需要视频模型 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」。",
+                code="missing_video_key",
+            )
+        profile["video_channel"] = picked_model["channel"]
+        profile["video_model"] = picked_model["id"]
+    else:
+        profile["ai_video"] = "disabled"
     marker["production_profile"] = profile
     marker_path.write_text(
         json.dumps(marker, ensure_ascii=False, indent=2) + "\n",
@@ -181,7 +303,7 @@ def start_production(
     except Exception:
         pass
     label = TIER_LABEL_ZH[tier]
-    return {
+    result = {
         "ok": True,
         "project_id": pid,
         "production_tier": tier,
@@ -190,6 +312,15 @@ def start_production(
         "stock_key_present": keys["stock_key_present"],
         "friendly_zh": f"已锁定制作档「{label}」，可以从当前停点继续。本页不会直接调付费接口。",
     }
+    if locked_pct is not None:
+        result["ai_share_pct"] = locked_pct
+        result["motion_mix"] = profile["motion_mix"]
+    if picked_model is not None:
+        result["video_channel"] = picked_model["channel"]
+        result["video_model"] = picked_model["id"]
+        result["video_model_zh"] = picked_model["label_zh"]
+        result["video_models"] = keys["video_models"]
+    return result
 
 
 def _now_iso() -> str:

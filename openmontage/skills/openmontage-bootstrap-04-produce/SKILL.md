@@ -323,7 +323,7 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 
 1. 若无 03 锁定，或商品片没有 `assets_gate=completed` → 交接 03。禁止在 04 补写 completed。
 2. 若有锁定 → 先执行 unified matrix / `asset_ledger` 硬门，再用**一句复查**点出：档位 / 渠模（重度）/ **实验 API 预算（¥1|3|5|8|12，非售价）** / **画面比例 motion_mix** / 段数 / **评审模式（普通|专业）** / 候选模式（自适应|稳定双候选）。例如：
-   `当前锁定：重度 / Agnes / 实验预算¥8（非售价）/ 比例1:1（推荐）/ 普通评审 / 自适应候选 / 6 段 video_plan，确认开始出片？`  
+   `当前锁定：重度 / Agnes / 实验预算¥8（非售价）/ 比例100%（默认）/ 普通评审 / 自适应候选 / 6 段 video_plan，确认开始出片？`  
 3. **不要**再完整展示轻/中/重选型大表。  
 4. 用户未确认「开始」前：**禁止**任何付费 API；确认开始也不能替代每次付费视频调用前的矩阵、provider、费用与确认复核。
 
@@ -437,7 +437,7 @@ produce_set_production_profile(
   review_mode="normal",
   candidate_mode="adaptive",
   motion_target_band="60s_cost_ref",
-  motion_mix="1:1",
+  motion_mix="0:1",
   motion_mix_source="default_recommend",
   duration_seconds="30"
 )

@@ -21,7 +21,9 @@ from lib.asset_precheck import (
 )
 from lib.checkpoint import _merge_project_decision_logs
 from lib.events import read_events
+from lib.experiment_budget import format_motion_mix_zh
 from lib.interaction_intents import list_safe_interaction_intents
+from lib.library_create import COMMERCIAL_VIDEO_MODELS
 from lib.project_export import is_completed, read_runner_status
 from lib.paths import PROJECTS_DIR, REPO_ROOT  # single source of truth (env-overridable)
 
@@ -2002,8 +2004,19 @@ def _build_commercial_board(
     )
 
     motion_mix = profile.get("motion_mix") or brief.get("motion_mix")
-    motion_mix_zh = "运镜约 50% / AI 约 50%" if motion_mix == "1:1" else str(motion_mix or "")
+    ai_share_raw = profile.get("ai_share_pct")
+    if ai_share_raw is None:
+        ai_share_raw = brief.get("ai_share_pct")
+    motion_mix_zh = format_motion_mix_zh(
+        motion_mix=motion_mix,
+        ai_share_pct=ai_share_raw,
+    )
 
+    video_model = profile.get("video_model") or brief.get("channel", {}).get("video_model")
+    video_model_zh = next(
+        (item["label_zh"] for item in COMMERCIAL_VIDEO_MODELS if item["id"] == video_model),
+        video_model,
+    )
     tier_labels = {"heavy": "重", "medium": "中", "light": "轻"}
     mode_labels = {"pro": "专业", "normal": "普通", "minimal": "极简"}
     display_mode_zh = interrupt_mode_zh(review_preset, review_mode) or mode_labels.get(
@@ -2028,9 +2041,12 @@ def _build_commercial_board(
             "review_mode_zh": display_mode_zh,
             "imported_asset_count": profile.get("imported_asset_count"),
             "motion_mix_zh": motion_mix_zh,
+            "motion_mix": motion_mix,
+            "ai_share_pct": ai_share_raw,
             "budget_cny": budget_cny,
             "style_label_zh": profile.get("style_label_zh"),
-            "video_model": profile.get("video_model") or brief.get("channel", {}).get("video_model"),
+            "video_model": video_model,
+            "video_model_zh": video_model_zh,
             "candidate_mode_zh": candidate_labels.get(profile.get("candidate_mode")),
         },
         "assets": images,

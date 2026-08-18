@@ -1,13 +1,44 @@
 import { el, getJSON } from "./lib.js";
 
 const TIERS = [
-  { id: "light", label_zh: "轻度", hint: "零 Key / Remotion 等" },
-  { id: "medium", label_zh: "中度", hint: "需要 Pexels 或 Pixabay Key" },
-  { id: "heavy", label_zh: "重度", hint: "需要视频模型 Key" },
+  { id: "light", label_zh: "轻度", hint: "适合简单讲解类说明" },
+  { id: "medium", label_zh: "中度", hint: "适合用素材库画面做产品介绍" },
+  { id: "heavy", label_zh: "重度", hint: "电商视频选这个" },
 ];
+const VIDEO_MODEL_CATALOG = [
+  {
+    id: "agnes-video-v2.0",
+    channel: "agnes",
+    label_zh: "Agnes",
+    keyNames: ["AGNES_API_KEY", "AGNES_AI_API_KEY"],
+    capability_zh: "超长自动切段拼接。",
+  },
+  {
+    id: "hy-video-1.5",
+    channel: "tokenhub",
+    label_zh: "TokenHub·混元",
+    keyNames: ["TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"],
+    capability_zh: "单段时长由模型定，长片自动拼接。",
+  },
+  {
+    id: "pixverse-video-v6.0",
+    channel: "tokenhub",
+    label_zh: "TokenHub·Pixverse",
+    keyNames: ["TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"],
+    capability_zh: "默认可约 5 秒一段，长片自动拼接。",
+  },
+];
+const AI_PRESETS = [50, 70, 100];
+const AI_STEP = 10;
+const AI_MIN = 0;
+const AI_MAX = 100;
+const DEFAULT_AI_PCT = 100;
 
 let keyFlags = null;
 let selectedTier = "light";
+let selectedAiPct = DEFAULT_AI_PCT;
+let selectedModelId = "";
+let capOpen = false;
 let busy = false;
 let statusText = "";
 let loadedFor = "";
@@ -20,28 +51,59 @@ function lockedTierId(raw) {
   return "";
 }
 
-function applyFlags(flags, { preferLocked } = {}) {
-  keyFlags = flags || keyFlags || {};
-  const locked = preferLocked || "";
-  if (locked) selectedTier = locked;
-  else if (!keyFlags.video_key_present && selectedTier === "heavy") {
-    selectedTier = "light";
-  }
+function clampAiPct(raw, fallback = DEFAULT_AI_PCT) {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return fallback;
+  const bounded = Math.max(AI_MIN, Math.min(AI_MAX, n));
+  return Math.round(bounded / AI_STEP) * AI_STEP;
 }
 
-function statusLine() {
-  const video = Boolean(keyFlags?.video_key_present);
-  const stock = Boolean(keyFlags?.stock_key_present);
-  const parts = [];
-  parts.push(video ? "重度可用" : "重度需要视频模型 Key");
-  parts.push(stock ? "中度可用" : "中度需要素材库 Key");
-  if (keyFlags?.scanned_at) parts.push(`刷新于 ${String(keyFlags.scanned_at).replace("T", " ").slice(0, 19)}`);
-  return parts.join(" · ");
+function initialAiPct(lockedAiSharePct, lockedMotionMix) {
+  if (lockedAiSharePct != null && String(lockedAiSharePct).trim() !== "") {
+    return clampAiPct(lockedAiSharePct);
+  }
+  const mix = String(lockedMotionMix || "").replace("：", ":");
+  if (mix === "0:1") return 100;
+  if (mix === "1:2") return 70;
+  if (mix === "1:1") return 50;
+  if (mix === "2:1") return 30;
+  return DEFAULT_AI_PCT;
+}
+
+function videoModels() {
+  const fromApi = Array.isArray(keyFlags?.video_models) ? keyFlags.video_models : [];
+  if (fromApi.length) return fromApi;
+  const names = new Set(keyFlags?.video_key_names_present || []);
+  return VIDEO_MODEL_CATALOG.map((spec) => ({
+    id: spec.id,
+    channel: spec.channel,
+    label_zh: spec.label_zh,
+    capability_zh: spec.capability_zh,
+    available: spec.keyNames.some((name) => names.has(name)),
+  }));
+}
+
+function firstAvailableModelId() {
+  const hit = videoModels().find((item) => item.available);
+  return hit?.id || "";
+}
+
+function applyFlags(flags) {
+  keyFlags = flags || keyFlags || {};
+  const available = new Set(videoModels().filter((item) => item.available).map((item) => item.id));
+  if (selectedModelId && !available.has(selectedModelId)) {
+    selectedModelId = firstAvailableModelId();
+  } else if (!selectedModelId) {
+    selectedModelId = firstAvailableModelId();
+  }
 }
 
 function blockMessage(tier) {
   if (tier === "heavy" && !keyFlags?.video_key_present) {
     return "重度需要视频模型 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」。";
+  }
+  if (tier === "heavy" && !selectedModelId) {
+    return "请选择一个已填入 Key 的视频模型。";
   }
   if (tier === "medium" && !keyFlags?.stock_key_present) {
     return "中度需要素材库 Key（Pexels 或 Pixabay）。请写入仓根 .env 后点「已填入 Key，刷新可用性」。";
@@ -49,16 +111,99 @@ function blockMessage(tier) {
   return "";
 }
 
+function renderAiMix({ requestRender }) {
+  const value = el("div", { class: "tier-ai-value" }, `AI ${selectedAiPct}%`);
+  const minus = el("button", { type: "button", class: "tier-ai-step", "aria-label": "降低 AI 占比" }, "←");
+  minus.addEventListener("click", () => {
+    selectedAiPct = Math.max(AI_MIN, selectedAiPct - AI_STEP);
+    statusText = "";
+    if (typeof requestRender === "function") requestRender();
+  });
+  const plus = el("button", { type: "button", class: "tier-ai-step", "aria-label": "提高 AI 占比" }, "→");
+  plus.addEventListener("click", () => {
+    selectedAiPct = Math.min(AI_MAX, selectedAiPct + AI_STEP);
+    statusText = "";
+    if (typeof requestRender === "function") requestRender();
+  });
+  const presets = el("div", { class: "tier-ai-presets" });
+  for (const pct of AI_PRESETS) {
+    const selected = selectedAiPct === pct;
+    const btn = el("button", {
+      type: "button",
+      class: `tier-ai-preset${selected ? " selected" : ""}`,
+    }, pct === 100 ? `${pct}% 默认` : `${pct}%`);
+    btn.addEventListener("click", () => {
+      selectedAiPct = pct;
+      statusText = "";
+      if (typeof requestRender === "function") requestRender();
+    });
+    presets.append(btn);
+  }
+  return el("div", { class: "tier-ai-mix" },
+    el("div", { class: "tier-ai-label" }, "AI 占比"),
+    el("div", { class: "tier-ai-row" }, minus, value, plus),
+    presets,
+    el("div", { class: "tier-ai-hint" },
+      `运镜约 ${100 - selectedAiPct}% · 具体生成情况视模型能力而定`));
+}
+
+function renderModelPicker({ requestRender }) {
+  const list = el("div", { class: "tier-model-options" });
+  const models = videoModels();
+  const selected = models.find((item) => item.id === selectedModelId) || models.find((item) => item.available);
+  for (const item of models) {
+    const isSelected = selectedModelId === item.id;
+    const button = el("button", {
+      type: "button",
+      class: `tier-model-option${isSelected ? " selected" : ""}${item.available ? "" : " disabled"}`,
+      disabled: item.available ? null : "",
+      "aria-pressed": isSelected ? "true" : "false",
+    }, item.label_zh);
+    if (item.available) {
+      button.addEventListener("click", () => {
+        selectedModelId = item.id;
+        statusText = "";
+        if (typeof requestRender === "function") requestRender();
+      });
+    }
+    list.append(button);
+  }
+  if (!models.some((item) => item.available)) {
+    list.append(el("div", { class: "tier-model-empty" },
+      "未检测到视频 Key。写入仓根 .env 后点「已填入 Key，刷新可用性」。"));
+  }
+  const cap = el("details", { class: "tier-model-cap" });
+  if (capOpen) cap.open = true;
+  cap.append(el("summary", {}, "能力说明"));
+  cap.append(el("div", {},
+    selected?.capability_zh || "请先选择已填入 Key 的模型。",
+    " 具体生成情况视模型能力而定。"));
+  cap.addEventListener("toggle", () => {
+    capOpen = cap.open;
+  });
+  return el("div", { class: "tier-model-picker" },
+    el("div", { class: "tier-ai-label" }, "视频模型"),
+    list,
+    cap);
+}
+
 export function renderProductionTierPanel({
   projectId,
   lockedTier,
+  lockedAiSharePct,
+  lockedMotionMix,
+  lockedVideoModel,
   requestRender,
+  requestRefresh,
 }) {
   const locked = lockedTierId(lockedTier);
   if (loadedFor !== projectId) {
     loadedFor = projectId;
     keyFlags = null;
     selectedTier = locked || "light";
+    selectedAiPct = initialAiPct(lockedAiSharePct, lockedMotionMix);
+    selectedModelId = String(lockedVideoModel || "").trim();
+    capOpen = false;
     statusText = "";
   } else if (locked && selectedTier !== locked && !busy) {
     selectedTier = locked;
@@ -67,7 +212,8 @@ export function renderProductionTierPanel({
   if (!keyFlags) {
     getJSON("/api/health")
       .then((flags) => {
-        applyFlags(flags, { preferLocked: locked });
+        applyFlags(flags);
+        if (!selectedModelId) selectedModelId = firstAvailableModelId();
         if (typeof requestRender === "function") requestRender();
       })
       .catch(() => {
@@ -93,6 +239,9 @@ export function renderProductionTierPanel({
     button.addEventListener("click", () => {
       selectedTier = tier.id;
       statusText = "";
+      if (tier.id === "heavy" && !selectedModelId) {
+        selectedModelId = firstAvailableModelId();
+      }
       if (typeof requestRender === "function") requestRender();
     });
     options.append(button);
@@ -110,13 +259,14 @@ export function renderProductionTierPanel({
     try {
       const response = await fetch("/api/keys/refresh", { method: "POST" });
       const payload = await response.json();
-      applyFlags(payload, { preferLocked: locked });
+      applyFlags(payload);
       statusText = payload.friendly_zh || "已刷新。";
     } catch {
       statusText = "刷新失败。请确认本机看板仍在运行，然后重试。";
     } finally {
       busy = false;
-      if (typeof requestRender === "function") requestRender();
+      const redraw = requestRefresh || requestRender;
+      if (typeof redraw === "function") redraw();
     }
   });
 
@@ -137,12 +287,17 @@ export function renderProductionTierPanel({
     statusText = "正在锁定制作档…";
     if (typeof requestRender === "function") requestRender();
     try {
+      const body = { production_tier: selectedTier };
+      if (selectedTier === "heavy") {
+        body.ai_share_pct = selectedAiPct;
+        body.video_model = selectedModelId;
+      }
       const response = await fetch(
         `/api/project/${encodeURIComponent(projectId)}/start-production`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ production_tier: selectedTier }),
+          body: JSON.stringify(body),
         },
       );
       const payload = await response.json().catch(() => ({}));
@@ -159,19 +314,23 @@ export function renderProductionTierPanel({
       statusText = "开始失败。请留在本页重试。";
     } finally {
       busy = false;
-      if (typeof requestRender === "function") requestRender();
+      const redraw = requestRefresh || requestRender;
+      if (typeof redraw === "function") redraw();
     }
   });
 
-  return el("div", { class: "notice commercial-tier-panel" },
-    el("div", { class: "tier-panel-head" },
-      el("b", {}, "制作档位"),
-      el("span", { class: "tier-panel-status" }, statusLine())),
-    el("p", { class: "tier-panel-copy" },
-      "轻 / 中 / 重始终可点。缺 Key 时仍可选重度，点开始会被拦住。补好 .env 后点刷新即可。"),
+  const children = [
+    el("div", { class: "tier-panel-head" }, el("b", {}, "制作档位")),
     options,
-    el("div", { class: "tier-panel-actions" }, refreshBtn, startBtn),
-    statusText
-      ? el("div", { class: "tier-panel-feedback", role: "status" }, statusText)
-      : null);
+  ];
+  if (selectedTier === "heavy") {
+    children.push(el("div", { class: "tier-heavy-tools" },
+      renderModelPicker({ requestRender }),
+      renderAiMix({ requestRender })));
+  }
+  children.push(el("div", { class: "tier-panel-actions" }, refreshBtn, startBtn));
+  if (statusText) {
+    children.push(el("div", { class: "tier-panel-feedback", role: "status" }, statusText));
+  }
+  return el("div", { class: "notice commercial-tier-panel" }, ...children);
 }

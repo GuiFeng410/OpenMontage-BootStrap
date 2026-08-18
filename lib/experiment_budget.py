@@ -49,14 +49,14 @@ MOTION_TARGET_BANDS: dict[str, tuple[int, int]] = {
 MOTION_MIX_OPTIONS: dict[str, dict[str, Any]] = {
     "1:1": {
         "ai_fraction": 0.5,
-        "label_zh": "推荐（普通默认）",
+        "label_zh": "可选一半",
         "warn_cost": False,
         "warn_identity": False,
         "warn_slideshow": False,
-        "is_default": True,
+        "is_default": False,
     },
     "1:2": {
-        "ai_fraction": 2 / 3,
+        "ai_fraction": 0.7,
         "label_zh": "更动感",
         "warn_cost": True,
         "warn_identity": True,
@@ -65,11 +65,11 @@ MOTION_MIX_OPTIONS: dict[str, dict[str, Any]] = {
     },
     "0:1": {
         "ai_fraction": 1.0,
-        "label_zh": "几乎全 AI",
+        "label_zh": "默认（几乎全 AI）",
         "warn_cost": True,
         "warn_identity": True,
         "warn_slideshow": False,
-        "is_default": False,
+        "is_default": True,
     },
     "2:1": {
         "ai_fraction": 1 / 3,
@@ -81,8 +81,13 @@ MOTION_MIX_OPTIONS: dict[str, dict[str, Any]] = {
     },
 }
 
-DEFAULT_MOTION_MIX = "1:1"
+DEFAULT_MOTION_MIX = "0:1"
 MOTION_MIX_TOLERANCE = 0.15  # ±15% of duration for "大概符合"
+AI_SHARE_STEP = 10
+AI_SHARE_MIN = 0
+AI_SHARE_MAX = 100
+AI_SHARE_PRESETS = (50, 70, 100)
+DEFAULT_AI_SHARE_PCT = 100
 
 REVIEW_MODES = frozenset({"normal", "pro"})
 CANDIDATE_MODES = frozenset({"adaptive", "stable_dual"})
@@ -316,8 +321,8 @@ def normalize_motion_mix(raw: str | None, *, default: str = DEFAULT_MOTION_MIX) 
     aliases = {
         "1比1": "1:1",
         "一半": "1:1",
-        "推荐": "1:1",
-        "默认": "1:1",
+        "推荐": "0:1",
+        "默认": "0:1",
         "1比2": "1:2",
         "全ai": "0:1",
         "全视频": "0:1",
@@ -330,6 +335,58 @@ def normalize_motion_mix(raw: str | None, *, default: str = DEFAULT_MOTION_MIX) 
     if text in MOTION_MIX_OPTIONS:
         return text
     return default if default in MOTION_MIX_OPTIONS else DEFAULT_MOTION_MIX
+
+
+def clamp_ai_share_pct(raw: Any, *, default: int = DEFAULT_AI_SHARE_PCT) -> int:
+    """User-facing AI share 0–100, snapped to 10% steps."""
+    try:
+        value = int(round(float(raw)))
+    except (TypeError, ValueError):
+        return default
+    value = max(AI_SHARE_MIN, min(AI_SHARE_MAX, value))
+    return int(round(value / AI_SHARE_STEP) * AI_SHARE_STEP)
+
+
+def motion_mix_from_ai_share_pct(pct: Any) -> str:
+    """Map a UI percent onto the nearest planned mix (50 / ~60 / 100 / ~30)."""
+    value = clamp_ai_share_pct(pct)
+    if value >= 85:
+        return "0:1"
+    if value >= 65:
+        return "1:2"
+    if value >= 40:
+        return "1:1"
+    return "2:1"
+
+
+def ai_share_pct_from_motion_mix(mix: str | None) -> int:
+    """Board presets: 1:2 is shown as 60% (not 67%)."""
+    key = normalize_motion_mix(mix)
+    return {
+        "1:1": 50,
+        "1:2": 70,
+        "0:1": 100,
+        "2:1": 30,
+    }.get(key, DEFAULT_AI_SHARE_PCT)
+
+
+def format_motion_mix_zh(
+    *,
+    motion_mix: str | None = None,
+    ai_share_pct: Any = None,
+) -> str:
+    pct: int | None = None
+    if ai_share_pct is not None and str(ai_share_pct).strip() != "":
+        try:
+            pct = int(round(float(ai_share_pct)))
+        except (TypeError, ValueError):
+            pct = None
+    if pct is None and motion_mix:
+        pct = int(motion_mix_info(motion_mix)["ai_share_pct"])
+    if pct is None:
+        return ""
+    pct = max(0, min(100, pct))
+    return f"AI 约 {pct}% / 运镜约 {100 - pct}%"
 
 
 def normalize_motion_mix_source(raw: str | None, *, default: str = "default_recommend") -> str:
@@ -373,9 +430,21 @@ def motion_mix_info(mix: str | None = None) -> dict[str, Any]:
     }
 
 
-def recommended_ai_seconds(duration_seconds: int | float, motion_mix: str | None = None) -> dict[str, Any]:
+def recommended_ai_seconds(
+    duration_seconds: int | float,
+    motion_mix: str | None = None,
+    ai_share_pct: Any = None,
+) -> dict[str, Any]:
     """Soft AI-second target band derived from duration × mix (±tolerance)."""
     info = motion_mix_info(motion_mix)
+    if ai_share_pct is not None and str(ai_share_pct).strip() != "":
+        pct = clamp_ai_share_pct(ai_share_pct)
+        info = {
+            **info,
+            "ai_fraction": pct / 100.0,
+            "ai_share_pct": pct,
+            "remotion_share_pct": 100 - pct,
+        }
     duration = max(0.0, float(duration_seconds))
     target = duration * float(info["ai_fraction"])
     slack = duration * MOTION_MIX_TOLERANCE

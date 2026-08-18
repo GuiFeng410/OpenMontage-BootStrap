@@ -219,6 +219,8 @@ def create_app() -> FastAPI:
                 start_production,
                 project_id=project_id,
                 production_tier=str(payload.get("production_tier") or ""),
+                ai_share_pct=payload.get("ai_share_pct"),
+                video_model=str(payload.get("video_model") or ""),
             )
         except LibraryCreateError as exc:
             raise HTTPException(

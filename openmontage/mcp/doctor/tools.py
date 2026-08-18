@@ -641,7 +641,7 @@ def run_set_production_profile(
             review_mode=review_mode or existing.get("review_mode") or "normal",
             candidate_mode=candidate_mode or existing.get("candidate_mode") or "adaptive",
             motion_target_band=motion_target_band or existing.get("motion_target_band"),
-            motion_mix=motion_mix or existing.get("motion_mix") or "1:1",
+            motion_mix=motion_mix or existing.get("motion_mix") or "0:1",
             motion_mix_source=motion_mix_source or existing.get("motion_mix_source") or "",
             duration_seconds=duration_i,
             style_label_zh=style_label_zh or existing.get("style_label_zh"),

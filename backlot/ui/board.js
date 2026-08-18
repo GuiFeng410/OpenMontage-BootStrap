@@ -594,6 +594,7 @@ function renderFoundMedia(s) {
 
 function renderNoState(s) {
   if (s.has_pipeline_state) return null;
+  if (isCommercial(s)) return null;
   return el("div", { class: "notice", style: "border-color:#2b2b33;background:var(--surface-2);color:var(--text-3)" },
     el("span", { style: "font-size:calc(15px * var(--fs-scale))" }, "◌"),
     el("span", {},

@@ -471,10 +471,11 @@ v2 仍遵守既有硬门：网页只读、聊天一次只问一个问题、不�
 
 **推荐规则：**
 
-- 只列出已填 Key 且可出片的渠道/模型。  
-- 若 Agnes 与 TokenHub **都有 Key** → 默认推荐 **Agnes**，并写清差异（如并发、分辨率）。  
-- 仅一家有 Key → 推荐该家，仍须用户确认。  
-- **无任何可用视频 Key** → **不**出示「假可用」表；提示：先补 Key（`06-providers` / `.env-example`），或**改档**到轻度/中度。禁止假装能烧重度。
+- 只列出已填 Key 且可出片的渠道/模型；无 Key 的标灰不可选。  
+- 固定顺序：Agnes → TokenHub·混元 → TokenHub·Pixverse。默认取清单里**第一个已填 Key** 的项（不再按「两家都有则必须 Agnes」单独分支，效果上 Agnes 仍排第一）。  
+- **无任何可用视频 Key** → **不**出示「假可用」表；提示：先补 Key（`06-providers` / `.env-example`），或**改档**到轻度/中度。禁止假装能烧重度。  
+- 看板已锁定 `video_model` 时，聊天退路不得重出本表，除非用户明确要求改选。  
+- 能力说明只给一行、可折叠；片长由模型能力决定，超长自动拼接。不在本表让用户选手动秒数。OSS 不进本表，需要时在素材步再问。
 
 **表 2.3 Grill 卡示例：**
 
@@ -532,23 +533,25 @@ v2 仍遵守既有硬门：网页只读、聊天一次只问一个问题、不�
 #### 3.4 画面构成比例（运镜:AI · ≥15s 且可烧 AI 时）
 
 **触发：** `duration_seconds >= 15`，且（重度已锁视频 Key / `ai_video=enabled`，或商品片明确要用付费视频生成）。  
-**时机：** 表 2.3（或等价渠模）确认之后、**表 3 之前**单独一条消息；对用户用 **Grill 确认卡**。普通与专业都要出示；普通默认预勾推荐项。
+**时机：** 表 2.3（或等价渠模）确认之后、**表 3 之前**单独一条消息；对用户用 **Grill 确认卡**。普通与专业都要出示。  
+**网页已锁定：** 若看板已写入 `video_model` 与 `motion_mix` / `ai_share_pct`，聊天退路**不得**再出表 2.3 与本比例卡，除非用户明确要求改选。
 
 | 选项 | 运镜:AI生成 | AI生成视频约占 | 说明 |
 |------|-------------|---------------|------|
-| A | **1:1** | ~50% | **推荐（普通默认）** |
-| B | 1:2 | ~67% | 更动感；**成本可能上涨**；物品/人物不一致风险升高 |
-| C | 0:1 | ~100% | 几乎全模型；强提示成本与一致性风险 |
-| D | 2:1 | ~33% | **（更省可选；可能有幻灯片感）** |
+| A | **0:1** | **~100%** | **默认**；几乎全模型生成。具体生成情况视模型能力而定 |
+| B | 1:2 | ~70% | 可选；更动感 |
+| C | 1:1 | ~50% | 可选，**不作为推荐** |
+| D | 2:1 | ~30% | 仅用户主动要更省时才提 |
 
-**Grill 卡要点示例：** `1. 画面比例：A 1:1（推荐）/ B 1:2 / C 0:1 / D 2:1`
+**Grill 卡要点示例：** `1. 画面比例：A 100%（默认）/ B 70% / C 50%（可选）`
 
 **规则：**
 
 1. 比例是**推荐目标**，按整片 **AI 模型生成时长合计** 大概符合即可（约 ±10%–15%）；beat 怎么切可自由安排，**不按段数硬凑**。  
-2. 审查中用户可把某段从运镜改成 AI（或反过来）；**终稿不强制贴死**原比例；偏离时口头告知观感/费用/一致性即可。  
-3. 无可用视频 Key：不出 B/C，或标灰并说明「未配置视频 Key，无法提高 AI 占比」。  
-4. 写入：`motion_mix`（`1:1`/`1:2`/`0:1`/`2:1`）、`motion_mix_source`（`default_recommend`|`user_selected`）。普通未改选 → `1:1` + `default_recommend`。
+2. 审查中用户可把某段从运镜改成 AI（或反过来）；**终稿不强制贴死**原比例。  
+3. 无可用视频 Key：不出本卡；提示补 Key 或改档。  
+4. 写入：`motion_mix`（`0:1`/`1:2`/`1:1`/`2:1`）、`ai_share_pct`（`100`/`70`/`50`/`30`）、`motion_mix_source`（`default_recommend`|`user_selected`）。未改选 → `0:1` + `ai_share_pct=100` + `default_recommend`。  
+5. 对用户只说「具体生成情况视模型能力而定」，不要主动讲费用或商品不像。
 
 ### 4. 消息 3 — 表 3（分段视频规划 · 三档都出）
 
@@ -616,7 +619,7 @@ produce_set_production_profile(
   review_mode="normal",         # normal|pro；默认普通
   candidate_mode="adaptive",    # adaptive=单候选+条件重试；stable_dual=关键 beat 双候选
   motion_target_band="60s_cost_ref",  # 可选实验带；有 motion_mix 时以 mix 推导为主
-  motion_mix="1:1",             # 1:1|1:2|0:1|2:1；推荐目标（软约束）
+  motion_mix="0:1",             # 0:1|1:2|1:1|2:1；默认 0:1（约 100% AI）
   motion_mix_source="default_recommend",  # default_recommend|user_selected
   duration_seconds="30",        # 写入以便推导 AI 秒数带
   style_label_zh="",            # 可选中文名：高端极简/生活方式/电商清晰展示
@@ -627,7 +630,7 @@ produce_set_production_profile(
 商品/重度未明示预算时：**默认** `api_budget_tier=standard`、`budget_cny=8`，且须**主动询问确认**（¥8+）。  
 未明示评审模式时：**默认** `review_mode=normal`。  
 未明示候选策略时：**默认** `candidate_mode=adaptive`（禁止默认双候选）。  
-未明示画面比例且已触发比例卡：默认 `motion_mix=1:1`、`motion_mix_source=default_recommend`，并向用户念清配置。
+未明示画面比例且已触发比例卡：默认 `motion_mix=0:1`、`ai_share_pct=100`、`motion_mix_source=default_recommend`，并向用户念清配置。50% 只作为可选项，不作为推荐。
 
 5. **简报扩展字段**（写入项目 artifacts / 简报 JSON，交接时点明）：
 
@@ -641,7 +644,8 @@ produce_set_production_profile(
 | `needs_choice_confirm` | ¥8+ 为 true（选档须主动询问） |
 | `review_mode` | `normal` / `pro` |
 | `candidate_mode` | `adaptive` / `stable_dual` |
-| `motion_mix` | `1:1` / `1:2` / `0:1` / `2:1`（推荐目标，软约束） |
+| `motion_mix` | `0:1` / `1:2` / `1:1` / `2:1`（推荐目标，软约束；默认 `0:1`） |
+| `ai_share_pct` | `100` / `70` / `50`（看板步进可为其它 10% 档；默认 `100`） |
 | `motion_mix_source` | `default_recommend` / `user_selected` |
 | `motion_target_band` | `30s_ref` / `60s_cost_ref` / `60s_high_motion`（可选；有 mix 时以 mix 为主） |
 | `light_presentation` | 轻度表现方式（含 `remotion` / `hyperframes`）；非轻度可空 |
