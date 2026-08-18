@@ -273,6 +273,7 @@ def start_production(
     profile = dict(marker.get("production_profile") or {})
     profile["production_tier"] = tier
     profile["production_start_requested_at"] = _now_iso()
+    profile["runner_start_pending"] = True
     locked_pct: int | None = None
     if tier == "heavy":
         existing_pct = profile.get("ai_share_pct")
@@ -298,6 +299,22 @@ def start_production(
         json.dumps(marker, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+    stop_stage = None
+    try:
+        from lib.board_advance import ensure_current_stop_card
+
+        stop_stage = ensure_current_stop_card(pid, marker, projects_dir=projects)
+        if stop_stage:
+            marker = json.loads(marker_path.read_text(encoding="utf-8"))
+            profile = dict(marker.get("production_profile") or {})
+            profile["runner_start_pending"] = False
+            marker["production_profile"] = profile
+            marker_path.write_text(
+                json.dumps(marker, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+    except Exception:
+        stop_stage = None
     try:
         remember_machine_seen(repo_root=root, latest_project_id=pid)
     except Exception:
@@ -310,7 +327,8 @@ def start_production(
         "production_tier_zh": label,
         "video_key_present": keys["video_key_present"],
         "stock_key_present": keys["stock_key_present"],
-        "friendly_zh": f"已锁定制作档「{label}」，可以从当前停点继续。本页不会直接调付费接口。",
+        "friendly_zh": f"已锁定制作档「{label}」，请留在本页确认当前停点。本页不会直接调付费接口。",
+        "next_stop": stop_stage,
     }
     if locked_pct is not None:
         result["ai_share_pct"] = locked_pct

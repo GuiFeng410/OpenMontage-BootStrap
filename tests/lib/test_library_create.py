@@ -211,6 +211,36 @@ def test_start_production_locks_light_and_heavy_when_keys_present(
     assert "th-secret-do-not-leak-ccc" not in str(heavy)
 
 
+def test_start_production_seeds_stop_card_without_recommend(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    project_dir = _write_ready_project(tmp_path)
+    (tmp_path / ".env").write_text("TOKENHUB_API_KEY=\n", encoding="utf-8")
+    result = start_production(
+        project_id="shop-demo",
+        production_tier="light",
+        repo_root=tmp_path,
+        environ={},
+    )
+    assert result["next_stop"] == "brief_locked"
+    assert "请留在本页" in result["friendly_zh"]
+    checkpoint = json.loads(
+        (project_dir / "checkpoint_brief_locked.json").read_text(encoding="utf-8")
+    )
+    options = checkpoint["metadata"]["decision_options"]
+    assert options
+    assert all("recommended" not in item for item in options)
+    assert "recommendation_zh" not in checkpoint["metadata"]
+    marker = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
+    assert marker["production_profile"]["runner_start_pending"] is False
+    assert marker["board_stop"]["stage"] == "brief_locked"
+    assert all(
+        "recommended" not in item
+        for item in marker["board_stop"]["decision_options"]
+    )
+
+
 def test_start_production_persists_ai_share_pct(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

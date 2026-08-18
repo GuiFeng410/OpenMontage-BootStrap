@@ -23,6 +23,7 @@ from lib.checkpoint import _merge_project_decision_logs
 from lib.events import read_events
 from lib.experiment_budget import format_motion_mix_zh
 from lib.interaction_intents import list_safe_interaction_intents
+from lib.board_advance import strip_recommend
 from lib.library_create import COMMERCIAL_VIDEO_MODELS
 from lib.project_export import is_completed, read_runner_status
 from lib.paths import PROJECTS_DIR, REPO_ROOT  # single source of truth (env-overridable)
@@ -340,6 +341,25 @@ def _build_stage_rail(
                 break
         rail.insert(insert_at, entry)
     return rail
+
+
+def _apply_board_stop_overlay(stages: list[dict], marker: dict[str, Any]) -> None:
+    stop = marker.get("board_stop") if isinstance(marker, dict) else None
+    if not isinstance(stop, dict):
+        return
+    stage_name = str(stop.get("stage") or "").strip()
+    if not stage_name or stop.get("needs_user_decision") is not True:
+        return
+    cleaned = strip_recommend(stop)
+    for stage in stages:
+        if stage.get("name") != stage_name:
+            continue
+        meta = dict(stage.get("metadata") or {})
+        for key, value in cleaned.items():
+            if key != "stage":
+                meta[key] = value
+        stage["metadata"] = meta
+        return
 
 
 # ---------------------------------------------------------------------------
@@ -877,19 +897,28 @@ def _parse_time_span(raw: str) -> tuple[Optional[float], Optional[float]]:
     return to_sec(parts[0]), to_sec(parts[1])
 
 
+def _stage_awaits_decision(stage: dict[str, Any] | None) -> bool:
+    if not isinstance(stage, dict):
+        return False
+    status = str(stage.get("status") or "pending")
+    if status == "completed":
+        return False
+    if status == "awaiting_human":
+        return True
+    return (stage.get("metadata") or {}).get("needs_user_decision") is True
+
+
+def _first_decision_stage(stages: list[dict]) -> dict[str, Any] | None:
+    awaiting = next((s for s in stages if s.get("status") == "awaiting_human"), None)
+    if awaiting is not None:
+        return awaiting
+    return next((s for s in stages if _stage_awaits_decision(s)), None)
+
+
 def _commercial_card_mode(stages: list[dict]) -> str:
     """plan | assets | produce — drives segment card field set."""
     by_name = {s.get("name"): s for s in stages}
-    awaiting = next((s for s in stages if s.get("status") == "awaiting_human"), None)
-    if awaiting is None:
-        awaiting = next(
-            (
-                s for s in stages
-                if s.get("status") == "in_progress"
-                and (s.get("metadata") or {}).get("needs_user_decision") is True
-            ),
-            None,
-        )
+    awaiting = _first_decision_stage(stages)
     if awaiting:
         name = awaiting.get("name")
         if name == "brief_locked":
@@ -1771,19 +1800,10 @@ def _build_commercial_board(
                     "batch_id": batch.get("id"),
                 })
 
-    awaiting = next((s for s in stages if s.get("status") == "awaiting_human"), None)
-    if awaiting is None:
-        awaiting = next(
-            (
-                s for s in stages
-                if s.get("status") == "in_progress"
-                and (s.get("metadata") or {}).get("needs_user_decision") is True
-            ),
-            None,
-        )
+    awaiting = _first_decision_stage(stages)
     decision = None
     if awaiting:
-        meta = awaiting.get("metadata") or {}
+        meta = strip_recommend(awaiting.get("metadata") or {})
         name = awaiting.get("name") or ""
         decision = {
             "stage": name,
@@ -1791,7 +1811,6 @@ def _build_commercial_board(
             "title_zh": meta.get("decision_title_zh"),
             "prompt_zh": meta.get("decision_prompt_zh"),
             "context_zh": meta.get("decision_context_zh"),
-            "recommendation_zh": meta.get("recommendation_zh"),
             "options": meta.get("decision_options") if isinstance(meta.get("decision_options"), list) else [],
             "approval_note": meta.get("approval_note"),
             "examples_zh": meta.get("examples_zh"),
@@ -2442,6 +2461,7 @@ def load_board_state(project_dir: Path) -> dict[str, Any]:
     media = _scan_media(project_dir)
 
     stages = _build_stage_rail(pipeline_meta, checkpoints, history)
+    _apply_board_stop_overlay(stages, marker)
     legacy_checkpoints: list[dict] = []
     if pipeline_type == "bootstrap-commercial":
         legacy_checkpoints = [

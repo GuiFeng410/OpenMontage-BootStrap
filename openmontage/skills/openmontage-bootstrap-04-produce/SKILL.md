@@ -192,7 +192,7 @@ produce_list_intents
 
 ### 快速模式 v2（执行）
 
-`fast_track_v1` 项目继续走上一节冻结流程；只有最新合法 `approval_policy.selected="fast_track_v2"` 的项目走本循环。禁止把「直接出片」当审批证据；面板提交也只产生待确认 intent，网页只写 intent，不在浏览器 apply。本机 runner（随 `backlot open`）可 `produce_runner_tick` 代 plan/apply；聊天口令「确认面板选择」仍是退路。
+`fast_track_v1` 项目继续走上一节冻结流程；只有最新合法 `approval_policy.selected="fast_track_v2"` 的项目走本循环。禁止把「直接出片」当审批证据；面板提交也只产生待确认 intent，网页只写 intent，不在浏览器 apply。本机 runner（随 `backlot open`）可 `produce_runner_tick` 代 plan/apply 并写下一网页停点；成功后请用户留在本页点「进入下一步」，不要说「回聊天继续出片」。本轮不写推荐、不调付费生视频。聊天口令「确认面板选择」仍是退路。
 
 ```text
 produce_plan_approval_bundle

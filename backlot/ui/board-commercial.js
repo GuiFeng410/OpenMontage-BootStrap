@@ -86,7 +86,7 @@ export function renderAwaitingNotice(s, context) {
   if (!awaiting) return null;
   if (isCommercial(s)) {
     const dec = s.commercial?.decision;
-    const prompt = dec?.prompt_zh || "请在聊天中回复以继续。";
+    const prompt = dec?.prompt_zh || "请在本页确认后进入下一步。";
     const examples = dec?.examples_zh;
     const options = Array.isArray(dec?.options) ? dec.options : [];
     if (options.length) {
@@ -108,9 +108,8 @@ export function renderAwaitingNotice(s, context) {
         el("b", {}, `【需要你决定】${dec?.title_zh || dec?.stage_label_zh || (awaiting.label_zh || awaiting.name)}`),
         dec?.context_zh ? el("div", { class: "commercial-decision-context" }, dec.context_zh) : null,
         el("div", { class: "commercial-decision-prompt", style: "white-space:pre-line" }, prompt),
-        dec?.recommendation_zh ? el("div", { class: "commercial-decision-recommendation" }, `建议：${dec.recommendation_zh}`) : null,
         examples ? el("div", { class: "commercial-decision-example" }, `回复示例：${examples}`) : null,
-        el("div", { class: "commercial-chat-only" }, "请回到 ", el("b", {}, "聊天"), " 回复；本页只展示信息，不提交审批。")));
+        el("div", { class: "commercial-chat-only" }, "请留在本页确认。本机不会静默付费生视频。")));
   }
   return el("div", { class: "notice" },
     el("span", { style: "font-size:calc(16px * var(--fs-scale))" }, "◈"),

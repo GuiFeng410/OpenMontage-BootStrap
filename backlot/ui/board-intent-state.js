@@ -60,10 +60,6 @@ export function selectOption(draft, decisionKey, option) {
     option_id: optionId,
     label_zh: option.label_zh ?? option.label ?? optionId,
   };
-  if (typeof option.recommended === "boolean") {
-    selection.recommended = option.recommended;
-  }
-
   const existingIndex = draft.selections.findIndex(
     (item) => item.decision_key === decisionKey,
   );
@@ -110,7 +106,7 @@ export function summarizeDraft(draft) {
   const note = draft.note.trim();
   if (note) lines.push(`备注：${note}`);
   lines.push(
-    "请回聊天发送：确认面板选择",
+    "点「进入下一步」后请留在本页。",
     "以上选择仍在等待确认，尚未正式执行。",
   );
   return lines.join("\n");

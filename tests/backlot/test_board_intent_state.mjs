@@ -114,7 +114,6 @@ test("selectOption replaces one decision without mutating its source", () => {
   const second = selectOption(first, "brief_locked::production_tier", {
     option_id: "medium",
     label_zh: "中度",
-    recommended: true,
     impact_zh: "不应进入草稿",
   });
 
@@ -128,7 +127,6 @@ test("selectOption replaces one decision without mutating its source", () => {
     decision_key: "brief_locked::production_tier",
     option_id: "medium",
     label_zh: "中度",
-    recommended: true,
   }]);
 });
 
@@ -169,8 +167,9 @@ test("summary contains pending wording, identity and numbered choices", () => {
   assert.match(summary, /jade/);
   assert.match(summary, /brief_locked/);
   assert.match(summary, /1[.、]\s*重度/);
-  assert.match(summary, /请回聊天发送：确认面板选择/);
+  assert.match(summary, /点「进入下一步」后请留在本页/);
   assert.match(summary, /尚未正式执行/);
+  assert.doesNotMatch(summary, /请回聊天发送：确认面板选择/);
   assert.doesNotMatch(summary, /已批准|正式批准|已执行/);
 });
 

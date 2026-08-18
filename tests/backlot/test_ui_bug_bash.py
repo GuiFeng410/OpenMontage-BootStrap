@@ -131,10 +131,8 @@ def _intent_panel_project(
                 "label_zh": "重度",
                 "description_zh": "允许付费视频生成",
                 "impact_zh": "成本与一致性风险较高",
-                "recommended": True,
             },
         ] if options else [],
-        "recommendation_zh": "推荐重度",
         "examples_zh": "确认面板选择",
     }
     _write_json(project / "checkpoint_brief_locked.json", {
@@ -858,7 +856,7 @@ def test_commercial_decision_options_are_clickable_and_show_selected_state(
                 '.commercial-decision-option[data-option-id="heavy"]'
             )
             expect(heavy).to_have_class(
-                "commercial-decision-option recommended selected"
+                "commercial-decision-option selected"
             )
             expect(heavy).to_have_attribute("aria-pressed", "true")
             selected_style = heavy.evaluate(
@@ -1067,7 +1065,7 @@ def test_intent_panel_is_keyboard_accessible(staged_backlot_server):
                 f"{staged_backlot_server}/p/{project_id}?static=1",
                 wait_until="networkidle",
             )
-            heavy = page.get_by_role("button", name="重度 推荐")
+            heavy = page.get_by_role("button", name=/重度/)
             heavy.focus()
             page.keyboard.press("Space")
 
@@ -1391,7 +1389,7 @@ def test_commercial_empty_decision_options_preserve_read_only_notice(
             expect(page.locator(".commercial-intent-basket")).to_have_count(0)
             expect(page.locator(".commercial-intent-copy")).to_have_count(0)
             expect(page.locator(".commercial-chat-only")).to_contain_text(
-                "本页只展示信息，不提交审批"
+                "请留在本页确认"
             )
         finally:
             browser.close()

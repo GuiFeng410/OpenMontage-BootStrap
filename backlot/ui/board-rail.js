@@ -9,8 +9,9 @@ export function stageLabel(st) {
 }
 
 export function stageNeedsDecision(st) {
-  return st?.status === "awaiting_human"
-    || (st?.status === "in_progress" && st?.metadata?.needs_user_decision === true);
+  if (st?.status === "awaiting_human") return true;
+  if (st?.status === "completed") return false;
+  return st?.metadata?.needs_user_decision === true;
 }
 
 function stageWasCompletedBefore(st) {
@@ -19,6 +20,7 @@ function stageWasCompletedBefore(st) {
 
 function stageSubZh(st) {
   if (st.status === "awaiting_human") return "等你在本页确认\n点进入下一步继续";
+  if (stageNeedsDecision(st)) return "等你在本页确认\n点进入下一步继续";
   if (st.status === "in_progress" && stageWasCompletedBefore(st)) {
     return st.stalled
       ? `重试中·此前已通过\n可能卡住 · ${st.stalled_minutes} 分钟无活动`
@@ -145,7 +147,7 @@ export function renderStageDrawer(s, {
     body.append(el("div", { class: "hint", style: "margin-bottom:12px;line-height:1.6" },
       "商品片阶段详情已在下方「方案摘要 / Beat 胶片条 / 成片预览」展示。",
       el("br"),
-      "原始 JSON 见 ", el("code", {}, "artifacts/"), " 目录；审批请在聊天进行。"));
+      "原始 JSON 见 ", el("code", {}, "artifacts/"), " 目录；请在本页点「进入下一步」。"));
     const meta = st.metadata || {};
     if (stageNeedsDecision(st) && meta.decision_prompt_zh) {
       body.append(el("div", { class: "commercial-decision-hint" },

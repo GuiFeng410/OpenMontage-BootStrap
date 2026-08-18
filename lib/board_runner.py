@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 import lib.approval_bundle as approval_bundle
+import lib.board_advance as board_advance
 import lib.interaction_intents as intents
 import lib.project_export as project_export
 from lib.paths import PROJECTS_DIR
@@ -136,11 +137,11 @@ def tick(
             )
         except approval_bundle.ApprovalBundleError as exc:
             status = {
-                "phase": PHASE_NEEDS_CHAT,
+                "phase": PHASE_PAUSED,
                 "runner_alive": runner_alive,
                 "friendly_zh": getattr(exc, "safe_message", None)
-                or "本机无法自动确认这笔选择，请回聊天发送：确认面板选择",
-                "current_question": "请回聊天发送：确认面板选择",
+                or "本机无法自动确认这笔选择。请留在本页，或点刷新重试。",
+                "current_question": "请留在本页，或点刷新重试。",
             }
             project_export.write_runner_status(project_id, status)
             return {
@@ -151,6 +152,48 @@ def tick(
             }
         if applied:
             actions.append("approval_bundle")
+            applied_stage = str((applied.get("applied") or {}).get("intent", {}).get("stage") or "")
+            if not applied_stage:
+                applied_stage = str((applied.get("planned") or {}).get("intent", {}).get("stage") or "")
+            next_stop = None
+            try:
+                marker = board_advance.read_marker(
+                    project_id, projects_dir=PROJECTS_DIR
+                ) or marker
+                next_stop = board_advance.advance_after_apply(
+                    project_id,
+                    applied_stage or "brief_locked",
+                    marker,
+                    projects_dir=PROJECTS_DIR,
+                )
+            except Exception:
+                next_stop = None
+            if next_stop:
+                actions.append("next_stop")
+
+    seeded = None
+    if "approval_bundle" not in actions:
+        try:
+            marker = board_advance.read_marker(
+                project_id, projects_dir=PROJECTS_DIR
+            ) or marker
+            profile = (
+                marker.get("production_profile")
+                if isinstance(marker.get("production_profile"), dict)
+                else {}
+            )
+            if profile.get("production_start_requested_at") or profile.get(
+                "runner_start_pending"
+            ):
+                seeded = board_advance.ensure_current_stop_card(
+                    project_id,
+                    marker,
+                    projects_dir=PROJECTS_DIR,
+                )
+                if seeded:
+                    actions.append("seed_stop")
+        except Exception:
+            seeded = None
 
     if _has_final(project_id):
         status = {
@@ -168,12 +211,23 @@ def tick(
             "runner_alive": runner_alive,
             "friendly_zh": "选择已提交，本机排队处理中，请留在本页。",
         }
+    elif "next_stop" in actions:
+        status = {
+            "phase": PHASE_PRODUCING,
+            "runner_alive": runner_alive,
+            "friendly_zh": "面板选择已生效。下一停点已在本页，请点「进入下一步」。本机不会静默付费生视频。",
+        }
+    elif "seed_stop" in actions or seeded:
+        status = {
+            "phase": PHASE_PRODUCING,
+            "runner_alive": runner_alive,
+            "friendly_zh": "已锁定制作档。请在本页确认当前停点后点「进入下一步」。本机不会静默付费生视频。",
+        }
     elif actions:
         status = {
             "phase": PHASE_PRODUCING,
             "runner_alive": runner_alive,
-            "friendly_zh": "面板选择已生效。本机不会静默付费生视频；缺画面时请在聊天说「继续出片」。",
-            "current_question": "若还没有成片，请回聊天继续出片。",
+            "friendly_zh": "面板选择已生效。请留在本页查看下一停点。本机不会静默付费生视频。",
         }
     else:
         status = {

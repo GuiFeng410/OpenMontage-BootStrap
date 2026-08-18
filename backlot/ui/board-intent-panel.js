@@ -69,7 +69,6 @@ export function renderDecisionIntentPanel({
     );
     const classNames = [
       "commercial-decision-option",
-      option.recommended ? "recommended" : "",
       selected ? "selected" : "",
     ].filter(Boolean).join(" ");
     const button = el("button", {
@@ -80,10 +79,7 @@ export function renderDecisionIntentPanel({
       disabled: stale ? "" : null,
     },
     el("span", { class: "commercial-decision-option-head" },
-      el("b", {}, option.label_zh || option.label || option.id || "选项"),
-      option.recommended
-        ? el("span", { class: "commercial-recommend-badge" }, "推荐")
-        : null),
+      el("b", {}, option.label_zh || option.label || option.id || "选项")),
     option.description_zh
       ? el("span", { class: "commercial-decision-option-copy" }, option.description_zh)
       : null,
@@ -111,11 +107,8 @@ export function renderDecisionIntentPanel({
     el("div", {
       class: "commercial-decision-prompt",
       style: "white-space:pre-line",
-    }, decision?.prompt_zh || "请在聊天中回复以继续。"),
+    }, decision?.prompt_zh || "请在本页确认后进入下一步。"),
     optionList,
-    decision?.recommendation_zh
-      ? el("div", { class: "commercial-decision-recommendation" }, `建议：${decision.recommendation_zh}`)
-      : null,
     decision?.examples_zh
       ? el("div", { class: "commercial-decision-example" }, `回复示例：${decision.examples_zh}`)
       : null);
