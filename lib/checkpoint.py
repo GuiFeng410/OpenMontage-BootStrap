@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import json
 import os
-import threading
-import time
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from functools import lru_cache
@@ -18,11 +16,6 @@ from typing import Any, Callable, Optional
 from uuid import uuid4
 
 import jsonschema
-
-if os.name == "nt":
-    import msvcrt
-else:
-    import fcntl
 
 from schemas.artifacts import ARTIFACT_NAMES, validate_artifact
 from lib.asset_precheck import scan_user_images, validate_beat_assignment_matrix
@@ -140,7 +133,6 @@ HISTORY_DIRNAME = "history"
 CHECKPOINT_LOCK_FILENAME = ".checkpoint.lock"
 CHECKPOINT_LOCK_TIMEOUT_SECONDS = 10.0
 CHECKPOINT_LOCK_POLL_SECONDS = 0.02
-_CHECKPOINT_LOCK_FILE_INIT_GUARD = threading.Lock()
 
 
 class CheckpointValidationError(ValueError):
@@ -150,65 +142,19 @@ class CheckpointValidationError(ValueError):
 @contextmanager
 def _project_checkpoint_lock(pipeline_dir: Path, project_id: str):
     """Serialize one project's checkpoint transaction with an OS-owned lock."""
-    project_dir = pipeline_dir / project_id
-    project_dir.mkdir(parents=True, exist_ok=True)
-    lock_path = project_dir / CHECKPOINT_LOCK_FILENAME
-    # Initialize byte 0 without a buffered file object. On Windows, separate
-    # processes may both observe a newly-created lock file as empty. O_APPEND
-    # makes each stale observer write at the then-current EOF, so a process
-    # cannot flush back onto byte 0 after another process has locked it.
-    with _CHECKPOINT_LOCK_FILE_INIT_GUARD:
-        init_fd = os.open(
-            lock_path,
-            os.O_CREAT | os.O_APPEND | os.O_RDWR,
-        )
-        try:
-            if os.fstat(init_fd).st_size == 0:
-                os.write(init_fd, b"\0")
-        finally:
-            os.close(init_fd)
-    lock_file = open(lock_path, "r+b", buffering=0)
-    deadline = time.monotonic() + CHECKPOINT_LOCK_TIMEOUT_SECONDS
-    acquired = False
+    from lib.persistence.file_lock import CheckpointLockTimeout, project_checkpoint_lock
+
     try:
-        while not acquired:
-            lock_file.seek(0)
-            try:
-                if os.name == "nt":
-                    msvcrt.locking(
-                        lock_file.fileno(),
-                        msvcrt.LK_NBLCK,
-                        1,
-                    )
-                else:
-                    fcntl.flock(
-                        lock_file.fileno(),
-                        fcntl.LOCK_EX | fcntl.LOCK_NB,
-                    )
-            except OSError as exc:
-                if time.monotonic() >= deadline:
-                    raise CheckpointValidationError(
-                        f"checkpoint lock timeout for project {project_id!r}"
-                    ) from exc
-                time.sleep(CHECKPOINT_LOCK_POLL_SECONDS)
-                continue
-            acquired = True
-        yield
-    finally:
-        if acquired:
-            try:
-                lock_file.seek(0)
-                if os.name == "nt":
-                    msvcrt.locking(
-                        lock_file.fileno(),
-                        msvcrt.LK_UNLCK,
-                        1,
-                    )
-                else:
-                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
-            except OSError:
-                pass
-        lock_file.close()
+        with project_checkpoint_lock(
+            pipeline_dir,
+            project_id,
+            timeout=CHECKPOINT_LOCK_TIMEOUT_SECONDS,
+            poll_seconds=CHECKPOINT_LOCK_POLL_SECONDS,
+            lock_filename=CHECKPOINT_LOCK_FILENAME,
+        ):
+            yield
+    except CheckpointLockTimeout as exc:
+        raise CheckpointValidationError(str(exc)) from exc
 
 
 @lru_cache(maxsize=1)

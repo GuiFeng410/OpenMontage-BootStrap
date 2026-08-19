@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 
 import lib.board_produce as board_produce
+import lib.persistence.json_store as json_store
 from tests.lib.test_board_advance import _seed_minimal_ready_for_delivery, _write_project
 
 
@@ -37,7 +38,7 @@ def test_atomic_json_write_retries_transient_permission_error(
     tmp_path: Path, monkeypatch
 ) -> None:
     target = tmp_path / "state.json"
-    original_replace = board_produce.os.replace
+    original_replace = json_store.os.replace
     attempts = 0
 
     def flaky_replace(source, destination):
@@ -47,7 +48,7 @@ def test_atomic_json_write_retries_transient_permission_error(
             raise PermissionError("transient sharing violation")
         return original_replace(source, destination)
 
-    monkeypatch.setattr(board_produce.os, "replace", flaky_replace)
+    monkeypatch.setattr(json_store.os, "replace", flaky_replace)
 
     board_produce._write_json(target, {"ready": True})
 

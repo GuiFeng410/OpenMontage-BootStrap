@@ -400,7 +400,7 @@ def test_atomic_replace_failure_preserves_existing_run(
     def fail_replace(_source, _target):
         raise OSError("replace failed")
 
-    monkeypatch.setattr(production_run.os, "replace", fail_replace)
+    monkeypatch.setattr("lib.persistence.json_store.os.replace", fail_replace)
     changed = {**run, "updated_at": "2026-08-19T09:00:00+00:00"}
     with pytest.raises(OSError, match="replace failed"):
         production_run.write_production_run(project, changed)

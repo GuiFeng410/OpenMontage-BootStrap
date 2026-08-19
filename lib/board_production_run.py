@@ -10,12 +10,11 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable
-from uuid import uuid4
 
+from lib.persistence.json_store import JsonStore
 from lib.review_interrupt import COMMERCIAL_STAGE_ORDER, normalize_review_preset
 
 RUN_FILENAME = "production_run.json"
@@ -176,19 +175,7 @@ def _read_json_for_migration(
 
 
 def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        temporary.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary, path)
-    finally:
-        try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
+    JsonStore.write_atomic(path, data)
 
 
 def production_run_path(project_dir: Path) -> Path:

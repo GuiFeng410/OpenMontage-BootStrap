@@ -18,11 +18,11 @@ Status flow::
 from __future__ import annotations
 
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
-from uuid import uuid4
+
+from lib.persistence.json_store import JsonStore
 
 from lib.paths import PROJECTS_DIR
 from schemas.artifacts import validate_artifact
@@ -87,18 +87,7 @@ def _now_iso() -> str:
 
 
 def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
-    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        temporary.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary, path)
-    finally:
-        try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
+    JsonStore.write_atomic(path, data)
 
 
 def _check_semantics(data: dict[str, Any]) -> None:

@@ -17,9 +17,9 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
-from uuid import uuid4
 
 import lib.board_production_run as production_run
+from lib.persistence.json_store import JsonStore
 from lib.board_stage_artifacts import (
     StageArtifactValidationError,
     build_final_review,
@@ -112,26 +112,7 @@ def _read_json(path: Path) -> dict[str, Any]:
 
 
 def _write_json(path: Path, data: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        temporary.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        for attempt in range(4):
-            try:
-                os.replace(temporary, path)
-                break
-            except PermissionError:
-                if attempt == 3:
-                    raise
-                time.sleep(0.01 * (2**attempt))
-    finally:
-        try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
+    JsonStore.write_atomic(path, data, replace_retries=3)
 
 
 def _locked_artifact_revision(project: Path) -> str:

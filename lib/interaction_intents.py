@@ -9,13 +9,12 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from uuid import uuid4
 
 from lib.paths import PROJECTS_DIR
+from lib.persistence.json_store import JsonStore
 from schemas.artifacts import validate_artifact
 
 INTENTS_SUBDIR = "intents"
@@ -198,18 +197,7 @@ def _intent_path(project_dir: Path, intent_id: str) -> Path:
 
 
 def _atomic_write_json(path: Path, data: dict[str, Any]) -> None:
-    temporary = path.with_name(f".{path.name}.{uuid4().hex}.tmp")
-    try:
-        temporary.write_text(
-            json.dumps(data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
-        os.replace(temporary, path)
-    finally:
-        try:
-            temporary.unlink()
-        except FileNotFoundError:
-            pass
+    JsonStore.write_atomic(path, data)
 
 
 def create_or_conflict(project_id: str, data: dict[str, Any]) -> dict[str, Any]:
