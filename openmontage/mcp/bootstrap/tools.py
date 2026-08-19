@@ -12,12 +12,13 @@ from typing import Any
 
 from openmontage.mcp.bootstrap import install_state as install_state_mod
 from openmontage.mcp.bootstrap.env_file import ensure_env_file as _ensure_env_file
+from lib.paths import get_workspace
 from openmontage.mcp.common.errors import ConfigError, DoctorError
 from openmontage.mcp.common.sandbox import project_dir
 from openmontage.mcp.doctor import tools as doctor_tools
 from openmontage.mcp.media import tools as media_tools
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = get_workspace().repo_root
 
 GITHUB_CLONE_URL = "https://github.com/GuiFeng410/OpenMontage-BootStrap.git"
 GITEE_CLONE_URL = "https://gitee.com/rory_-3232/open-montage-boot-strap.git"

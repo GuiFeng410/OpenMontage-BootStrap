@@ -6,7 +6,6 @@ Does not call paid generate. Options are listed without a recommended badge.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -15,7 +14,7 @@ from lib.checkpoint import (
     merge_write_checkpoint,
     read_checkpoint,
 )
-from lib.paths import PROJECTS_DIR as DEFAULT_PROJECTS_DIR
+from lib.paths import get_workspace
 from lib.review_interrupt import (
     COMMERCIAL_STAGE_ORDER,
     STAGE_LABEL_ZH,
@@ -39,7 +38,7 @@ DECISION_STALE_KEYS = (
 def projects_root(projects_dir: Path | None = None) -> Path:
     if projects_dir is not None:
         return Path(projects_dir)
-    return Path(os.environ.get("OPENMONTAGE_PROJECTS_DIR") or DEFAULT_PROJECTS_DIR)
+    return get_workspace().projects_dir
 
 
 PRODUCING_WAIT_ZH = (

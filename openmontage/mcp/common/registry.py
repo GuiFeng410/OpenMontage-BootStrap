@@ -6,14 +6,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from lib.paths import get_workspace
+
+REPO_ROOT = get_workspace().repo_root
 
 
 def ensure_repo_on_path() -> Path:
-    root = str(REPO_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
-    return REPO_ROOT
+    root = get_workspace().repo_root
+    root_str = str(root)
+    if root_str not in sys.path:
+        sys.path.insert(0, root_str)
+    return root
 
 
 def get_registry():

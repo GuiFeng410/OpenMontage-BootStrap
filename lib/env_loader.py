@@ -12,13 +12,15 @@ from typing import Optional
 from dotenv import load_dotenv
 
 
-def load_env(project_root: Optional[Path] = None) -> None:
-    """Load .env file from project root."""
+def load_env(project_root: Optional[Path] = None, *, override: bool = False) -> None:
+    """Load .env from the workspace root. Missing keys only, unless override."""
     if project_root is None:
-        project_root = Path(__file__).resolve().parent.parent
-    env_path = project_root / ".env"
+        from lib.paths import get_workspace
+
+        project_root = get_workspace().repo_root
+    env_path = Path(project_root) / ".env"
     if env_path.exists():
-        load_dotenv(env_path)
+        load_dotenv(env_path, override=override)
 
 
 def get_env(key: str, default: Optional[str] = None) -> Optional[str]:

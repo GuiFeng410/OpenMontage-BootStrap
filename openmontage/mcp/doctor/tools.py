@@ -13,10 +13,11 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from lib.paths import get_workspace
 from openmontage.mcp.common.errors import ConfigError, DoctorError
 from openmontage.mcp.common.sandbox import project_dir, projects_root, require_projects_root, resolve_under_projects
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = get_workspace().repo_root
 
 PRODUCTION_TIERS = frozenset({"light", "medium", "heavy"})
 VISUAL_SOURCES = frozenset({"template", "stock", "paid_gen"})

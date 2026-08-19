@@ -72,9 +72,11 @@ def _utc_now() -> str:
 
 
 def _projects_root(projects_root: Path | None = None) -> Path:
-    configured = os.environ.get("OPENMONTAGE_PROJECTS_DIR")
-    default = Path(__file__).resolve().parents[2] / "projects"
-    return (projects_root or (Path(configured) if configured else default)).resolve()
+    if projects_root is not None:
+        return Path(projects_root).resolve()
+    from lib.paths import get_workspace
+
+    return get_workspace().projects_dir.resolve()
 
 
 def _safe_project_root(project_id: str, projects_root: Path | None = None) -> Path:

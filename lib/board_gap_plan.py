@@ -8,8 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from lib.asset_precheck import duration_profile, scan_user_images
-from lib.paths import PROJECTS_DIR as DEFAULT_PROJECTS_DIR
-from lib.paths import REPO_ROOT
+from lib.paths import REPO_ROOT, get_workspace
 from openmontage.mcp.bootstrap import install_state as install_state_mod
 
 GAP_ACTIONS = ("upload", "i2i", "reuse", "skip")
@@ -78,7 +77,7 @@ class GapPlanError(Exception):
 def projects_root(projects_dir: Path | None = None) -> Path:
     if projects_dir is not None:
         return Path(projects_dir)
-    return Path(DEFAULT_PROJECTS_DIR)
+    return get_workspace().projects_dir
 
 
 def list_commercial_image_models(
