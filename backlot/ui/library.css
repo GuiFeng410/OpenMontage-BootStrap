@@ -7,6 +7,55 @@
   animation: rise .55s cubic-bezier(.2, .7, .3, 1) .05s backwards;
 }
 
+.library-occupant {
+  display: grid;
+  gap: 8px;
+  margin-top: 20px;
+  padding: 14px 16px;
+  border: 1px solid rgba(240, 168, 60, .45);
+  border-radius: 8px;
+  background: rgba(240, 168, 60, .08);
+}
+
+.library-occupant[hidden] {
+  display: none;
+}
+
+.library-occupant-title {
+  margin: 0;
+  color: var(--text-1);
+  font: 600 calc(13px * var(--fs-scale)) var(--mono);
+}
+
+.library-occupant-hint {
+  margin: 0;
+  color: var(--text-2);
+  font-size: calc(12px * var(--fs-scale));
+}
+
+.library-occupant-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.library-occupant-release {
+  min-height: 36px;
+  padding: 8px 14px;
+  border: 1px solid rgba(240, 168, 60, .58);
+  border-radius: 7px;
+  background: var(--amber);
+  color: #17120b;
+  font: 600 calc(12px * var(--fs-scale)) var(--mono);
+  cursor: pointer;
+}
+
+.library-occupant-feedback {
+  color: var(--text-2);
+  font-size: calc(12px * var(--fs-scale));
+}
+
 .library-onboarding-head {
   display: flex;
   align-items: center;

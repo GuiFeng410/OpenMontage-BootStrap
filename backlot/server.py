@@ -230,10 +230,11 @@ def create_app() -> FastAPI:
 
     @app.get("/api/health")
     async def health() -> dict:
-        from lib.library_create import public_install_flags
+        from lib.library_create import public_install_flags, runner_occupant
         from backlot.runner import runner_code_current
 
         flags = public_install_flags()
+        occupant = runner_occupant(projects_dir=PROJECTS_DIR)
         return {
             "ok": True,
             "app": "backlot",
@@ -241,6 +242,7 @@ def create_app() -> FastAPI:
             "runner_alive": _runner_alive(),
             "runner_code_current": bool(runner_code_current()),
             "active_project_id": _active_project_id(),
+            "runner_occupant": occupant,
             **flags,
         }
 
@@ -276,6 +278,27 @@ def create_app() -> FastAPI:
                 "friendly_zh": "看板即将退出。本机网页服务与 runner 会关掉。",
             }
         )
+
+    @app.post("/api/library/release-runner")
+    async def library_release_runner(request: Request) -> JSONResponse:
+        from lib.library_create import LibraryCreateError, release_library_runner
+
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        try:
+            result = await asyncio.to_thread(
+                release_library_runner,
+                confirm=bool(isinstance(payload, dict) and payload.get("confirm") is True),
+                projects_dir=PROJECTS_DIR,
+            )
+        except LibraryCreateError as exc:
+            raise HTTPException(
+                status_code=exc.http_status,
+                detail={"code": exc.code, "friendly_zh": exc.friendly_zh},
+            ) from exc
+        return JSONResponse(result)
 
     @app.post("/api/keys/refresh")
     async def keys_refresh() -> dict:

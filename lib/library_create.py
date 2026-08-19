@@ -31,20 +31,23 @@ COMMERCIAL_VIDEO_MODELS: tuple[dict[str, Any], ...] = (
         "label_zh": "Agnes",
         "key_names": ("AGNES_API_KEY", "AGNES_AI_API_KEY"),
         "capability_zh": "超长自动切段拼接。",
+        "board_generate": True,
     },
     {
         "id": "hy-video-1.5",
         "channel": "tokenhub",
         "label_zh": "TokenHub·混元",
         "key_names": ("TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"),
-        "capability_zh": "单段时长由模型定，长片自动拼接。",
+        "capability_zh": "看板暂不能开烧。有 Key 也不在本机分段白名单里。",
+        "board_generate": False,
     },
     {
         "id": "pixverse-video-v6.0",
         "channel": "tokenhub",
         "label_zh": "TokenHub·Pixverse",
         "key_names": ("TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"),
-        "capability_zh": "默认可约 5 秒一段，长片自动拼接。",
+        "capability_zh": "看板暂不能开烧。有 Key 也不在本机分段白名单里。",
+        "board_generate": False,
     },
 )
 MAX_DURATION = 75
@@ -68,12 +71,16 @@ def list_commercial_video_models(
     present = {str(name) for name in (key_names_present or [])}
     models: list[dict[str, Any]] = []
     for spec in COMMERCIAL_VIDEO_MODELS:
+        key_ready = any(name in present for name in spec["key_names"])
+        board_generate = bool(spec.get("board_generate"))
         models.append(
             {
                 "id": spec["id"],
                 "channel": spec["channel"],
                 "label_zh": spec["label_zh"],
-                "available": any(name in present for name in spec["key_names"]),
+                "key_ready": key_ready,
+                "board_generate": board_generate,
+                "available": key_ready and board_generate,
                 "capability_zh": spec["capability_zh"],
             }
         )
@@ -103,6 +110,11 @@ def resolve_commercial_video_model(
         picked = next((item for item in models if item["id"] == wanted), None)
         if picked is None:
             raise LibraryCreateError("请选择已接线的视频模型", code="bad_video_model")
+        if not picked.get("board_generate"):
+            raise LibraryCreateError(
+                "该模型看板暂不能开烧，不会改走其它渠道。请改选 Agnes，或回聊天。",
+                code="board_generate_unsupported",
+            )
         if not picked["available"]:
             raise LibraryCreateError(
                 "该模型尚未填入 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」，或改选其它模型。",
@@ -112,7 +124,7 @@ def resolve_commercial_video_model(
     picked = default_commercial_video_model(models)
     if picked is None:
         raise LibraryCreateError(
-            "重度需要视频模型 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」。",
+            "重度需要看板能开烧的模型。目前可开烧：Agnes。请写入 Agnes Key 后刷新；混元 / Pixverse 暂不能在看板开烧。",
             code="missing_video_key",
         )
     return picked
@@ -291,7 +303,7 @@ def start_production(
     keys = _flags_from_live_scan(repo_root=root, environ=environ)
     if tier == "heavy" and not keys["video_key_present"]:
         raise LibraryCreateError(
-            "重度需要视频模型 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」。",
+            "重度需要看板能开烧的模型。目前可开烧：Agnes。请写入 Agnes Key 后刷新；混元 / Pixverse 暂不能在看板开烧。",
             code="missing_video_key",
         )
     if tier == "medium" and not keys["stock_key_present"]:
@@ -325,7 +337,7 @@ def start_production(
         profile["ai_video"] = "enabled"
         if picked_model is None:
             raise LibraryCreateError(
-                "重度需要视频模型 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」。",
+                "重度需要看板能开烧的模型。目前可开烧：Agnes。请写入 Agnes Key 后刷新；混元 / Pixverse 暂不能在看板开烧。",
                 code="missing_video_key",
             )
         profile["video_channel"] = picked_model["channel"]
@@ -383,10 +395,66 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def runner_occupant(*, projects_dir: Path | None = None) -> dict[str, str]:
+    """Title of the project currently bound to the unique runner, if any."""
+    try:
+        from backlot.runner import active_project_id, runner_alive
+    except Exception:
+        return {"project_id": "", "title": ""}
+    from lib.paths import PROJECTS_DIR
+
+    if not runner_alive():
+        return {"project_id": "", "title": ""}
+    pid = str(active_project_id() or "").strip()
+    if not pid:
+        return {"project_id": "", "title": ""}
+    title = pid
+    root = Path(projects_dir or PROJECTS_DIR)
+    marker_path = root / pid / "project.json"
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, TypeError):
+        marker = {}
+    if isinstance(marker, dict) and str(marker.get("title") or "").strip():
+        title = str(marker.get("title")).strip()
+    return {"project_id": pid, "title": title}
+
+
+def release_library_runner(
+    *,
+    confirm: bool = False,
+    projects_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Stop the unique runner without shutting the web server. Does not export."""
+    if confirm is not True:
+        raise LibraryCreateError("confirm required", code="confirm_required", http_status=400)
+    from lib.board_produce import busy_project_ids
+
+    busy = busy_project_ids(projects_dir=projects_dir)
+    if busy:
+        raise LibraryCreateError(
+            "正在出片，不能放下。成片完成或失败后再放下，以免中断生成。",
+            code="producing",
+            http_status=409,
+        )
+    occupant = runner_occupant(projects_dir=projects_dir)
+    from backlot.runner import stop_runner
+
+    stop_runner()
+    title = occupant.get("title") or occupant.get("project_id") or "当前项目"
+    return {
+        "ok": True,
+        "released_project_id": occupant.get("project_id") or "",
+        "friendly_zh": f"已放下「{title}」。可以创建或继续另一个项目。网页服务还在。",
+    }
+
+
 def _assert_runner_idle_or_same(project_id: str = "") -> None:
     try:
-        from backlot.runner import active_project_id
+        from backlot.runner import active_project_id, runner_alive
     except Exception:
+        return
+    if not runner_alive():
         return
     active = str(active_project_id() or "").strip()
     wanted = str(project_id or "").strip()
@@ -395,7 +463,7 @@ def _assert_runner_idle_or_same(project_id: str = "") -> None:
     if wanted and active == wanted:
         return
     raise LibraryCreateError(
-        f"本机正在做「{active}」。请先结束或冻结当前项目，再创建或继续另一个。",
+        f"本机正在做「{active}」。请先在库页点「放下再做别的」，再创建或继续另一个。",
         code="runner_busy",
         http_status=409,
     )

@@ -19,7 +19,7 @@ export function renderExportButton(s) {
       ? "这个项目已经结束并导出"
       : ready
         ? "把成片拷到本项目 exports/，标记完成，然后回到库页。"
-        : "成片出现后即可在本页导出。没有成片不会标记完成。",
+        : "还没有成片，不能结束导出。这不是中断；要去做别的项目请回库页点「放下再做别的」。",
   }, completed ? "已结束并导出" : "结束并导出项目");
 
   if (!completed && ready) {
@@ -51,7 +51,8 @@ export function renderExportButton(s) {
 
   return el("span", { class: "export-tab-wrap" },
     button,
-    el("span", { id: feedbackId, class: "export-tab-feedback", role: "status" }));
+    el("span", { id: feedbackId, class: "export-tab-feedback", role: "status" },
+      !completed && !ready ? "还没有成片，不能结束导出。" : ""));
 }
 
 export function maybeRedirectAfterExport(s) {

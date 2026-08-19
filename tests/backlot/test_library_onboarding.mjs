@@ -9,6 +9,7 @@ import {
   getReviewModeRoute,
   listReviewModes,
   readStoredReviewMode,
+  shouldRemountOnboardingForm,
   writeStoredReviewMode,
 } from "../../backlot/ui/library-onboarding.js";
 
@@ -88,6 +89,14 @@ test("stored review mode round-trips and rejects unknown values", () => {
   assert.equal(readStoredReviewMode(fake), "pro");
   assert.equal(writeStoredReviewMode(fake, "nope"), "normal");
   assert.equal(readStoredReviewMode(fake), "normal");
+});
+
+test("create form remounts only before first paint", () => {
+  assert.equal(shouldRemountOnboardingForm({}), true);
+  assert.equal(shouldRemountOnboardingForm({ mounted: false, creating: false }), true);
+  assert.equal(shouldRemountOnboardingForm({ mounted: true, creating: false }), false);
+  assert.equal(shouldRemountOnboardingForm({ mounted: false, creating: true }), false);
+  assert.equal(shouldRemountOnboardingForm({ mounted: true, creating: true }), false);
 });
 
 test("service info includes host, count and root", () => {

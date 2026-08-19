@@ -115,6 +115,11 @@ export function formatServiceInfo({
   ];
 }
 
+/** Library SSE/poll must not remount the create form once it exists. */
+export function shouldRemountOnboardingForm({ mounted = false, creating = false } = {}) {
+  return !mounted && !creating;
+}
+
 export async function copyCreatePrompt({ clipboard, prompt }) {
   try {
     if (typeof clipboard?.writeText !== "function") {

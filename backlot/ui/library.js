@@ -1,5 +1,5 @@
 import { el, fmtAgo, getJSON, subscribe, thumbURL } from "/ui/lib.js";
-import { renderQuitButton } from "/ui/board-runtime.js";
+import { renderQuitButton, releaseLibraryRunner } from "/ui/board-runtime.js";
 import {
   buildCreateProductVideoPrompt,
   copyCreatePrompt,
@@ -7,6 +7,7 @@ import {
   getReviewModeRoute,
   listReviewModes,
   readStoredReviewMode,
+  shouldRemountOnboardingForm,
   writeStoredReviewMode,
 } from "/ui/library-onboarding.js";
 
@@ -25,11 +26,78 @@ const LABELS = {
 };
 let currentTheme = localStorage.getItem(THEME_KEY) === "light" ? "light" : "dark";
 let creatingProject = false;
+let occupantBarMounted = false;
+let releasingRunner = false;
 
 function applyTheme(theme) {
   currentTheme = theme === "light" ? "light" : "dark";
   document.documentElement.dataset.theme = currentTheme;
   localStorage.setItem(THEME_KEY, currentTheme);
+}
+
+function occupantFromHealth(health) {
+  if (!health?.runner_alive) return { project_id: "", title: "" };
+  const occ = health.runner_occupant || {};
+  const id = String(occ.project_id || health.active_project_id || "").trim();
+  if (!id) return { project_id: "", title: "" };
+  return { project_id: id, title: String(occ.title || id) };
+}
+
+function mountOccupantBar() {
+  const slot = document.getElementById("runner-occupant");
+  if (!slot || occupantBarMounted) return;
+  occupantBarMounted = true;
+  const title = el("p", { class: "library-occupant-title" });
+  const hint = el("p", { class: "library-occupant-hint" },
+    "放下只停 runner，不结束项目，网页还在。要关掉网页请点「退出看板」。结束导出需要成片。");
+  const feedback = el("span", { class: "library-occupant-feedback", role: "status" });
+  const release = el("button", {
+    type: "button",
+    class: "library-occupant-release",
+  }, "放下再做别的");
+  release.addEventListener("click", async () => {
+    if (releasingRunner) return;
+    releasingRunner = true;
+    release.disabled = true;
+    feedback.textContent = "正在放下…";
+    try {
+      const result = await releaseLibraryRunner();
+      feedback.textContent = result.friendly_zh;
+      if (result.ok) {
+        await render();
+      }
+    } catch {
+      feedback.textContent = "放下失败。请留在本页重试。";
+    } finally {
+      releasingRunner = false;
+      release.disabled = false;
+    }
+  });
+  slot.append(
+    title,
+    hint,
+    el("div", { class: "library-occupant-actions" }, release, feedback),
+  );
+}
+
+function updateOccupantBar(health) {
+  mountOccupantBar();
+  const slot = document.getElementById("runner-occupant");
+  if (!slot) return { project_id: "", title: "" };
+  const occ = occupantFromHealth(health);
+  slot.hidden = !occ.project_id;
+  const title = slot.querySelector(".library-occupant-title");
+  if (title) {
+    title.textContent = occ.project_id ? `本机正在做：${occ.title}` : "";
+  }
+  const createBtn = onboarding.querySelector(".library-onboarding-copy");
+  if (createBtn && !creatingProject) {
+    createBtn.disabled = Boolean(occ.project_id);
+    createBtn.title = occ.project_id
+      ? "请先点「放下再做别的」，再创建新项目"
+      : "填写主题后点开始创建";
+  }
+  return occ;
 }
 
 function renderThemeToggle() {
@@ -74,7 +142,31 @@ function currentReviewMode() {
 
 function setReviewMode(mode) {
   selectedReviewMode = writeStoredReviewMode(window.sessionStorage, mode);
+  const existing = onboarding.querySelector(".library-mode-route");
+  if (existing) {
+    existing.replaceWith(renderModeRoute(selectedReviewMode));
+    const promptField = onboarding.querySelector(".library-onboarding-prompt");
+    if (promptField) {
+      promptField.value = buildCreateProductVideoPrompt(selectedReviewMode);
+    }
+    return;
+  }
   renderOnboarding(lastOnboardingHealth, lastProjectCount);
+}
+
+function updateOnboardingServiceInfo(health, projectCount) {
+  lastOnboardingHealth = health || lastOnboardingHealth;
+  lastProjectCount = projectCount;
+  const [serviceLine, countLine, rootLine] = formatServiceInfo({
+    host: location.host,
+    projectsDir: health?.projects_dir,
+    projectCount,
+  });
+  const spans = onboarding.querySelectorAll(".library-service-list span");
+  if (spans[0]) spans[0].textContent = serviceLine;
+  if (spans[1]) spans[1].textContent = countLine;
+  const rootP = onboarding.querySelector(".library-service-details p");
+  if (rootP) rootP.textContent = rootLine;
 }
 
 function renderModeRoute(mode) {
@@ -206,6 +298,11 @@ function renderOnboarding(health, projectCount) {
         themeField.focus();
         return;
       }
+      const occ = occupantFromHealth(lastOnboardingHealth);
+      if (occ.project_id) {
+        feedback.textContent = `本机正在做「${occ.title}」。请先点「放下再做别的」。`;
+        return;
+      }
       creatingProject = true;
       feedback.textContent = "正在创建项目…";
       createButton.disabled = true;
@@ -319,7 +416,7 @@ function renderOnboarding(health, projectCount) {
   );
 }
 
-function card(p) {
+function card(p, occupant) {
   const poster = el("div", { class: "lib-poster" });
   if (p.poster) {
     poster.append(el("img", { src: thumbURL(p.project_id, p.poster, 640), loading: "lazy", alt: "" }));
@@ -380,6 +477,12 @@ function card(p) {
     });
   } else {
     node.addEventListener("click", async () => {
+      if (occupant.project_id && occupant.project_id !== p.project_id) {
+        window.alert(
+          `本机正在做「${occupant.title}」。请先点「放下再做别的」，再继续其它项目。`,
+        );
+        return;
+      }
       const ok = window.confirm(
         `继续这个项目？\n编号：${p.project_id}\n${stopLine}\n将占用本机唯一 runner，从当前停点接着做，不会新建，也不会自动开烧。`,
       );
@@ -414,18 +517,26 @@ async function render() {
     getJSON("/api/health").catch(() => ({ projects_dir: "未提供" })),
   ]);
   document.getElementById("count").textContent = `${projects.length} ${LABELS.projects}`;
+  lastOnboardingHealth = health || lastOnboardingHealth;
   const liveCount = projects.filter((p) => p.live).length;
   const badge = document.getElementById("liveBadge");
   badge.classList.toggle("idle", liveCount === 0);
   document.getElementById("liveText").textContent = liveCount
     ? `${liveCount} ${LABELS.LIVE}`
     : LABELS.IDLE;
-  if (!creatingProject) {
+  const occupant = updateOccupantBar(health);
+  if (shouldRemountOnboardingForm({
+    mounted: onboarding.hasChildNodes(),
+    creating: creatingProject,
+  })) {
     renderOnboarding(health, projects.length);
+    updateOccupantBar(health);
+  } else {
+    updateOnboardingServiceInfo(health, projects.length);
   }
   grid.innerHTML = "";
   document.getElementById("empty").style.display = projects.length ? "none" : "block";
-  for (const p of projects) grid.append(card(p));
+  for (const p of projects) grid.append(card(p, occupant));
 }
 
 render().catch(console.error);

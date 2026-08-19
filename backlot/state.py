@@ -2248,6 +2248,17 @@ def _attach_commercial_board_echo(project_dir: Path, commercial: dict[str, Any])
     commercial["board_stop"] = stop
     runner = commercial.get("runner_status") if isinstance(commercial.get("runner_status"), dict) else {}
     paused = bool(stop and stop.get("paused")) or str(runner.get("phase") or "") == "paused"
+    job = commercial.get("produce_job") if isinstance(commercial.get("produce_job"), dict) else {}
+    job_busy = str(job.get("status") or "") in {"queued", "running"}
+    has_final = bool(commercial.get("final_video"))
+    from lib.review_interrupt import honest_user_stage_zh
+
+    commercial["user_stage_zh"] = honest_user_stage_zh(
+        {"label_zh": commercial.get("user_stage_zh")},
+        has_final=has_final,
+        producing=job_busy or str(runner.get("phase") or "") in {"producing", "queued"},
+        paused=paused,
+    )
     if stop and paused:
         commercial["decision"] = {
             "stage": stop.get("stage") or "delivery_signoff",
@@ -2267,13 +2278,25 @@ def _attach_commercial_board_echo(project_dir: Path, commercial: dict[str, Any])
             "paused": True,
         }
     elif stop and stop.get("producing_wait") and not commercial.get("decision"):
-        commercial["decision"] = {
-            "stage": stop.get("stage") or "delivery_signoff",
-            "title_zh": stop.get("decision_title_zh") or "制作中",
-            "prompt_zh": stop.get("decision_prompt_zh") or "",
-            "options": [],
-            "producing_wait": True,
-        }
+        if not has_final and not job_busy:
+            commercial["decision"] = {
+                "stage": stop.get("stage") or "delivery_signoff",
+                "title_zh": "已暂停",
+                "prompt_zh": stop.get("decision_prompt_zh")
+                or runner.get("friendly_zh")
+                or "还没有成片，已暂停。请放下后改选看板能开烧的渠道，或回本页处理。",
+                "options": [],
+                "producing_wait": False,
+                "paused": True,
+            }
+        else:
+            commercial["decision"] = {
+                "stage": stop.get("stage") or "delivery_signoff",
+                "title_zh": stop.get("decision_title_zh") or "制作中",
+                "prompt_zh": stop.get("decision_prompt_zh") or "",
+                "options": [],
+                "producing_wait": True,
+            }
 
 
 def _find_poster(project_dir: Path, state: dict) -> Optional[str]:
@@ -2579,6 +2602,14 @@ def load_board_state(project_dir: Path) -> dict[str, Any]:
     import time
     last_activity = _last_activity(project_dir)
     now = time.time()
+    live = bool(last_activity and (now - last_activity) < LIVE_WINDOW_SECONDS)
+    if pipeline_type == "bootstrap-commercial":
+        try:
+            from backlot.runner import active_project_id, runner_alive
+
+            live = bool(runner_alive()) and str(active_project_id() or "") == project_id
+        except Exception:
+            live = False
 
     # Stall detection: an in_progress stage that stopped writing anything.
     for stage_entry in stages:
@@ -2608,7 +2639,7 @@ def load_board_state(project_dir: Path) -> dict[str, Any]:
         "events": events,
         "cost": cost,
         "last_activity": last_activity,
-        "live": bool(last_activity and (now - last_activity) < LIVE_WINDOW_SECONDS),
+        "live": live,
         "production_profile": marker.get("production_profile"),
     }
     if pipeline_type == "bootstrap-commercial":

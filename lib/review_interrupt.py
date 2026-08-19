@@ -141,3 +141,24 @@ def user_progress(
         "label_zh": "已完成" if delivery_done else STAGE_LABEL_ZH.get(last, last),
         "status": "completed",
     }
+
+
+def honest_user_stage_zh(
+    progress: dict[str, Any],
+    *,
+    has_final: bool,
+    producing: bool,
+    paused: bool,
+) -> str:
+    """Library/board stop label that does not fake delivery or producing."""
+    label = str((progress or {}).get("label_zh") or "")
+    fake_busy = label in {"待交付", "交付确认", "生成中", "制作中"}
+    if has_final:
+        if label == "生成中":
+            return "待交付"
+        return label
+    if fake_busy:
+        if producing:
+            return "生成中"
+        return "已暂停"
+    return label

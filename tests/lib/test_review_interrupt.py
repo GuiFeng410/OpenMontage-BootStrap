@@ -1,4 +1,4 @@
-from lib.review_interrupt import confirm_stop_ids, user_progress
+from lib.review_interrupt import confirm_stop_ids, honest_user_stage_zh, user_progress
 
 
 def test_minimal_has_three_confirm_stops() -> None:
@@ -19,6 +19,33 @@ def test_minimal_progress_shows_generating_after_assets() -> None:
     ]
     progress = user_progress(stages, "minimal")
     assert progress["label_zh"] == "生成中"
+
+
+def test_honest_stage_does_not_fake_delivery_without_final() -> None:
+    assert honest_user_stage_zh(
+        {"label_zh": "待交付"},
+        has_final=False,
+        producing=False,
+        paused=True,
+    ) == "已暂停"
+    assert honest_user_stage_zh(
+        {"label_zh": "待交付"},
+        has_final=True,
+        producing=False,
+        paused=False,
+    ) == "待交付"
+    assert honest_user_stage_zh(
+        {"label_zh": "生成中"},
+        has_final=False,
+        producing=True,
+        paused=False,
+    ) == "生成中"
+    assert honest_user_stage_zh(
+        {"label_zh": "方案确认"},
+        has_final=False,
+        producing=False,
+        paused=True,
+    ) == "方案确认"
 
 
 def test_legacy_preset_keeps_all_stops() -> None:

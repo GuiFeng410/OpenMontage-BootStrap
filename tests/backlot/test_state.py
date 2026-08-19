@@ -2625,6 +2625,62 @@ class TestLibrary:
         assert projects[0]["live"] is True
         assert projects[1]["live"] is False
 
+    def test_commercial_live_only_when_runner_bound(self, projects_root, monkeypatch):
+        p = _make_project(projects_root, "necklace")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "title": "Necklace",
+            "pipeline_type": "bootstrap-commercial",
+        })
+        _write(p / "checkpoint_brief_locked.json", {
+            "stage": "brief_locked",
+            "status": "in_progress",
+            "timestamp": "2026-08-19T00:00:00Z",
+            "artifacts": {},
+        })
+        monkeypatch.setattr("backlot.runner.runner_alive", lambda: False)
+        monkeypatch.setattr("backlot.runner.active_project_id", lambda: "")
+        assert summarize_project(p)["live"] is False
+
+        monkeypatch.setattr("backlot.runner.runner_alive", lambda: True)
+        monkeypatch.setattr("backlot.runner.active_project_id", lambda: p.name)
+        assert summarize_project(p)["live"] is True
+
+    def test_commercial_delivery_without_final_is_paused(self, projects_root, monkeypatch):
+        monkeypatch.setattr("backlot.runner.runner_alive", lambda: False)
+        monkeypatch.setattr("backlot.runner.active_project_id", lambda: "")
+        p = _make_project(projects_root, "necklace-paused")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "title": "Necklace",
+            "pipeline_type": "bootstrap-commercial",
+            "production_profile": {"review_mode_preset": "minimal"},
+            "board_stop": {
+                "stage": "delivery_signoff",
+                "producing_wait": True,
+                "decision_title_zh": "制作中",
+                "decision_prompt_zh": "制作中 16–28 分钟",
+            },
+        })
+        for name, status in (
+            ("brief_locked", "completed"),
+            ("assets_gate", "completed"),
+            ("delivery_signoff", "pending"),
+        ):
+            _write(p / f"checkpoint_{name}.json", {
+                "stage": name,
+                "status": status,
+                "timestamp": "2026-08-19T00:00:00Z",
+                "artifacts": {},
+            })
+        commercial = load_board_state(p)["commercial"]
+        assert commercial["user_stage_zh"] == "已暂停"
+        assert commercial["decision"]["producing_wait"] is False
+        assert commercial["decision"]["title_zh"] == "已暂停"
+        summary = summarize_project(p)
+        assert summary["live"] is False
+        assert summary["user_stage_zh"] == "已暂停"
+
     def test_underscore_dirs_skipped(self, projects_root):
         (projects_root / "_analysis").mkdir()
         _make_project(projects_root, "real")

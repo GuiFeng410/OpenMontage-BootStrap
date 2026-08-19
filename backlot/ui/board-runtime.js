@@ -9,6 +9,31 @@ export function runnerBoundToProject(s) {
   return Boolean(s?.commercial?.runner_status?.runner_alive);
 }
 
+export async function releaseLibraryRunner() {
+  const response = await fetch("/api/library/release-runner", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ confirm: true }),
+  });
+  let payload = {};
+  try {
+    payload = await response.json();
+  } catch {
+    payload = {};
+  }
+  if (!response.ok) {
+    const detail = payload.detail;
+    const message = (detail && (detail.friendly_zh || detail.detail))
+      || payload.friendly_zh
+      || "无法放下当前项目。";
+    return { ok: false, status: response.status, friendly_zh: message };
+  }
+  return {
+    ok: true,
+    friendly_zh: payload.friendly_zh || "已放下。网页服务还在。",
+  };
+}
+
 export async function stopBacklotRuntime({ interrupt = false } = {}) {
   const response = await fetch("/api/runtime/stop", {
     method: "POST",

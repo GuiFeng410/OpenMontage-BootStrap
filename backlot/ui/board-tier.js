@@ -12,20 +12,23 @@ const VIDEO_MODEL_CATALOG = [
     label_zh: "Agnes",
     keyNames: ["AGNES_API_KEY", "AGNES_AI_API_KEY"],
     capability_zh: "超长自动切段拼接。",
+    board_generate: true,
   },
   {
     id: "hy-video-1.5",
     channel: "tokenhub",
     label_zh: "TokenHub·混元",
     keyNames: ["TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"],
-    capability_zh: "单段时长由模型定，长片自动拼接。",
+    capability_zh: "看板暂不能开烧。有 Key 也不在本机分段白名单里。",
+    board_generate: false,
   },
   {
     id: "pixverse-video-v6.0",
     channel: "tokenhub",
     label_zh: "TokenHub·Pixverse",
     keyNames: ["TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"],
-    capability_zh: "默认可约 5 秒一段，长片自动拼接。",
+    capability_zh: "看板暂不能开烧。有 Key 也不在本机分段白名单里。",
+    board_generate: false,
   },
 ];
 const AI_PRESETS = [50, 70, 100];
@@ -72,15 +75,29 @@ function initialAiPct(lockedAiSharePct, lockedMotionMix) {
 
 function videoModels() {
   const fromApi = Array.isArray(keyFlags?.video_models) ? keyFlags.video_models : [];
-  if (fromApi.length) return fromApi;
-  const names = new Set(keyFlags?.video_key_names_present || []);
-  return VIDEO_MODEL_CATALOG.map((spec) => ({
-    id: spec.id,
-    channel: spec.channel,
-    label_zh: spec.label_zh,
-    capability_zh: spec.capability_zh,
-    available: spec.keyNames.some((name) => names.has(name)),
-  }));
+  const rows = fromApi.length
+    ? fromApi
+    : VIDEO_MODEL_CATALOG.map((spec) => {
+      const names = new Set(keyFlags?.video_key_names_present || []);
+      const keyReady = spec.keyNames.some((name) => names.has(name));
+      return {
+        id: spec.id,
+        channel: spec.channel,
+        label_zh: spec.label_zh,
+        capability_zh: spec.capability_zh,
+        board_generate: spec.board_generate !== false,
+        key_ready: keyReady,
+        available: keyReady && spec.board_generate !== false,
+      };
+    });
+  return rows.map((item) => {
+    const board = item.board_generate !== false;
+    return {
+      ...item,
+      board_generate: board,
+      available: Boolean(item.available) && board,
+    };
+  });
 }
 
 function firstAvailableModelId() {
@@ -90,20 +107,21 @@ function firstAvailableModelId() {
 
 function applyFlags(flags) {
   keyFlags = flags || keyFlags || {};
-  const available = new Set(videoModels().filter((item) => item.available).map((item) => item.id));
-  if (selectedModelId && !available.has(selectedModelId)) {
-    selectedModelId = firstAvailableModelId();
-  } else if (!selectedModelId) {
+  if (!selectedModelId) {
     selectedModelId = firstAvailableModelId();
   }
 }
 
 function blockMessage(tier) {
   if (tier === "heavy" && !keyFlags?.video_key_present) {
-    return "重度需要视频模型 Key。请写入仓根 .env 后点「已填入 Key，刷新可用性」。";
+    return "重度需要看板能开烧的模型。目前可开烧：Agnes。请写入 Agnes Key 后刷新。";
   }
   if (tier === "heavy" && !selectedModelId) {
-    return "请选择一个已填入 Key 的视频模型。";
+    return "请选择一个看板能开烧且已填入 Key 的视频模型。目前可开烧：Agnes。";
+  }
+  const picked = videoModels().find((item) => item.id === selectedModelId);
+  if (tier === "heavy" && picked && !picked.board_generate) {
+    return "当前模型看板暂不能开烧，不会改走其它渠道。请改选 Agnes，或回库页放下后新建。";
   }
   if (tier === "medium" && !keyFlags?.stock_key_present) {
     return "中度需要素材库 Key（Pexels 或 Pixabay）。请写入仓根 .env 后点「已填入 Key，刷新可用性」。";
@@ -153,13 +171,14 @@ function renderModelPicker({ requestRender }) {
   const selected = models.find((item) => item.id === selectedModelId) || models.find((item) => item.available);
   for (const item of models) {
     const isSelected = selectedModelId === item.id;
+    const canSelect = Boolean(item.available);
     const button = el("button", {
       type: "button",
-      class: `tier-model-option${isSelected ? " selected" : ""}${item.available ? "" : " disabled"}`,
-      disabled: item.available ? null : "",
+      class: `tier-model-option${isSelected ? " selected" : ""}${canSelect ? "" : " disabled"}`,
+      disabled: canSelect ? null : "",
       "aria-pressed": isSelected ? "true" : "false",
-    }, item.label_zh);
-    if (item.available) {
+    }, item.board_generate === false ? `${item.label_zh}（看板暂不能开烧）` : item.label_zh);
+    if (canSelect) {
       button.addEventListener("click", () => {
         selectedModelId = item.id;
         statusText = "";
@@ -170,7 +189,7 @@ function renderModelPicker({ requestRender }) {
   }
   if (!models.some((item) => item.available)) {
     list.append(el("div", { class: "tier-model-empty" },
-      "未检测到视频 Key。写入仓根 .env 后点「已填入 Key，刷新可用性」。"));
+      "没有看板能开烧的模型。请写入 Agnes Key 后刷新。混元 / Pixverse 暂不能在看板开烧。"));
   }
   const cap = el("details", { class: "tier-model-cap" });
   if (capOpen) cap.open = true;
@@ -270,10 +289,13 @@ export function renderProductionTierPanel({
     }
   });
 
+  const flagsReady = keyFlags !== null;
+  const blocked = flagsReady ? blockMessage(selectedTier) : "";
   const startBtn = el("button", {
     type: "button",
     class: "tier-start-btn",
-    disabled: busy ? "" : null,
+    disabled: busy || (selectedTier === "heavy" && !flagsReady) || blocked ? "" : null,
+    title: blocked || "锁定制作档。本页不会直接调付费接口。",
   }, "确认开始出片");
   startBtn.addEventListener("click", async () => {
     const blocked = blockMessage(selectedTier);
@@ -319,6 +341,9 @@ export function renderProductionTierPanel({
     }
   });
 
+  if (blocked && !statusText) {
+    statusText = blocked;
+  }
   const children = [
     el("div", { class: "tier-panel-head" }, el("b", {}, "制作档位")),
     options,

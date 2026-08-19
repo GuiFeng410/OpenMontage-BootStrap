@@ -99,6 +99,9 @@ class TestBacklotServerApi:
         assert "stock_key_present" in payload
         assert "runner_code_current" in payload
         assert isinstance(payload["runner_code_current"], bool)
+        assert "runner_occupant" in payload
+        assert "project_id" in payload["runner_occupant"]
+        assert "title" in payload["runner_occupant"]
 
     def test_keys_refresh_never_returns_secret_values(self, client, monkeypatch):
         monkeypatch.setattr(
@@ -182,6 +185,7 @@ class TestBacklotServerApi:
         assert css.status_code == 200
         assert js.status_code == 200
         assert "/ui/library.css?v=" in page.text
+        assert 'id="runner-occupant"' in page.text
 
     def test_projects_shape_and_state(self, client, projects_root):
         _make_project(projects_root, "film")
@@ -308,6 +312,42 @@ class TestBacklotPerformanceBudgets:
         assert response.status_code == 200
         assert response.json()["ok"] is True
         assert stopped["n"] == 1
+
+
+    def test_release_runner_requires_confirm(self, client):
+        response = client.post("/api/library/release-runner", json={})
+        assert response.status_code == 400
+
+    def test_release_runner_blocks_when_producing(self, client, projects_root, monkeypatch):
+        project = _make_project(projects_root, "busy")
+        _write_json(
+            project / "artifacts" / "produce_job.json",
+            {"status": "running", "engine": "paid_video"},
+        )
+        stopped = {"n": 0}
+        exits = {"n": 0}
+        monkeypatch.setattr("backlot.runner.stop_runner", lambda: stopped.__setitem__("n", 1))
+        monkeypatch.setattr(server_mod, "schedule_server_exit", lambda: exits.__setitem__("n", 1))
+        response = client.post("/api/library/release-runner", json={"confirm": True})
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "producing"
+        assert stopped["n"] == 0
+        assert exits["n"] == 0
+
+    def test_release_runner_ok_when_idle_keeps_server(self, client, monkeypatch):
+        stopped = {"n": 0}
+        exits = {"n": 0}
+        monkeypatch.setattr("backlot.runner.stop_runner", lambda: stopped.__setitem__("n", 1))
+        monkeypatch.setattr(server_mod, "schedule_server_exit", lambda: exits.__setitem__("n", 1))
+        monkeypatch.setattr("backlot.runner.runner_alive", lambda: True)
+        monkeypatch.setattr("backlot.runner.active_project_id", lambda: "film-idle")
+        response = client.post("/api/library/release-runner", json={"confirm": True})
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert stopped["n"] == 1
+        assert exits["n"] == 0
+        assert "网页服务还在" in payload["friendly_zh"]
 
 
 class TestFindingsFixes:

@@ -16,6 +16,12 @@ from lib.library_create import (
 from openmontage.mcp.bootstrap.install_state import snapshot_install_state
 
 
+@pytest.fixture(autouse=True)
+def _isolate_runner(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("backlot.runner.active_project_id", lambda: "")
+    monkeypatch.setattr("backlot.runner.runner_alive", lambda: False)
+
+
 def test_flags_default_not_ready(tmp_path: Path) -> None:
     flags = public_install_flags(repo_root=tmp_path)
     assert flags["install_state_exists"] is False
@@ -24,19 +30,26 @@ def test_flags_default_not_ready(tmp_path: Path) -> None:
     assert flags["stock_key_present"] is False
     assert flags["video_models"][0]["id"] == "agnes-video-v2.0"
     assert flags["video_models"][0]["available"] is False
+    assert flags["video_models"][0]["board_generate"] is True
     assert flags["video_models"][1]["id"] == "hy-video-1.5"
+    assert flags["video_models"][1]["board_generate"] is False
     assert flags["video_models"][2]["id"] == "pixverse-video-v6.0"
+    assert flags["video_models"][2]["board_generate"] is False
     image_ids = [item["id"] for item in flags["image_models"]]
     assert image_ids[0] == "dashscope"
     assert "agnes" in image_ids
     assert "pixverse" not in image_ids
 
 
-def test_tokenhub_alias_unlocks_hunyuan_and_pixverse() -> None:
+def test_tokenhub_alias_marks_key_ready_but_not_board_generate() -> None:
     models = {item["id"]: item for item in list_commercial_video_models(["TENCENT_TOKENHUB_API_KEY"])}
     assert models["agnes-video-v2.0"]["available"] is False
-    assert models["hy-video-1.5"]["available"] is True
-    assert models["pixverse-video-v6.0"]["available"] is True
+    assert models["hy-video-1.5"]["key_ready"] is True
+    assert models["hy-video-1.5"]["board_generate"] is False
+    assert models["hy-video-1.5"]["available"] is False
+    assert models["pixverse-video-v6.0"]["key_ready"] is True
+    assert models["pixverse-video-v6.0"]["board_generate"] is False
+    assert models["pixverse-video-v6.0"]["available"] is False
 
 
 def test_flags_live_scan_env_ignores_stale_install_state(tmp_path: Path) -> None:
@@ -50,8 +63,10 @@ def test_flags_live_scan_env_ignores_stale_install_state(tmp_path: Path) -> None
     assert flags["video_key_present"] is True
     assert "TOKENHUB_API_KEY" in flags["video_key_names_present"]
     models = {item["id"]: item for item in flags["video_models"]}
-    assert models["hy-video-1.5"]["available"] is True
-    assert models["pixverse-video-v6.0"]["available"] is True
+    assert models["hy-video-1.5"]["key_ready"] is True
+    assert models["hy-video-1.5"]["available"] is False
+    assert models["pixverse-video-v6.0"]["key_ready"] is True
+    assert models["pixverse-video-v6.0"]["available"] is False
     assert models["agnes-video-v2.0"]["available"] is False
     assert "th-secret-do-not-leak-live" not in str(flags)
 
@@ -218,7 +233,7 @@ def test_start_production_locks_light_and_heavy_when_keys_present(
     monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
     project_dir = _write_ready_project(tmp_path)
     (tmp_path / ".env").write_text(
-        "TOKENHUB_API_KEY=th-secret-do-not-leak-ccc\nPEXELS_API_KEY=px-secret-do-not-leak-ddd\n",
+        "AGNES_API_KEY=ag-secret-do-not-leak-ccc\nPEXELS_API_KEY=px-secret-do-not-leak-ddd\n",
         encoding="utf-8",
     )
     light = start_production(
@@ -238,8 +253,8 @@ def test_start_production_locks_light_and_heavy_when_keys_present(
     assert heavy["production_tier"] == "heavy"
     marker = (project_dir / "project.json").read_text(encoding="utf-8")
     assert '"production_tier": "heavy"' in marker
-    assert "th-secret-do-not-leak-ccc" not in marker
-    assert "th-secret-do-not-leak-ccc" not in str(heavy)
+    assert "ag-secret-do-not-leak-ccc" not in marker
+    assert "ag-secret-do-not-leak-ccc" not in str(heavy)
 
 
 def test_start_production_seeds_stop_card_without_recommend(
@@ -278,25 +293,25 @@ def test_start_production_persists_ai_share_pct(
     monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
     project_dir = _write_ready_project(tmp_path)
     (tmp_path / ".env").write_text(
-        "TOKENHUB_API_KEY=th-secret-do-not-leak-eee\nPEXELS_API_KEY=px-secret-do-not-leak-fff\n",
+        "AGNES_API_KEY=ag-secret-do-not-leak-eee\nPEXELS_API_KEY=px-secret-do-not-leak-fff\n",
         encoding="utf-8",
     )
     heavy = start_production(
         project_id="shop-demo",
         production_tier="heavy",
         ai_share_pct=70,
-        video_model="pixverse-video-v6.0",
+        video_model="agnes-video-v2.0",
         repo_root=tmp_path,
         environ={},
     )
     assert heavy["ai_share_pct"] == 70
     assert heavy["motion_mix"] == "1:2"
-    assert heavy["video_model"] == "pixverse-video-v6.0"
-    assert heavy["video_channel"] == "tokenhub"
+    assert heavy["video_model"] == "agnes-video-v2.0"
+    assert heavy["video_channel"] == "agnes"
     marker = json.loads((project_dir / "project.json").read_text(encoding="utf-8"))
     assert marker["production_profile"]["ai_share_pct"] == 70
     assert marker["production_profile"]["motion_mix"] == "1:2"
-    assert marker["production_profile"]["video_model"] == "pixverse-video-v6.0"
+    assert marker["production_profile"]["video_model"] == "agnes-video-v2.0"
 
 
 def test_start_production_defaults_to_first_available_model(
@@ -342,8 +357,29 @@ def test_start_production_rejects_model_without_key(
     assert caught.value.code == "missing_model_key"
 
 
+def test_start_production_rejects_pixverse_even_with_tokenhub_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    _write_ready_project(tmp_path)
+    (tmp_path / ".env").write_text(
+        "TOKENHUB_API_KEY=th-secret-do-not-leak-pix\n",
+        encoding="utf-8",
+    )
+    with pytest.raises(LibraryCreateError) as caught:
+        start_production(
+            project_id="shop-demo",
+            production_tier="heavy",
+            video_model="pixverse-video-v6.0",
+            repo_root=tmp_path,
+            environ={},
+        )
+    assert caught.value.code == "board_generate_unsupported"
+
+
 def test_create_blocked_when_runner_busy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    monkeypatch.setattr("backlot.runner.runner_alive", lambda: True)
     monkeypatch.setattr("backlot.runner.active_project_id", lambda: "other-pro")
     with pytest.raises(LibraryCreateError) as caught:
         create_library_project(title="Jade", repo_root=tmp_path)
@@ -374,6 +410,7 @@ def test_continue_rejects_completed_project(tmp_path: Path, monkeypatch: pytest.
 def test_continue_same_project_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
     snapshot_install_state(repo_root=tmp_path, verify_ready=True)
+    monkeypatch.setattr("backlot.runner.runner_alive", lambda: True)
     monkeypatch.setattr("backlot.runner.active_project_id", lambda: "shop-demo")
     project = tmp_path / "projects" / "shop-demo"
     project.mkdir(parents=True)
