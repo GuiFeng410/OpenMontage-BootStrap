@@ -1,19 +1,20 @@
 {
-  "version": "0.5.0",
+  "version": "0.6.0",
   "channel": "stable",
-  "released_at": "2026-08-17",
+  "released_at": "2026-08-19",
   "minimum_python": "3.10",
   "requires_mcp_restart": true,
   "project_schema_migrations": [],
   "changes": [
-    "Backlot B1/B1.1/B2：面板选择、审批包、快速模式 v2",
-    "商品素材分配与生成图审查门禁",
-    "compose 支持项目相对路径 assets/video/… 并正式写出 final.mp4",
-    "backlot open 写启动日志，失败仍打印项目网址"
+    "默认电商宣传片主链：库页创建进看板，轻/中/重与停点在流程页确认",
+    "唯一 runner：看库只开网页；创建或「继续这个项目」才绑一个项目",
+    "网页开烧到交付看成片：极简直出、普通先试片再分段，本机终稿可预览导出",
+    "TokenHub 混元/Pixverse 有 Key 即可选开烧；中断与完结分开",
+    "交付页单播放器且复用 video；取消常驻右栏档案，本阶段短卡与折叠回顾"
   ],
   "known_limits": [
     "尚无用户工作区安装器与聊天检查更新",
-    "网页点击后自动出片属于 v0.6",
-    "轻度 Demo 仍存在，电商宣传片将在 v0.6 改为默认主路径"
+    "专业 7 停真实生产未开",
+    "方案页未点同意时卡片仍可提交（错误收集第 6 条）"
   ]
 }
