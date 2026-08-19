@@ -1398,6 +1398,30 @@ def test_delivery_view_shows_one_final_player_not_two(staged_backlot_server):
             browser.close()
 
 
+def test_commercial_board_hides_persistent_aside_behind_review_fold(
+    staged_backlot_server,
+):
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1280, "height": 900})
+        try:
+            page.goto(
+                staged_backlot_server + "/p/commercial-task3?static=1",
+                wait_until="networkidle",
+            )
+            expect(page.locator(".commercial-aside")).to_have_count(0)
+            expect(page.locator(".commercial-stage-status")).to_be_visible()
+            expect(page.get_by_role("heading", name="方案摘要")).not_to_be_visible()
+            expect(page.get_by_role("heading", name="已确认决定")).not_to_be_visible()
+            fold = page.locator(".commercial-review-fold")
+            expect(fold).to_have_count(1)
+            expect(fold.locator(":scope > summary")).to_have_text("回顾")
+            fold.locator(":scope > summary").click()
+            expect(page.get_by_role("heading", name="方案摘要")).to_be_visible()
+        finally:
+            browser.close()
+
+
 def test_edit_intents_still_require_editing_gate(staged_backlot_server):
 
     project_id = _stage_edit_gate_project(

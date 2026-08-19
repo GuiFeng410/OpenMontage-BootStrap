@@ -227,7 +227,7 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 ```
 
 禁止：只在聊天复述方案却不写 `segment_cards` / `decision_log`；禁止用空或半截 `artifacts_json` 覆盖已有 brief/video_plan。  
-面板侧：后续阶段仍保留「已确认方案档案 / 已确认决定」；点顶栏「方案确认」可回看文案规划。
+面板侧：后续阶段不常驻「方案摘要 / 已确认方案档案 / 已确认决定」；主栏只看本阶段短卡，历史在底栏折叠「回顾」。点顶栏「方案确认」可回看当时文案规划。
 
 商品片决定使用固定分类，禁止临时发明 category：主题/时长/渠道用 `brief_selection`，评审方式用 `review_mode_selection`，轻/中/重档用 `production_tier_selection`，候选策略用 `candidate_mode_selection`，运镜/AI 比例用 `motion_mix_selection`，素材取舍用 `asset_decision`，试片/初稿等阶段裁定用 `stage_review_decision`，最终交付确认用 `delivery_signoff`，全程审批策略用 `approval_policy`。
 

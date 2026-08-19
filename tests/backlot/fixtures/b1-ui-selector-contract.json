@@ -10,12 +10,14 @@
     ".sse-refresh-btn",
     ".edit-tab-btn",
     ".commercial-decision-option",
-    ".commercial-chat-only"
+    ".commercial-chat-only",
+    ".commercial-stage-status",
+    ".commercial-review-fold"
   ],
   "copy_contract": [
     "请留在本页确认",
     "提交剪辑要求",
-    "已确认决定"
+    "回顾"
   ],
   "baseline_tests": {
     "chrome": "42 passed",

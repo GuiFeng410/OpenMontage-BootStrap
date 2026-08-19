@@ -191,7 +191,31 @@
 .intent-basket-stale button { justify-self: start; }
 .commercial-drawer pre { display: none; }
 .project-switch-hint { margin-top: 4px; }
-.commercial-board .commercial-aside { min-width: 280px; max-width: 340px; }
+.board.commercial-board { grid-template-columns: 1fr; }
+.commercial-board .commercial-aside { display: none; }
+.commercial-stage-status-kicker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.commercial-review-fold {
+  margin-top: 18px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--surface-2);
+}
+.commercial-review-fold > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+.commercial-review-body {
+  display: grid;
+  gap: 14px;
+  margin-top: 12px;
+}
 .commercial-summary .kv-row {
   display: flex; justify-content: space-between; gap: 12px;
   padding: 6px 0; border-bottom: 1px solid var(--border-soft);

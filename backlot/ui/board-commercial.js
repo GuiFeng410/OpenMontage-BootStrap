@@ -238,7 +238,7 @@ function renderCommercialPlanArchive(s, context) {
   const archive = s.commercial?.plan_archive || {};
   const b = s.commercial?.brief_summary || {};
   const view = commercialContentView(s, context.selectedStage);
-  // Always keep prior plan evidence visible after leaving 方案确认.
+  // Keep prior plan evidence for the 回顾 fold; the live work surface is the current stage.
   if (view === "plan" && !archive.overall_prompt_zh && !archive.has_video_plan) return null;
   const flags = [
     archive.has_brief ? "brief✓" : "brief✗",
@@ -288,6 +288,7 @@ function renderCommercialSummary(s) {
     ["候选策略", b.candidate_mode_zh],
     ["风格", b.style_label_zh],
   ].filter(([, v]) => v);
+  if (!rows.length) return null;
   const body = el("div", { class: "panel-body commercial-summary" });
   for (const [label, value] of rows) {
     body.append(el("div", { class: "kv-row" },
@@ -1190,19 +1191,125 @@ function shouldHideMinimalAssetPanels(s) {
   return assetsGate?.status === "completed";
 }
 
-export function renderCommercialBoard(s, context) {
-  const aside = el("aside", { class: "commercial-aside" });
-  const summary = renderCommercialSummary(s);
-  const planArchive = renderCommercialPlanArchive(s, context);
-  const decisions = renderCommercialDecisions(s);
-  const costPanel = renderCommercialCostPanel(s);
-  const activity = context.renderActivity(s);
-  if (summary) aside.append(summary);
-  if (planArchive) aside.append(planArchive);
-  if (decisions) aside.append(decisions);
-  if (costPanel) aside.append(costPanel);
-  if (activity) aside.append(activity);
+function stageConclusionZh(status) {
+  if (status === "completed") return "已确认";
+  if (status === "awaiting_human") return "待你确认";
+  if (status === "in_progress") return "进行中";
+  if (status === "failed") return "失败";
+  if (status === "pending") return "未开始";
+  return status || "—";
+}
 
+function stageStatusRows(s, view) {
+  const b = s.commercial?.brief_summary || {};
+  const evidence = s.commercial?.stage_evidence || {};
+  if (view === "plan") {
+    return [
+      ["主题", b.theme],
+      ["时长", b.duration_seconds ? `${b.duration_seconds}s` : null],
+      ["制作档", b.production_tier],
+      ["视频渠道", b.video_channel || b.video_model_zh],
+    ];
+  }
+  if (view === "assets") {
+    const beats = s.commercial?.beats || [];
+    const unused = s.commercial?.unused_assets || [];
+    const selected = (s.commercial?.assets || []).filter((item) => item.selected !== false);
+    const missing = beats.filter((beat) => (
+      beat.assignment_status === "missing"
+      || beat.assignment_status === "assignment_conflict"
+    ));
+    const conclusion = !beats.length
+      ? "待检查"
+      : (missing.length ? `有缺口 ${missing.length} 段` : "已齐");
+    return [
+      ["素材结论", conclusion],
+      ["选用", `${selected.length} 张`],
+      ["未分配", unused.length ? `${unused.length} 张` : "无"],
+    ];
+  }
+  if (view === "sample") {
+    const sample = evidence.sample || {};
+    return [
+      ["试片", sample.status || "待生成"],
+      ["时长", sample.duration_seconds != null ? `${sample.duration_seconds}s` : null],
+    ];
+  }
+  if (view === "segment") {
+    const beats = s.commercial?.beats || [];
+    const segs = Array.isArray(evidence.segment) ? evidence.segment : [];
+    const total = beats.length || segs.length;
+    const done = segs.filter((item) => item.exists).length
+      || beats.filter((beat) => beat.asset_path).length;
+    const job = s.commercial?.produce_job || {};
+    const current = Array.isArray(job.beat_ids) && job.beat_ids.length
+      ? `当前 ${job.beat_ids.filter(Boolean).join("、")}`
+      : (job.friendly_zh || job.batch_id || null);
+    return [
+      ["进度", total ? `${done}/${total} 段` : "待开始"],
+      ["当前", current],
+    ];
+  }
+  if (view === "draft") {
+    const draft = evidence.draft || {};
+    const issues = draft.issue_segments || [];
+    return [
+      ["初稿", issues.length ? `有问题 ${issues.length} 条` : (draft.path ? "通过" : "待审查")],
+    ];
+  }
+  if (view === "compose") {
+    const compose = evidence.compose || {};
+    const probe = compose.technical_probe || {};
+    const issues = [...(probe.issues || []), ...(compose.issues_found || [])];
+    return [
+      ["技术检查", issues.length ? `${issues.length} 个问题` : (compose.status || "待检查")],
+      ["时长", probe.duration_seconds != null ? `${probe.duration_seconds}s` : null],
+    ];
+  }
+  if (view === "delivery") {
+    const delivery = evidence.delivery || {};
+    return [
+      ["签收", delivery.decision_label_zh || delivery.decision || "等待签收"],
+      ["质量", delivery.quality_status || "待技术检查"],
+    ];
+  }
+  return [];
+}
+
+function renderCommercialStageStatus(s, context) {
+  const view = commercialContentView(s, context.selectedStage);
+  const focus = commercialFocusStage(s, context.selectedStage);
+  const st = (s.stages || []).find((x) => x.name === focus) || {};
+  const label = st.label_zh || CONTENT_VIEW_LABEL[view] || focus;
+  const rows = stageStatusRows(s, view).filter(([, value]) => value);
+  const body = el("div", { class: "commercial-stage-status-body commercial-summary" });
+  body.append(el("div", { class: "commercial-stage-status-kicker" },
+    el("b", {}, label),
+    el("span", { class: "status-chip" }, stageConclusionZh(st.status))));
+  for (const [key, value] of rows) {
+    body.append(el("div", { class: "kv-row" },
+      el("span", { class: "kv-k" }, key),
+      el("span", { class: "kv-v" }, value)));
+  }
+  return el("div", { class: "notice commercial-stage-status" },
+    el("span", {}, "◈"),
+    body);
+}
+
+function renderCommercialReviewFold(s, context) {
+  const panels = [
+    renderCommercialSummary(s),
+    renderCommercialPlanArchive(s, context),
+    renderCommercialDecisions(s),
+    typeof context.renderActivity === "function" ? context.renderActivity(s) : null,
+  ].filter(Boolean);
+  if (!panels.length) return null;
+  return el("details", { class: "commercial-review-fold" },
+    el("summary", {}, "回顾"),
+    el("div", { class: "commercial-review-body" }, panels));
+}
+
+export function renderCommercialBoard(s, context) {
   const main = el("div", { class: "main-col" });
   const tierPanel = renderProductionTierPanel({
     projectId: s.project_id,
@@ -1244,20 +1351,13 @@ export function renderCommercialBoard(s, context) {
   const legacyNotice = renderCommercialLegacyNotice(s);
   if (legacyNotice) main.append(legacyNotice);
   const allDone = s.stages.filter((x) => !x.undeclared).every((x) => x.status === "completed");
-  const focus = commercialFocusStage(s, context.selectedStage);
-  const focusLabel = (s.stages.find((x) => x.name === focus) || {}).label_zh || focus;
   if (allDone) {
     main.append(el("div", { class: "notice commercial-done-notice" },
       el("span", {}, "✓"),
-      el("span", {}, "七阶段已完成。胶片条默认显示「分段」视图（不揉合集）；点顶栏「合成终稿/交付确认」可看图文视频合集。「需要你决定」仅在 ", el("code", {}, "awaiting_human"), " 时出现。")));
-  } else {
-    const view = commercialContentView(s, context.selectedStage);
-    main.append(el("div", { class: "notice commercial-done-notice" },
-      el("span", {}, "◈"),
-      el("span", {}, "当前阶段：", el("b", {}, focusLabel),
-        " · 证据视图：", el("b", {}, CONTENT_VIEW_LABEL[view] || view),
-        "。点击顶栏阶段可切换，避免各阶段产物混在一起。")));
+      el("span", {}, "七阶段已完成。点顶栏阶段可回看该阶段证据。确认后点顶栏「结束并导出项目」。")));
   }
+  const statusCard = renderCommercialStageStatus(s, context);
+  if (statusCard) main.append(statusCard);
   const view = commercialContentView(s, context.selectedStage);
   const hideAssetPanels = shouldHideMinimalAssetPanels(s);
   const precheck = hideAssetPanels ? null : renderCommercialAssetPrecheck(s, context);
@@ -1277,9 +1377,11 @@ export function renderCommercialBoard(s, context) {
     ? null
     : renderFinalVideo(s.project_id, s.commercial?.final_video, context);
   if (finalVideo) main.prepend(finalVideo);
-  if (!beats && !players && !summary && !precheck && !assetPool) {
+  const reviewFold = renderCommercialReviewFold(s, context);
+  if (reviewFold) main.append(reviewFold);
+  if (!beats && !players && !statusCard && !precheck && !assetPool) {
     main.append(el("div", { class: "hint" },
       "中文证据区数据未加载。请 ", el("b", {}, "重启 Backlot 服务"), " 后刷新页面（", el("code", {}, "python -m backlot serve"), "）。"));
   }
-  return el("div", { class: "board commercial-board" }, main, aside);
+  return el("div", { class: "board commercial-board" }, main);
 }
