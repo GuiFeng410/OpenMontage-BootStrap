@@ -226,6 +226,7 @@ def write_job(
         project,
         run_revision=run["run_revision"],
     ) or {}
+    prior_job_id = str(existing.get("job_id") or "").strip()
     if existing and any(
         field in payload and payload.get(field) != existing.get(field)
         for field in ("stage", "kind", "artifact_revision", "batch_id")
@@ -261,6 +262,8 @@ def write_job(
         **payload,
         "updated_at": _now(),
     }
+    if not str(body.get("job_id") or "").strip() and prior_job_id:
+        body["job_id"] = prior_job_id
     written = production_run.write_produce_job(project, body)
     updated_run = production_run.register_job_summary(run, written)
     production_run.write_production_run(project, updated_run)
@@ -1951,6 +1954,12 @@ def maybe_start(
     return {"action": "produce_start", "status": STATUS_QUEUED, "job": job}
 
 
+def _is_in_process_paid_job(job: dict[str, Any]) -> bool:
+    engine = str(job.get("engine") or "")
+    status = str(job.get("status") or "")
+    return engine == "paid_video" and status in {STATUS_QUEUED, STATUS_RUNNING}
+
+
 def _reconcile_missing_background(
     project_id: str,
     job: dict[str, Any],
@@ -2032,6 +2041,12 @@ def poll(
         return {"action": "", "status": str(job.get("status") or ""), "job": job}
     compose_id = str(job.get("job_id") or "")
     if not compose_id:
+        if _is_in_process_paid_job(job):
+            return {
+                "action": "",
+                "status": str(job.get("status") or ""),
+                "job": job,
+            }
         return _reconcile_missing_background(
             project_id,
             job,

@@ -163,8 +163,10 @@ export function renderStageDrawer(s, {
       "原始 JSON 见 ", el("code", {}, "artifacts/"), " 目录；请在本页点「进入下一步」。"));
     const meta = st.metadata || {};
     if (stageNeedsDecision(st) && meta.decision_prompt_zh) {
+      const options = Array.isArray(meta.decision_options) ? meta.decision_options : [];
+      const heading = options.length ? "请在本页确认：" : "当前已暂停：";
       body.append(el("div", { class: "commercial-decision-hint" },
-        el("b", {}, "若本阶段等待你："),
+        el("b", {}, heading),
         el("div", {}, meta.decision_prompt_zh)));
     }
     if (meta.approval_note) {

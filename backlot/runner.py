@@ -301,6 +301,9 @@ def spawn_detached(project_id: str) -> Path | None:
 
 
 def run_loop(project_id: str = "", poll_seconds: float = POLL_SECONDS) -> int:
+    from lib.env_loader import load_env
+
+    load_env(REPO_ROOT)
     os.environ.setdefault("OPENMONTAGE_P1_ALLOW_WRITES", "true")
     os.environ.setdefault("PYTHONUTF8", "1")
     os.environ.setdefault("OPENMONTAGE_PROJECTS_DIR", str(REPO_ROOT / "projects"))

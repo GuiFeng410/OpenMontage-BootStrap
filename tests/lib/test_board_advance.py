@@ -146,6 +146,53 @@ def test_sample_stop_requires_canonical_video_and_beat_ids(tmp_path: Path) -> No
     assert meta["decision_options"]
 
 
+def test_write_stop_card_seals_sample_evidence_and_clears_pause(tmp_path: Path) -> None:
+    from lib.checkpoint import merge_write_checkpoint
+
+    root = tmp_path / "projects"
+    project = root / "shop-demo"
+    _write_project(root)
+    _seed_minimal_ready_for_delivery(root, "shop-demo")
+    merge_write_checkpoint(
+        root,
+        "shop-demo",
+        "sample_review",
+        "in_progress",
+        {},
+        pipeline_type="bootstrap-commercial",
+        human_approval_required=True,
+        metadata_patch={
+            "needs_user_decision": False,
+            "paused": True,
+            "pause_code": "review_evidence_missing",
+            "decision_options": [],
+        },
+    )
+
+    (project / "assets" / "video").mkdir(parents=True, exist_ok=True)
+    (project / "assets" / "video" / "sample.mp4").write_bytes(b"film")
+    reel = {
+        "version": "1.0",
+        "path": "assets/video/sample.mp4",
+        "beat_ids": ["beat_01"],
+        "status": "pending",
+    }
+    (project / "artifacts" / "sample_reel.json").write_text(
+        json.dumps(reel),
+        encoding="utf-8",
+    )
+
+    write_stop_card("shop-demo", "sample_review", projects_dir=root)
+    sealed = read_checkpoint(root, "shop-demo", "sample_review")
+    assert sealed["artifacts"]["sample_reel"]["path"] == "assets/video/sample.mp4"
+    assert sealed["metadata"].get("paused") is not True
+    assert "pause_code" not in sealed["metadata"]
+    assert sealed["metadata"]["needs_user_decision"] is True
+    overlay = json.loads((project / "project.json").read_text(encoding="utf-8"))["board_stop"]
+    assert overlay.get("paused") is not True
+    assert overlay["decision_options"]
+
+
 def test_strip_recommend_drops_badge_fields() -> None:
     cleaned = strip_recommend(
         {

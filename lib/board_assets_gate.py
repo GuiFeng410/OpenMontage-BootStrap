@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lib.asset_precheck import validate_beat_assignment_matrix
+from lib.asset_precheck import scan_user_images, validate_beat_assignment_matrix
 from lib.board_gap_plan import CLASS_NEED_ZH, projects_root
 from lib.checkpoint import CheckpointValidationError, merge_write_checkpoint
 from lib.paths import PROJECTS_DIR as DEFAULT_PROJECTS_DIR
@@ -21,6 +21,8 @@ class AssetsGateError(Exception):
 
 
 _NEED_ZH_TO_CLASS = {zh: key for key, zh in CLASS_NEED_ZH.items()}
+UNUSED_UPLOAD_NOTE_ZH = "各段已有唯一选用图，本张为多余上传，未分配到任何段。"
+UNUSED_UPLOAD_REASON = "extra_unassigned_upload"
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -57,6 +59,70 @@ def _precheck_row(precheck: dict[str, Any], path: str) -> dict[str, Any]:
         if str(entry.get("path") or "") == path:
             return dict(entry)
     return {}
+
+
+def _ledger_path_key(path: str) -> str:
+    return str(path or "").replace("\\", "/").strip().casefold()
+
+
+def _append_unused_uploads(
+    *,
+    project_dir: Path,
+    precheck: dict[str, Any],
+    entries: list[dict[str, Any]],
+    used_paths: set[str],
+) -> None:
+    used_keys = {_ledger_path_key(path) for path in used_paths}
+    inventory = scan_user_images(project_dir, min_dimension=1)
+    unsafe: list[str] = []
+    oversized: list[str] = []
+    for image in inventory.get("entries") or []:
+        if not isinstance(image, dict):
+            continue
+        path = str(image.get("path") or "").strip()
+        if not path or _ledger_path_key(path) in used_keys:
+            continue
+        issues = image.get("issues") or []
+        if isinstance(issues, list) and "unsafe_svg_declaration" in issues:
+            unsafe.append(path)
+            continue
+        if isinstance(issues, list) and "svg_too_large" in issues:
+            oversized.append(path)
+            continue
+        scan_row = _precheck_row(precheck, path) or dict(image)
+        row = {
+            **scan_row,
+            "path": path,
+            "file": scan_row.get("file") or Path(path).name,
+            "kind": "image",
+            "user_class": str(
+                scan_row.get("user_class")
+                or scan_row.get("suggested_class")
+                or "unclassified"
+            ).strip()
+            or "unclassified",
+            "status": "confirmed",
+            "origin": "user_upload",
+            "asset_source": "user_upload",
+            "gap_fill": "user_upload",
+            "selected": False,
+            "note_zh": UNUSED_UPLOAD_NOTE_ZH,
+            "reason": UNUSED_UPLOAD_REASON,
+        }
+        row.pop("beats", None)
+        row.pop("beat", None)
+        entries.append(row)
+        used_keys.add(_ledger_path_key(path))
+    if unsafe:
+        raise AssetsGateError(
+            "商品片 assets_gate 发现危险 SVG，禁止完成："
+            f"{sorted(unsafe)}"
+        )
+    if oversized:
+        raise AssetsGateError(
+            "商品片 assets_gate 发现过大 SVG，禁止完成："
+            f"{sorted(oversized)}"
+        )
 
 
 def plan_allows_auto_seal(project_dir: Path) -> bool:
@@ -136,6 +202,14 @@ def build_asset_ledger_from_plan(
         entries.append(row)
         used_paths.add(path)
 
+    _append_unused_uploads(
+        project_dir=project_dir,
+        precheck=precheck,
+        entries=entries,
+        used_paths=used_paths,
+    )
+    used_count = sum(1 for item in entries if item.get("selected") is not False)
+
     ledger = {
         "version": "1.0",
         "project_id": project_id,
@@ -143,7 +217,7 @@ def build_asset_ledger_from_plan(
         "gap_fill": "none",
         "entries": entries,
         "summary": {
-            "available_image_count": len(entries),
+            "available_image_count": used_count,
             "counts_by_class": counts,
             "missing_asset_classes": [],
             "status_zh": "就绪",

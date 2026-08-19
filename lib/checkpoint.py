@@ -1265,11 +1265,11 @@ def merge_write_checkpoint(
                 current.get("metadata")
                 if isinstance(current.get("metadata"), dict)
                 else {}
-            ),
-            **(metadata_patch or {}),
+            )
         }
         for key in metadata_remove_keys:
             metadata.pop(key, None)
+        metadata.update(metadata_patch or {})
         current_cost = (
             current.get("cost_snapshot")
             if isinstance(current.get("cost_snapshot"), dict)

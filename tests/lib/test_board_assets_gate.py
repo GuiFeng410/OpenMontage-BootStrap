@@ -148,6 +148,26 @@ def test_build_asset_ledger_from_plan(tmp_path: Path) -> None:
     assert ledger["entries"][0]["beats"] == ["B01"]
 
 
+def test_build_asset_ledger_marks_extra_upload_unused(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    project = _write_project(root)
+    Image.new("RGB", (800, 800), (180, 180, 180)).save(
+        project / "assets" / "images" / "003.png"
+    )
+    ledger = build_asset_ledger_from_plan("shop-demo", projects_dir=root)
+    unused = [item for item in ledger["entries"] if item.get("selected") is False]
+    used = [item for item in ledger["entries"] if item.get("selected") is not False]
+    assert [item["path"] for item in used] == [
+        "assets/images/001.png",
+        "assets/images/002.png",
+    ]
+    assert [item["path"] for item in unused] == ["assets/images/003.png"]
+    assert unused[0]["note_zh"]
+    assert unused[0]["reason"] == "extra_unassigned_upload"
+    assert "beats" not in unused[0]
+    assert ledger["summary"]["available_image_count"] == 2
+
+
 def test_seal_assets_gate_writes_checkpoint(tmp_path: Path) -> None:
     root = tmp_path / "projects"
     _write_project(root)
@@ -155,3 +175,19 @@ def test_seal_assets_gate_writes_checkpoint(tmp_path: Path) -> None:
     checkpoint = read_checkpoint(root, "shop-demo", "assets_gate")
     assert checkpoint["status"] == "completed"
     assert (root / "shop-demo" / "artifacts" / "asset_ledger.json").is_file()
+
+
+def test_seal_assets_gate_completes_with_extra_unassigned_upload(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    project = _write_project(root)
+    Image.new("RGB", (800, 800), (180, 180, 180)).save(
+        project / "assets" / "images" / "003.png"
+    )
+    seal_assets_gate("shop-demo", projects_dir=root)
+    checkpoint = read_checkpoint(root, "shop-demo", "assets_gate")
+    assert checkpoint["status"] == "completed"
+    ledger = json.loads(
+        (project / "artifacts" / "asset_ledger.json").read_text(encoding="utf-8")
+    )
+    unused = [item for item in ledger["entries"] if item.get("selected") is False]
+    assert [item["path"] for item in unused] == ["assets/images/003.png"]

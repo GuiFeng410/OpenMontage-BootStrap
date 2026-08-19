@@ -963,6 +963,72 @@ def test_poll_pauses_orphaned_job_without_retry(tmp_path: Path) -> None:
     assert result["job"]["attempt"] == 1
 
 
+def test_poll_paid_running_without_job_id_does_not_orphan(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    _write_project(root)
+    board_produce.write_job(
+        "shop-demo",
+        {
+            "status": board_produce.STATUS_RUNNING,
+            "engine": "paid_video",
+            "job_id": "",
+            "stage": "segment_build",
+            "kind": "segment",
+            "batch_id": "B04",
+            "beat_ids": ["B04"],
+            "expected_outputs": [
+                "assets/video/seg_B04.mp4",
+                "artifacts/review_overview.json",
+            ],
+        },
+        projects_dir=root,
+    )
+
+    result = board_produce.poll("shop-demo", projects_dir=root)
+
+    assert result["action"] == ""
+    assert result["status"] == board_produce.STATUS_RUNNING
+    assert result["job"].get("code") != "orphaned"
+
+
+def test_write_job_keeps_background_id_when_batch_changes(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    _write_project(root)
+    board_produce.write_job(
+        "shop-demo",
+        {
+            "status": board_produce.STATUS_QUEUED,
+            "engine": "paid_video",
+            "job_id": "media-job-1",
+            "stage": "draft_review",
+            "kind": "draft",
+            "batch_id": "",
+            "expected_outputs": [
+                "artifacts/review_overview.json",
+                "artifacts/full_draft_pro.json",
+            ],
+        },
+        projects_dir=root,
+    )
+    written = board_produce.write_job(
+        "shop-demo",
+        {
+            "status": board_produce.STATUS_RUNNING,
+            "engine": "paid_video",
+            "stage": "segment_build",
+            "kind": "segment",
+            "batch_id": "B04",
+            "beat_ids": ["B04"],
+            "expected_outputs": [
+                "assets/video/seg_B04.mp4",
+                "artifacts/review_overview.json",
+            ],
+        },
+        projects_dir=root,
+    )
+    assert written["job_id"] == "media-job-1"
+
+
 def test_poll_not_found_background_job_pauses_as_orphan(tmp_path: Path) -> None:
     class MissingJob(Exception):
         code = "not_found"

@@ -418,14 +418,20 @@ def write_stop_card(
     metadata = strip_recommend(
         stop_card_metadata(stage, project_id, projects_dir=projects_dir)
     )
+    artifacts_patch: dict[str, Any] = {}
+    artifact_name = _REVIEW_STAGE_ARTIFACT.get(stage)
+    if artifact_name and project_id and not metadata.get("paused"):
+        artifact_file = root / project_id / "artifacts" / f"{artifact_name}.json"
+        try:
+            payload = json.loads(artifact_file.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            payload = None
+        if isinstance(payload, dict) and payload:
+            artifacts_patch = {artifact_name: payload}
     write_kwargs = {
         "pipeline_type": str(current.get("pipeline_type") or pipeline_type),
         "metadata_patch": metadata,
-        "metadata_remove_keys": (
-            "recommendation_zh",
-            "examples_zh",
-            "minimal_plan_signoff",
-        ),
+        "metadata_remove_keys": DECISION_STALE_KEYS + ("minimal_plan_signoff",),
         **_approval_kwargs_from_checkpoint(current),
     }
     if status == "completed":
@@ -442,7 +448,7 @@ def write_stop_card(
             }
     try:
         path, written, _marker = merge_write_checkpoint(
-            root, project_id, stage, status, {}, **write_kwargs
+            root, project_id, stage, status, artifacts_patch, **write_kwargs
         )
     except CheckpointValidationError:
         write_board_stop_overlay(
