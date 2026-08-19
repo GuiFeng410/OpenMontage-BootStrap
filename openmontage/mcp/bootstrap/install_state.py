@@ -9,6 +9,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from lib.paths import WorkspacePaths
+
 STATE_RELATIVE = Path(".openmontage") / "install-state.json"
 STATE_VERSION = 1
 VIDEO_SECTION_MARK = "## 【二、视频生成专项服务】"
@@ -47,8 +49,12 @@ STATE_FIELDS = (
 )
 
 
+def _workspace(repo_root: Path) -> WorkspacePaths:
+    return WorkspacePaths(repo_root=Path(repo_root).resolve())
+
+
 def state_path(repo_root: Path) -> Path:
-    return Path(repo_root).resolve() / STATE_RELATIVE
+    return _workspace(repo_root).install_state_path
 
 
 def _now_iso() -> str:
@@ -206,13 +212,12 @@ def scan_stock_keys(*, repo_root: Path, environ: dict[str, str] | None = None) -
 
 
 def _empty_state(repo_root: Path) -> dict[str, Any]:
-    root = Path(repo_root).resolve()
-    projects = os.environ.get("OPENMONTAGE_PROJECTS_DIR") or ""
+    ws = _workspace(repo_root)
     return {
         "version": STATE_VERSION,
         "verify_ready": False,
-        "repo_root": str(root),
-        "projects_dir": projects,
+        "repo_root": str(ws.repo_root),
+        "projects_dir": str(ws.projects_dir),
         "latest_project_id": None,
         "existing_project_count": 0,
         "video_key_present": False,
@@ -236,6 +241,9 @@ def _public_state(data: dict[str, Any], repo_root: Path) -> dict[str, Any]:
         clean["video_key_names_present"] = []
     if clean.get("stock_key_names_present") is None:
         clean["stock_key_names_present"] = []
+    ws = _workspace(repo_root)
+    clean["repo_root"] = str(ws.repo_root)
+    clean["projects_dir"] = str(ws.projects_dir)
     return clean
 
 
@@ -294,9 +302,10 @@ def snapshot_install_state(
     stock = scan_stock_keys(repo_root=repo_root, environ=environ)
     current = read_install_state(repo_root=repo_root)["state"]
     state = _public_state(current, repo_root)
-    state["repo_root"] = str(Path(repo_root).resolve())
-    state["projects_dir"] = os.environ.get("OPENMONTAGE_PROJECTS_DIR") or state.get("projects_dir") or ""
-    projects_dir = Path(state["projects_dir"] or (Path(repo_root) / "projects"))
+    ws = _workspace(repo_root)
+    state["repo_root"] = str(ws.repo_root)
+    state["projects_dir"] = str(ws.projects_dir)
+    projects_dir = ws.projects_dir
     state["existing_project_count"] = count_existing_projects(projects_dir)
     state["video_key_present"] = bool(scan["video_key_present"])
     state["video_key_names_present"] = list(scan["video_key_names_present"])
