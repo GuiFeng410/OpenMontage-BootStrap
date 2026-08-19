@@ -18,6 +18,7 @@ FINAL_REL = Path("renders") / "final.mp4"
 EXPORTS_SUBDIR = "exports"
 EXPORT_FILENAME = "final.mp4"
 LIFECYCLE_COMPLETED = "completed"
+LIFECYCLE_INTERRUPTED = "interrupted"
 RUNNER_STATUS_NAME = "runner_status.json"
 
 
@@ -69,6 +70,63 @@ def is_completed(marker: dict[str, Any] | None) -> bool:
     if not isinstance(marker, dict):
         return False
     return str(marker.get("lifecycle_status") or "") == LIFECYCLE_COMPLETED
+
+
+def is_interrupted(marker: dict[str, Any] | None) -> bool:
+    if not isinstance(marker, dict):
+        return False
+    if is_completed(marker):
+        return False
+    return str(marker.get("lifecycle_status") or "") == LIFECYCLE_INTERRUPTED
+
+
+def mark_interrupted(
+    project_id: str,
+    *,
+    reason_zh: str = "",
+    projects_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Freeze a project without export. Does not require a final video."""
+    project = Path(projects_dir) / project_id if projects_dir is not None else _project_dir(project_id)
+    marker_path = project / "project.json"
+    if not marker_path.is_file():
+        return {"ok": False, "code": "unknown_project", "project_id": project_id}
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {"ok": False, "code": "invalid_project_marker", "project_id": project_id}
+    if not isinstance(marker, dict):
+        return {"ok": False, "code": "invalid_project_marker", "project_id": project_id}
+    if is_completed(marker):
+        return {"ok": False, "code": "already_completed", "project_id": project_id}
+    marker["lifecycle_status"] = LIFECYCLE_INTERRUPTED
+    marker["interrupted_at"] = _now_iso()
+    if reason_zh:
+        marker["interrupt_reason_zh"] = reason_zh
+    marker_path.write_text(
+        json.dumps(marker, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    status_path = project / RUNNER_STATUS_NAME
+    status_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "updated_at": _now_iso(),
+                "phase": "paused",
+                "friendly_zh": reason_zh or "已中断。项目未结束，可在库页继续。",
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "ok": True,
+        "project_id": project_id,
+        "lifecycle_status": LIFECYCLE_INTERRUPTED,
+    }
 
 
 def write_runner_status(project_id: str, payload: dict[str, Any]) -> Path:

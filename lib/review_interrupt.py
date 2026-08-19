@@ -160,5 +160,5 @@ def honest_user_stage_zh(
     if fake_busy:
         if producing:
             return "生成中"
-        return "已暂停"
+        return "已中断"
     return label

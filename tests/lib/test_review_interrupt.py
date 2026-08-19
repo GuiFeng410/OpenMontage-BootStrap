@@ -27,7 +27,7 @@ def test_honest_stage_does_not_fake_delivery_without_final() -> None:
         has_final=False,
         producing=False,
         paused=True,
-    ) == "已暂停"
+    ) == "已中断"
     assert honest_user_stage_zh(
         {"label_zh": "待交付"},
         has_final=True,

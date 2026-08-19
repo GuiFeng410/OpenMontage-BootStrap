@@ -348,6 +348,33 @@ class TestBacklotPerformanceBudgets:
         assert stopped["n"] == 1
         assert exits["n"] == 0
         assert "网页服务还在" in payload["friendly_zh"]
+        assert "已中断" in payload["friendly_zh"]
+
+    def test_release_runner_interrupt_when_producing(self, client, projects_root, monkeypatch):
+        project = _make_project(projects_root, "busy")
+        _write_json(
+            project / "artifacts" / "produce_job.json",
+            {"status": "running", "engine": "paid_video"},
+        )
+        stopped = {"n": 0}
+        exits = {"n": 0}
+        monkeypatch.setattr("backlot.runner.stop_runner", lambda: stopped.__setitem__("n", 1))
+        monkeypatch.setattr(server_mod, "schedule_server_exit", lambda: exits.__setitem__("n", 1))
+        monkeypatch.setattr("backlot.runner.runner_alive", lambda: True)
+        monkeypatch.setattr("backlot.runner.active_project_id", lambda: "busy")
+        blocked = client.post("/api/library/release-runner", json={"confirm": True})
+        assert blocked.status_code == 409
+        response = client.post(
+            "/api/library/release-runner",
+            json={"confirm": True, "interrupt": True},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert payload["ok"] is True
+        assert stopped["n"] == 1
+        assert exits["n"] == 0
+        marker = json.loads((project / "project.json").read_text(encoding="utf-8"))
+        assert marker["lifecycle_status"] == "interrupted"
 
 
 class TestFindingsFixes:

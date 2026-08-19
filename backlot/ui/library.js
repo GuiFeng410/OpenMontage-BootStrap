@@ -49,25 +49,33 @@ function mountOccupantBar() {
   occupantBarMounted = true;
   const title = el("p", { class: "library-occupant-title" });
   const hint = el("p", { class: "library-occupant-hint" },
-    "放下只停 runner，不结束项目，网页还在。要关掉网页请点「退出看板」。结束导出需要成片。");
+    "中断只停 runner，不结束项目，网页还在。要关掉网页请点「退出看板」。结束导出需要成片。");
   const feedback = el("span", { class: "library-occupant-feedback", role: "status" });
   const release = el("button", {
     type: "button",
     class: "library-occupant-release",
-  }, "放下再做别的");
+  }, "中断并做别的");
   release.addEventListener("click", async () => {
     if (releasingRunner) return;
     releasingRunner = true;
     release.disabled = true;
-    feedback.textContent = "正在放下…";
+    feedback.textContent = "正在中断…";
     try {
-      const result = await releaseLibraryRunner();
+      let result = await releaseLibraryRunner();
+      if (!result.ok && result.status === 409) {
+        const ok = window.confirm("正在生成。确认中断？项目会标为已中断，不会结束导出。");
+        if (!ok) {
+          feedback.textContent = "已取消。生成仍在继续。";
+          return;
+        }
+        result = await releaseLibraryRunner({ interrupt: true });
+      }
       feedback.textContent = result.friendly_zh;
       if (result.ok) {
         await render();
       }
     } catch {
-      feedback.textContent = "放下失败。请留在本页重试。";
+      feedback.textContent = "中断失败。请留在本页重试。";
     } finally {
       releasingRunner = false;
       release.disabled = false;
@@ -94,7 +102,7 @@ function updateOccupantBar(health) {
   if (createBtn && !creatingProject) {
     createBtn.disabled = Boolean(occ.project_id);
     createBtn.title = occ.project_id
-      ? "请先点「放下再做别的」，再创建新项目"
+      ? "请先点「中断并做别的」，再创建新项目"
       : "填写主题后点开始创建";
   }
   return occ;
@@ -300,7 +308,7 @@ function renderOnboarding(health, projectCount) {
       }
       const occ = occupantFromHealth(lastOnboardingHealth);
       if (occ.project_id) {
-        feedback.textContent = `本机正在做「${occ.title}」。请先点「放下再做别的」。`;
+        feedback.textContent = `本机正在做「${occ.title}」。请先点「中断并做别的」。`;
         return;
       }
       creatingProject = true;
@@ -479,7 +487,7 @@ function card(p, occupant) {
     node.addEventListener("click", async () => {
       if (occupant.project_id && occupant.project_id !== p.project_id) {
         window.alert(
-          `本机正在做「${occupant.title}」。请先点「放下再做别的」，再继续其它项目。`,
+          `本机正在做「${occupant.title}」。请先点「中断并做别的」，再继续其它项目。`,
         );
         return;
       }

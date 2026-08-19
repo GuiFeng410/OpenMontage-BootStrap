@@ -19,16 +19,16 @@ const VIDEO_MODEL_CATALOG = [
     channel: "tokenhub",
     label_zh: "TokenHub·混元",
     keyNames: ["TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"],
-    capability_zh: "看板暂不能开烧。有 Key 也不在本机分段白名单里。",
-    board_generate: false,
+    capability_zh: "看板可开烧。单段时长由模型定，长片自动拼接。",
+    board_generate: true,
   },
   {
     id: "pixverse-video-v6.0",
     channel: "tokenhub",
     label_zh: "TokenHub·Pixverse",
     keyNames: ["TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"],
-    capability_zh: "看板暂不能开烧。有 Key 也不在本机分段白名单里。",
-    board_generate: false,
+    capability_zh: "看板可开烧。默认可约 5 秒一段，长片自动拼接。",
+    board_generate: true,
   },
 ];
 const AI_PRESETS = [50, 70, 100];
@@ -114,14 +114,14 @@ function applyFlags(flags) {
 
 function blockMessage(tier) {
   if (tier === "heavy" && !keyFlags?.video_key_present) {
-    return "重度需要看板能开烧的模型。目前可开烧：Agnes。请写入 Agnes Key 后刷新。";
+    return "重度需要已填 Key 的视频模型。可开烧：Agnes、混元、Pixverse。请写入对应 Key 后刷新。";
   }
   if (tier === "heavy" && !selectedModelId) {
-    return "请选择一个看板能开烧且已填入 Key 的视频模型。目前可开烧：Agnes。";
+    return "请选择一个已填入 Key 的视频模型。可开烧：Agnes、混元、Pixverse。";
   }
   const picked = videoModels().find((item) => item.id === selectedModelId);
   if (tier === "heavy" && picked && !picked.board_generate) {
-    return "当前模型看板暂不能开烧，不会改走其它渠道。请改选 Agnes，或回库页放下后新建。";
+    return "当前模型看板暂不能开烧，不会改走其它渠道。请改选已接线模型，或回库页中断后新建。";
   }
   if (tier === "medium" && !keyFlags?.stock_key_present) {
     return "中度需要素材库 Key（Pexels 或 Pixabay）。请写入仓根 .env 后点「已填入 Key，刷新可用性」。";

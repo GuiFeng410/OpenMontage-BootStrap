@@ -2281,10 +2281,10 @@ def _attach_commercial_board_echo(project_dir: Path, commercial: dict[str, Any])
         if not has_final and not job_busy:
             commercial["decision"] = {
                 "stage": stop.get("stage") or "delivery_signoff",
-                "title_zh": "已暂停",
+                "title_zh": "已中断",
                 "prompt_zh": stop.get("decision_prompt_zh")
                 or runner.get("friendly_zh")
-                or "还没有成片，已暂停。请放下后改选看板能开烧的渠道，或回本页处理。",
+                or "还没有成片，已中断。可在库页继续，或回本页处理。",
                 "options": [],
                 "producing_wait": False,
                 "paused": True,

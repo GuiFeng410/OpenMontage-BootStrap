@@ -12,6 +12,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import shutil
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,10 +23,12 @@ import lib.board_production_run as production_run
 from lib.board_stage_artifacts import (
     StageArtifactValidationError,
     build_final_review,
+    build_full_draft_pro,
     build_review_overview,
+    build_sample_reel,
     validate_stage_artifact,
 )
-from lib.board_advance import write_board_stop_overlay
+from lib.board_advance import write_board_stop_overlay, write_stop_card
 from lib.checkpoint import (
     CheckpointValidationError,
     merge_write_checkpoint,
@@ -60,6 +63,8 @@ _PAID_PROVIDERS = (
     "veo",
     "minimax",
     "runway",
+    "tokenhub",
+    "pixverse",
 )
 _HEAVY_KEY_HINTS = {
     "agnes": ("AGNES_API_KEY", "AGNES_AI_API_KEY"),
@@ -69,7 +74,8 @@ _HEAVY_KEY_HINTS = {
     "veo": ("GEMINI_API_KEY", "GOOGLE_API_KEY", "FAL_KEY", "FAL_AI_API_KEY"),
     "minimax": ("FAL_KEY", "FAL_AI_API_KEY"),
     "runway": ("RUNWAY_API_KEY", "RUNWAYML_API_SECRET"),
-    "pixverse": ("PIXVERSE_API_KEY", "TOKENHUB_API_KEY"),
+    "tokenhub": ("TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"),
+    "pixverse": ("PIXVERSE_API_KEY", "TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"),
 }
 
 
@@ -262,12 +268,72 @@ def write_job(
 
 
 def is_minimal(marker: dict[str, Any]) -> bool:
-    profile = marker.get("production_profile") if isinstance(marker, dict) else {}
-    if not isinstance(profile, dict):
-        profile = {}
+    return _review_preset(marker) == "minimal"
+
+
+def _review_preset(marker: dict[str, Any]) -> str | None:
     return normalize_review_preset(
-        profile.get("review_mode_preset") or profile.get("review_mode")
-    ) == "minimal"
+        _profile(marker).get("review_mode_preset") or _profile(marker).get("review_mode")
+    )
+
+
+def is_produce_preset(marker: dict[str, Any]) -> bool:
+    return _review_preset(marker) in {"minimal", "normal"}
+
+
+def _sample_rel(artifact_revision: str) -> str:
+    digest = hashlib.sha256((artifact_revision or "rev").encode("utf-8")).hexdigest()[:12]
+    return f"assets/video/sample_{digest}.mp4"
+
+
+def sample_ready(project_id: str, *, projects_dir: Path | None = None) -> bool:
+    project = _project_dir(project_id, projects_dir)
+    data = _read_json(project / "artifacts" / "sample_reel.json")
+    rel = str(data.get("path") or "").strip()
+    if not rel:
+        return False
+    path = project / rel
+    return path.is_file() and path.stat().st_size > 0
+
+
+def sample_review_completed(project_id: str, *, projects_dir: Path | None = None) -> bool:
+    checkpoint = read_checkpoint(
+        Path(projects_dir or PROJECTS_DIR), project_id, "sample_review"
+    )
+    return isinstance(checkpoint, dict) and checkpoint.get("status") == "completed"
+
+
+def draft_review_completed(project_id: str, *, projects_dir: Path | None = None) -> bool:
+    checkpoint = read_checkpoint(
+        Path(projects_dir or PROJECTS_DIR), project_id, "draft_review"
+    )
+    return isinstance(checkpoint, dict) and checkpoint.get("status") == "completed"
+
+
+def _segments_ready(project_id: str, *, projects_dir: Path | None = None) -> bool:
+    try:
+        beats = _plan_beats(project_id, projects_dir=projects_dir)
+    except ProduceJobError:
+        return False
+    project = _project_dir(project_id, projects_dir)
+    overview = _read_json(project / "artifacts" / "review_overview.json")
+    try:
+        validate_stage_artifact("review_overview", overview)
+    except StageArtifactValidationError:
+        return False
+    rows = [row for row in (overview.get("overview") or []) if isinstance(row, dict)]
+    if len(rows) < len(beats):
+        return False
+    return all(
+        _project_file_ready(project, str(row.get("output_path") or "")) for row in rows
+    )
+
+
+def _project_file_ready(project: Path, rel: str) -> bool:
+    if not rel:
+        return False
+    path = project / rel
+    return path.is_file() and path.stat().st_size > 0
 
 
 def assets_gate_completed(project_id: str, *, projects_dir: Path | None = None) -> bool:
@@ -469,7 +535,7 @@ def key_gate(
             )
             if part
         )
-        supported = "Agnes、Kling、Seedance、Sora、Veo、MiniMax、Runway"
+        supported = "Agnes、Kling、Seedance、Sora、Veo、MiniMax、Runway、混元、Pixverse"
         return {
             "status": STATUS_PAUSED,
             "engine": "paid_video",
@@ -589,13 +655,19 @@ def _video_extras(
             "duration": _kling_duration(duration),
             "reference_image_path": still_path,
         }
-    return {
+    payload = {
         "operation": "image_to_video",
         "duration": duration,
         "aspect_ratio": aspect,
         "image_path": still_path,
         "reference_image_path": still_path,
     }
+    if provider in {"tokenhub", "pixverse"}:
+        try:
+            payload["duration"] = int(round(float(duration) or 5))
+        except (TypeError, ValueError):
+            payload["duration"] = 5
+    return payload
 
 
 def _plan_beats(
@@ -1208,6 +1280,205 @@ def _wait_compose_done(
     raise ProduceJobError("合成等待超时。请留在本页重试。", code="compose_timeout")
 
 
+def _board_tokenhub_generate(
+    provider: str,
+    prompt: str,
+    output_path: str,
+    extras_json: str = "{}",
+    confirm: bool = False,
+    confirm_sample_ok: bool = False,
+) -> dict[str, Any]:
+    if not confirm or not confirm_sample_ok:
+        raise ProduceJobError("看板开烧需要用户已确认开始出片。", code="confirm_required")
+    try:
+        extras = json.loads(extras_json or "{}") if extras_json else {}
+    except json.JSONDecodeError:
+        extras = {}
+    if not isinstance(extras, dict):
+        extras = {}
+    model = str(extras.get("model") or "").strip()
+    if not model:
+        model = "pixverse-video-v6.0" if provider == "pixverse" else "hy-video-1.5"
+    dest = Path(output_path)
+    if not dest.is_absolute():
+        dest = PROJECTS_DIR / output_path
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    from tools._tokenhub.video import generate_video
+
+    duration_raw = extras.get("duration")
+    try:
+        duration = int(round(float(duration_raw))) if duration_raw is not None else 5
+    except (TypeError, ValueError):
+        duration = 5
+    image_path = extras.get("image_path") or extras.get("reference_image_path")
+    result = generate_video(
+        prompt,
+        model=model,
+        image_path=str(image_path) if image_path else None,
+        output_path=dest,
+        duration=duration,
+        aspect_ratio=str(extras.get("aspect_ratio") or "16:9"),
+        project_id=str(output_path).replace("\\", "/").split("/")[0],
+        user_authorized_upload=False,
+    )
+    return {
+        "success": True,
+        "output_path": str(result.get("output_path") or dest),
+        **{
+            key: result[key]
+            for key in ("job_id", "model")
+            if isinstance(result, dict) and key in result
+        },
+    }
+
+
+def _resolve_video_generate(
+    provider: str,
+    video_generate: Callable[..., dict[str, Any]] | None,
+) -> Callable[..., Any]:
+    if video_generate is not None:
+        return video_generate
+    if provider in {"tokenhub", "pixverse"}:
+        return _board_tokenhub_generate
+    from openmontage.mcp.providers_video.tools import video_generate as generate
+
+    return generate
+
+
+def _promote_sample_to_first_segment(
+    project_id: str,
+    beats: list[dict[str, Any]],
+    *,
+    artifact_revision: str,
+    provider: str,
+    model: str,
+    projects_dir: Path | None = None,
+) -> None:
+    if not beats:
+        return
+    project = _project_dir(project_id, projects_dir)
+    sample_rel = _sample_rel(artifact_revision)
+    source = project / sample_rel
+    if not source.is_file() or source.stat().st_size <= 0:
+        return
+    dest_rel = _seg_rel(str(beats[0]["beat"]), artifact_revision)
+    dest = project / dest_rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    if not dest.is_file() or dest.stat().st_size <= 0:
+        shutil.copy2(source, dest)
+    _materialize_review_overview(
+        project_id,
+        beats[:1],
+        provider=provider,
+        model=model,
+        artifact_revision=artifact_revision,
+        projects_dir=projects_dir,
+        completed=False,
+    )
+
+
+def _run_paid_sample(
+    project_id: str,
+    marker: dict[str, Any],
+    *,
+    projects_dir: Path | None = None,
+    video_generate: Callable[..., dict[str, Any]] | None = None,
+) -> str:
+    profile = _profile(marker)
+    brief = _read_json(_project_dir(project_id, projects_dir) / "artifacts" / "brief.json")
+    provider = _provider_id(profile, brief)
+    model = str(profile.get("video_model") or profile.get("model") or "").strip()
+    beats = _plan_beats(project_id, projects_dir=projects_dir)
+    if not beats:
+        raise ProduceJobError("缺少 video_plan 分段，无法生成试片。", code="no_plan")
+    row = beats[0]
+    beat = str(row["beat"])
+    width, height = _frame_size(profile)
+    aspect = _aspect_ratio(width, height)
+    wait_copy = _wait_copy(project_id, marker, projects_dir=projects_dir)
+    generate = _resolve_video_generate(provider, video_generate)
+    project = _project_dir(project_id, projects_dir)
+    artifact_revision = _locked_artifact_revision(project)
+    dest_rel = _sample_rel(artifact_revision)
+    if dest_rel == _seg_rel(beat, artifact_revision):
+        raise ProduceJobError("试片路径不能与分段路径相同。", code="sample_path_collision")
+    dest = project / dest_rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    still_abs = str((project / str(row["still"])).resolve())
+    extras = _video_extras(provider, still_abs, float(row["span"]), aspect)
+    if model:
+        extras["model"] = model
+    friendly = f"正在生成试片。{wait_copy}"
+    write_job(
+        project_id,
+        {
+            "stage": "sample_review",
+            "kind": "sample",
+            "artifact_revision": artifact_revision,
+            "batch_id": beat,
+            "beat_ids": [beat],
+            "expected_outputs": [dest_rel, "artifacts/sample_reel.json"],
+            "status": STATUS_RUNNING,
+            "engine": "paid_video",
+            "tier": "heavy",
+            "provider": provider,
+            "model": model,
+            "beat": beat,
+            "friendly_zh": friendly,
+        },
+        projects_dir=projects_dir,
+    )
+    _refresh_overlay(project_id, friendly, projects_dir=projects_dir)
+    call_video_generate_with_retries(
+        generate,
+        provider,
+        str(row["prompt"]),
+        _sandbox_rel(project_id, dest_rel),
+        json.dumps(extras, ensure_ascii=False),
+        True,
+        True,
+        dest=dest,
+    )
+    if not dest.is_file() or dest.stat().st_size <= 0:
+        raise ProduceJobError("试片生成结束但没有视频文件，未换渠道。", code="sample_missing")
+    reel = build_sample_reel(
+        dest_rel,
+        [beat],
+        duration_seconds=float(row["span"]),
+        status="pending",
+    )
+    _write_json(project / "artifacts" / "sample_reel.json", reel)
+    write_stop_card(
+        project_id,
+        "sample_review",
+        pipeline_type="bootstrap-commercial",
+        projects_dir=projects_dir,
+    )
+    return dest_rel
+
+
+def _write_draft_from_segments(
+    project_id: str,
+    *,
+    projects_dir: Path | None = None,
+) -> str:
+    project = _project_dir(project_id, projects_dir)
+    overview = _read_json(project / "artifacts" / "review_overview.json")
+    rows = [row for row in (overview.get("overview") or []) if isinstance(row, dict)]
+    path = str((rows[0] or {}).get("output_path") or "").strip() if rows else ""
+    if not path:
+        raise ProduceJobError("分段已生成但没有初稿可看的视频。", code="draft_missing")
+    draft = build_full_draft_pro(path, status="pending")
+    _write_json(project / "artifacts" / "full_draft_pro.json", draft)
+    write_stop_card(
+        project_id,
+        "draft_review",
+        pipeline_type="bootstrap-commercial",
+        projects_dir=projects_dir,
+    )
+    return path
+
+
 def _run_paid_pipeline(
     project_id: str,
     marker: dict[str, Any],
@@ -1216,6 +1487,7 @@ def _run_paid_pipeline(
     compose_start: Callable[..., dict[str, Any]] | None = None,
     video_generate: Callable[..., dict[str, Any]] | None = None,
     job_status: Callable[[str], dict[str, Any]] | None = None,
+    compose: bool = True,
 ) -> None:
     profile = _profile(marker)
     brief = _read_json(_project_dir(project_id, projects_dir) / "artifacts" / "brief.json")
@@ -1225,11 +1497,17 @@ def _run_paid_pipeline(
     width, height = _frame_size(profile)
     aspect = _aspect_ratio(width, height)
     wait_copy = _wait_copy(project_id, marker, projects_dir=projects_dir)
-    generate = video_generate
-    if generate is None:
-        from openmontage.mcp.providers_video.tools import video_generate as generate
+    generate = _resolve_video_generate(provider, video_generate)
     project = _project_dir(project_id, projects_dir)
     artifact_revision = _locked_artifact_revision(project)
+    _promote_sample_to_first_segment(
+        project_id,
+        beats,
+        artifact_revision=artifact_revision,
+        provider=provider,
+        model=model,
+        projects_dir=projects_dir,
+    )
     total = len(beats)
     for index, row in enumerate(beats, start=1):
         beat = str(row["beat"])
@@ -1353,6 +1631,8 @@ def _run_paid_pipeline(
         projects_dir=projects_dir,
         completed=True,
     )
+    if not compose:
+        return
     launched = _start_compose(
         project_id,
         marker,
@@ -1406,7 +1686,7 @@ def maybe_start(
                 friendly_zh=f"成片存在，但终稿证据写入失败，未开放交付：{exc}",
             )
         return {"action": "", "status": STATUS_DONE, "skipped": True}
-    if not is_minimal(marker) or not assets_gate_completed(
+    if not is_produce_preset(marker) or not assets_gate_completed(
         project_id, projects_dir=projects_dir
     ):
         return {"action": "", "status": STATUS_SKIPPED, "skipped": True}
@@ -1437,6 +1717,8 @@ def maybe_start(
     tier = _tier(profile)
     wait_copy = _wait_copy(project_id, marker, projects_dir=projects_dir)
     if tier != "heavy":
+        if _review_preset(marker) == "normal":
+            return {"action": "", "status": STATUS_SKIPPED, "skipped": True}
         return _start_compose(
             project_id,
             marker,
@@ -1446,14 +1728,52 @@ def maybe_start(
             wait_copy=COMPOSE_WAIT_ZH,
         )
 
+    sample_only = False
+    segments_only = False
+    if _review_preset(marker) == "normal":
+        if not sample_ready(project_id, projects_dir=projects_dir):
+            sample_only = True
+        elif not sample_review_completed(project_id, projects_dir=projects_dir):
+            return {"action": "", "status": STATUS_SKIPPED, "skipped": True}
+        elif not draft_review_completed(project_id, projects_dir=projects_dir):
+            if _segments_ready(project_id, projects_dir=projects_dir):
+                return {"action": "", "status": STATUS_SKIPPED, "skipped": True}
+            segments_only = True
+
     brief = _read_json(_project_dir(project_id, projects_dir) / "artifacts" / "brief.json")
     provider = _provider_id(profile, brief)
     artifact_revision = _locked_artifact_revision(
         _project_dir(project_id, projects_dir)
     )
+    sample_rel = _sample_rel(artifact_revision)
+    if sample_only:
+        reservation = {
+            "stage": "sample_review",
+            "kind": "sample",
+            "output_path": sample_rel,
+            "expected_outputs": [sample_rel, "artifacts/sample_reel.json"],
+            "friendly_zh": "正在生成试片，请留在本页。",
+        }
+    elif segments_only:
+        reservation = {
+            "stage": "draft_review",
+            "kind": "draft",
+            "output_path": "artifacts/full_draft_pro.json",
+            "expected_outputs": [
+                "artifacts/review_overview.json",
+                "artifacts/full_draft_pro.json",
+            ],
+            "friendly_zh": "正在生成其余分段，请留在本页。",
+        }
+    else:
+        reservation = {
+            "stage": "final_compose",
+            "kind": "final",
+            "output_path": OUTPUT_REL,
+            "expected_outputs": [OUTPUT_REL, "artifacts/final_review.json"],
+            "friendly_zh": wait_copy,
+        }
     reservation = {
-        "stage": "final_compose",
-        "kind": "final",
         "artifact_revision": artifact_revision,
         "batch_id": "",
         "beat_ids": [],
@@ -1462,9 +1782,7 @@ def maybe_start(
         "tier": "heavy",
         "provider": provider,
         "job_id": "",
-        "output_path": OUTPUT_REL,
-        "expected_outputs": [OUTPUT_REL, "artifacts/final_review.json"],
-        "friendly_zh": wait_copy,
+        **reservation,
     }
     try:
         write_job(project_id, reservation, projects_dir=projects_dir)
@@ -1484,6 +1802,54 @@ def maybe_start(
 
     def worker(_job_id: str = "") -> None:
         try:
+            if sample_only:
+                dest_rel = _run_paid_sample(
+                    project_id,
+                    marker,
+                    projects_dir=projects_dir,
+                    video_generate=video_generate,
+                )
+                write_job(
+                    project_id,
+                    {
+                        "status": STATUS_DONE,
+                        "engine": "paid_video",
+                        "tier": "heavy",
+                        "provider": provider,
+                        "kind": "sample",
+                        "output_path": dest_rel,
+                        "friendly_zh": "试片已就绪，请确认后再继续生成其余分段。",
+                    },
+                    projects_dir=projects_dir,
+                )
+                return
+            if segments_only:
+                _run_paid_pipeline(
+                    project_id,
+                    marker,
+                    projects_dir=projects_dir,
+                    compose_start=compose_start,
+                    video_generate=video_generate,
+                    job_status=job_status,
+                    compose=False,
+                )
+                dest_rel = _write_draft_from_segments(
+                    project_id, projects_dir=projects_dir
+                )
+                write_job(
+                    project_id,
+                    {
+                        "status": STATUS_DONE,
+                        "engine": "paid_video",
+                        "tier": "heavy",
+                        "provider": provider,
+                        "kind": "draft",
+                        "output_path": dest_rel,
+                        "friendly_zh": "分段已齐，请确认初稿后再合成终稿。",
+                    },
+                    projects_dir=projects_dir,
+                )
+                return
             _run_paid_pipeline(
                 project_id,
                 marker,

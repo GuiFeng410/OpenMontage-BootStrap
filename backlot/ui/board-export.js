@@ -19,7 +19,7 @@ export function renderExportButton(s) {
       ? "这个项目已经结束并导出"
       : ready
         ? "把成片拷到本项目 exports/，标记完成，然后回到库页。"
-        : "还没有成片，不能结束导出。这不是中断；要去做别的项目请回库页点「放下再做别的」。",
+        : "还没有成片，不能结束导出。要去做别的请点「中断」。",
   }, completed ? "已结束并导出" : "结束并导出项目");
 
   if (!completed && ready) {

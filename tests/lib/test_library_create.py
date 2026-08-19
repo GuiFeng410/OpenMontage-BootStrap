@@ -32,24 +32,24 @@ def test_flags_default_not_ready(tmp_path: Path) -> None:
     assert flags["video_models"][0]["available"] is False
     assert flags["video_models"][0]["board_generate"] is True
     assert flags["video_models"][1]["id"] == "hy-video-1.5"
-    assert flags["video_models"][1]["board_generate"] is False
+    assert flags["video_models"][1]["board_generate"] is True
     assert flags["video_models"][2]["id"] == "pixverse-video-v6.0"
-    assert flags["video_models"][2]["board_generate"] is False
+    assert flags["video_models"][2]["board_generate"] is True
     image_ids = [item["id"] for item in flags["image_models"]]
     assert image_ids[0] == "dashscope"
     assert "agnes" in image_ids
     assert "pixverse" not in image_ids
 
 
-def test_tokenhub_alias_marks_key_ready_but_not_board_generate() -> None:
+def test_tokenhub_alias_marks_key_ready_and_board_generate() -> None:
     models = {item["id"]: item for item in list_commercial_video_models(["TENCENT_TOKENHUB_API_KEY"])}
     assert models["agnes-video-v2.0"]["available"] is False
     assert models["hy-video-1.5"]["key_ready"] is True
-    assert models["hy-video-1.5"]["board_generate"] is False
-    assert models["hy-video-1.5"]["available"] is False
+    assert models["hy-video-1.5"]["board_generate"] is True
+    assert models["hy-video-1.5"]["available"] is True
     assert models["pixverse-video-v6.0"]["key_ready"] is True
-    assert models["pixverse-video-v6.0"]["board_generate"] is False
-    assert models["pixverse-video-v6.0"]["available"] is False
+    assert models["pixverse-video-v6.0"]["board_generate"] is True
+    assert models["pixverse-video-v6.0"]["available"] is True
 
 
 def test_flags_live_scan_env_ignores_stale_install_state(tmp_path: Path) -> None:
@@ -64,9 +64,9 @@ def test_flags_live_scan_env_ignores_stale_install_state(tmp_path: Path) -> None
     assert "TOKENHUB_API_KEY" in flags["video_key_names_present"]
     models = {item["id"]: item for item in flags["video_models"]}
     assert models["hy-video-1.5"]["key_ready"] is True
-    assert models["hy-video-1.5"]["available"] is False
+    assert models["hy-video-1.5"]["available"] is True
     assert models["pixverse-video-v6.0"]["key_ready"] is True
-    assert models["pixverse-video-v6.0"]["available"] is False
+    assert models["pixverse-video-v6.0"]["available"] is True
     assert models["agnes-video-v2.0"]["available"] is False
     assert "th-secret-do-not-leak-live" not in str(flags)
 
@@ -357,7 +357,7 @@ def test_start_production_rejects_model_without_key(
     assert caught.value.code == "missing_model_key"
 
 
-def test_start_production_rejects_pixverse_even_with_tokenhub_key(
+def test_start_production_accepts_pixverse_with_tokenhub_key(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
@@ -366,15 +366,19 @@ def test_start_production_rejects_pixverse_even_with_tokenhub_key(
         "TOKENHUB_API_KEY=th-secret-do-not-leak-pix\n",
         encoding="utf-8",
     )
-    with pytest.raises(LibraryCreateError) as caught:
-        start_production(
-            project_id="shop-demo",
-            production_tier="heavy",
-            video_model="pixverse-video-v6.0",
-            repo_root=tmp_path,
-            environ={},
-        )
-    assert caught.value.code == "board_generate_unsupported"
+    result = start_production(
+        project_id="shop-demo",
+        production_tier="heavy",
+        video_model="pixverse-video-v6.0",
+        repo_root=tmp_path,
+        environ={},
+    )
+    assert result["ok"] is True
+    marker = json.loads(
+        (tmp_path / "projects" / "shop-demo" / "project.json").read_text(encoding="utf-8")
+    )
+    assert marker["production_profile"]["video_model"] == "pixverse-video-v6.0"
+    assert marker["production_profile"]["video_channel"] == "tokenhub"
 
 
 def test_create_blocked_when_runner_busy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

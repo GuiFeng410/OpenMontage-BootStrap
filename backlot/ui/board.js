@@ -12,7 +12,7 @@ import {
 } from "/ui/board-rail.js";
 import { bindRerender, renderEditTab } from "/ui/board-edit.js";
 import { renderExportButton, maybeRedirectAfterExport } from "/ui/board-export.js";
-import { renderQuitButton } from "/ui/board-runtime.js";
+import { renderInterruptButton, renderQuitButton } from "/ui/board-runtime.js";
 import {
   commercialFocusStage, isCommercial, renderAwaitingNotice, renderCommercialBoard,
 } from "/ui/board-commercial.js";
@@ -181,6 +181,7 @@ function renderSlate(s) {
       onclick: () => { context.editOpen = !context.editOpen; render(); },
     }, "✂ 剪辑"),
     renderExportButton(s),
+    renderInterruptButton(s),
     renderQuitButton(s),
     renderThemeToggle(),
     liveEl,

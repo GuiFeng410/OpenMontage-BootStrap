@@ -2674,12 +2674,12 @@ class TestLibrary:
                 "artifacts": {},
             })
         commercial = load_board_state(p)["commercial"]
-        assert commercial["user_stage_zh"] == "已暂停"
+        assert commercial["user_stage_zh"] == "已中断"
         assert commercial["decision"]["producing_wait"] is False
-        assert commercial["decision"]["title_zh"] == "已暂停"
+        assert commercial["decision"]["title_zh"] == "已中断"
         summary = summarize_project(p)
         assert summary["live"] is False
-        assert summary["user_stage_zh"] == "已暂停"
+        assert summary["user_stage_zh"] == "已中断"
 
     def test_underscore_dirs_skipped(self, projects_root):
         (projects_root / "_analysis").mkdir()

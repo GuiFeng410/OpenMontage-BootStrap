@@ -114,7 +114,21 @@ def test_maybe_start_skips_when_assets_gate_open(tmp_path: Path) -> None:
     assert result["status"] == board_produce.STATUS_SKIPPED
 
 
-def test_maybe_start_skips_non_minimal(tmp_path: Path) -> None:
+def test_maybe_start_skips_professional(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    marker = _write_project(root)
+    marker = _set_profile(root / "shop-demo", review_mode_preset="pro")
+    _seed_minimal_ready_for_delivery(root, "shop-demo")
+    result = board_produce.maybe_start(
+        "shop-demo",
+        marker,
+        projects_dir=root,
+        compose_start=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no compose")),
+    )
+    assert result["skipped"] is True
+
+
+def test_maybe_start_normal_light_skips_until_heavy_sample(tmp_path: Path) -> None:
     root = tmp_path / "projects"
     marker = _write_project(root)
     marker = _set_profile(root / "shop-demo", review_mode_preset="normal")
@@ -315,10 +329,10 @@ def test_heavy_unknown_channel_pauses(tmp_path: Path, monkeypatch) -> None:
     marker = _set_profile(
         root / "shop-demo",
         production_tier="heavy",
-        provider="pixverse",
-        video_channel="pixverse",
+        provider="madeup",
+        video_channel="madeup-channel",
     )
-    monkeypatch.setattr(board_produce, "_present_key_names", lambda: {"PIXVERSE_API_KEY"})
+    monkeypatch.setattr(board_produce, "_present_key_names", lambda: {"AGNES_API_KEY"})
     result = board_produce.maybe_start(
         "shop-demo",
         marker,
@@ -333,6 +347,210 @@ def test_heavy_unknown_channel_pauses(tmp_path: Path, monkeypatch) -> None:
     assert overlay["board_stop"]["paused"] is True
     assert overlay["board_stop"]["producing_wait"] is False
     assert overlay["board_stop"]["decision_title_zh"] == "已暂停"
+
+
+def test_heavy_pixverse_with_tokenhub_starts(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "projects"
+    _write_project(root)
+    _seed_minimal_ready_for_delivery(root, "shop-demo")
+    marker = _set_profile(
+        root / "shop-demo",
+        production_tier="heavy",
+        provider="tokenhub",
+        video_channel="tokenhub",
+        video_model="pixverse-video-v6.0",
+    )
+    monkeypatch.setattr(
+        board_produce, "_present_key_names", lambda: {"TOKENHUB_API_KEY"}
+    )
+    calls: list[str] = []
+
+    def generate(provider, _prompt, output_path, extras_json="{}", confirm=False, confirm_sample_ok=False):
+        calls.append(provider)
+        dest = root / output_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"clip")
+        extras = json.loads(extras_json)
+        assert extras["model"] == "pixverse-video-v6.0"
+        assert extras["image_path"]
+        return {"success": True, "output_path": str(dest)}
+
+    def starter(_edit, _manifest, _output=""):
+        renders = root / "shop-demo" / "renders"
+        renders.mkdir(parents=True, exist_ok=True)
+        (renders / "final.mp4").write_bytes(b"film")
+        return _stub_start()
+
+    result = board_produce.maybe_start(
+        "shop-demo",
+        marker,
+        projects_dir=root,
+        compose_start=starter,
+        video_generate=generate,
+        paid_inline=True,
+    )
+    assert result["action"] == "produce_start", {
+        "code": (result.get("job") or {}).get("code"),
+        "friendly": (result.get("job") or {}).get("friendly_zh"),
+        "error": (result.get("job") or {}).get("error"),
+        "calls": calls,
+    }
+    assert calls == ["tokenhub"]
+    assert (root / "shop-demo" / "renders" / "final.mp4").is_file()
+
+
+def test_resolve_video_generate_routes_tokenhub() -> None:
+    assert (
+        board_produce._resolve_video_generate("tokenhub", None)
+        is board_produce._board_tokenhub_generate
+    )
+    assert (
+        board_produce._resolve_video_generate("pixverse", None)
+        is board_produce._board_tokenhub_generate
+    )
+
+
+def test_normal_heavy_writes_sample_not_final(tmp_path: Path, monkeypatch) -> None:
+    root = tmp_path / "projects"
+    _write_project(root)
+    _seed_minimal_ready_for_delivery(root, "shop-demo")
+    project = root / "shop-demo"
+    marker = _set_profile(
+        project,
+        review_mode_preset="normal",
+        production_tier="heavy",
+        provider="agnes",
+        video_channel="agnes",
+        video_model="agnes-video-v2.0",
+    )
+    monkeypatch.setattr(board_produce, "_present_key_names", lambda: {"AGNES_API_KEY"})
+    outputs: list[str] = []
+
+    def generate(_provider, _prompt, output_path, extras_json="{}", confirm=False, confirm_sample_ok=False):
+        outputs.append(output_path)
+        dest = root / output_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"clip")
+        return {"success": True, "output_path": str(dest)}
+
+    result = board_produce.maybe_start(
+        "shop-demo",
+        marker,
+        projects_dir=root,
+        compose_start=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no compose")),
+        video_generate=generate,
+        paid_inline=True,
+    )
+    assert result["action"] == "produce_start"
+    assert outputs and "sample_" in outputs[0]
+    assert "seg_" not in Path(outputs[0]).name
+    reel = json.loads((project / "artifacts" / "sample_reel.json").read_text(encoding="utf-8"))
+    assert reel["path"].startswith("assets/video/sample_")
+    assert not (project / "renders" / "final.mp4").exists()
+    skipped = board_produce.maybe_start(
+        "shop-demo",
+        marker,
+        projects_dir=root,
+        compose_start=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no compose")),
+        video_generate=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no generate")),
+        paid_inline=True,
+    )
+    assert skipped["skipped"] is True
+
+
+def test_normal_heavy_continues_after_sample_review(tmp_path: Path, monkeypatch) -> None:
+    from lib.checkpoint import merge_write_checkpoint
+
+    root = tmp_path / "projects"
+    _write_project(root)
+    _seed_minimal_ready_for_delivery(root, "shop-demo")
+    project = root / "shop-demo"
+    marker = _set_profile(
+        project,
+        review_mode_preset="normal",
+        production_tier="heavy",
+        provider="agnes",
+        video_channel="agnes",
+        video_model="agnes-video-v2.0",
+    )
+    monkeypatch.setattr(board_produce, "_present_key_names", lambda: {"AGNES_API_KEY"})
+    outputs: list[str] = []
+
+    def generate(_provider, _prompt, output_path, extras_json="{}", confirm=False, confirm_sample_ok=False):
+        outputs.append(output_path)
+        dest = root / output_path
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(b"clip")
+        return {"success": True, "output_path": str(dest)}
+
+    first = board_produce.maybe_start(
+        "shop-demo",
+        marker,
+        projects_dir=root,
+        compose_start=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no compose")),
+        video_generate=generate,
+        paid_inline=True,
+    )
+    assert first["action"] == "produce_start"
+    reel = json.loads((project / "artifacts" / "sample_reel.json").read_text(encoding="utf-8"))
+    merge_write_checkpoint(
+        root,
+        "shop-demo",
+        "sample_review",
+        "completed",
+        {"sample_reel": reel},
+        pipeline_type="bootstrap-commercial",
+        human_approval_required=True,
+        human_approved=True,
+    )
+
+    second = board_produce.maybe_start(
+        "shop-demo",
+        marker,
+        projects_dir=root,
+        compose_start=lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("no compose")),
+        video_generate=generate,
+        paid_inline=True,
+    )
+    assert second["action"] == "produce_start", {
+        "code": (second.get("job") or {}).get("code"),
+        "friendly": (second.get("job") or {}).get("friendly_zh"),
+        "error": (second.get("job") or {}).get("error"),
+    }
+    assert len(outputs) == 1
+    assert "sample_" in outputs[0]
+    revision = board_produce._locked_artifact_revision(project)
+    assert (project / board_produce._seg_rel("beat_01", revision)).is_file()
+    assert not (project / "renders" / "final.mp4").exists()
+    draft = json.loads((project / "artifacts" / "full_draft_pro.json").read_text(encoding="utf-8"))
+    merge_write_checkpoint(
+        root,
+        "shop-demo",
+        "draft_review",
+        "completed",
+        {"full_draft_pro": draft},
+        pipeline_type="bootstrap-commercial",
+        human_approval_required=True,
+        human_approved=True,
+    )
+
+    def starter(_edit, _manifest, _output=""):
+        renders = project / "renders"
+        renders.mkdir(parents=True, exist_ok=True)
+        (renders / "final.mp4").write_bytes(b"film")
+        return _stub_start()
+
+    third = board_produce.maybe_start(
+        "shop-demo",
+        marker,
+        projects_dir=root,
+        compose_start=starter,
+        video_generate=generate,
+        paid_inline=True,
+    )
+    assert third["action"] == "produce_start"
+    assert len(outputs) == 1
+    assert (project / "renders" / "final.mp4").is_file()
 
 
 def test_heavy_reuses_evidenced_segment_for_same_revision(

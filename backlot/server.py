@@ -257,6 +257,7 @@ def create_app() -> FastAPI:
         interrupt = bool(payload.get("interrupt"))
         from backlot.runner import stop_runner
         from lib.board_produce import busy_project_ids
+        from lib.library_create import interrupt_active_project
 
         busy = await asyncio.to_thread(lambda: busy_project_ids(projects_dir=PROJECTS_DIR))
         if busy and not interrupt:
@@ -265,11 +266,17 @@ def create_app() -> FastAPI:
                 detail={
                     "code": "producing",
                     "friendly_zh": (
-                        "正在出片，不能退出看板。成片完成或失败后再退出，以免中断生成。"
+                        "正在出片。确认中断后才能退出看板；不会结束导出。"
                     ),
                     "busy_projects": busy,
                 },
             )
+        await asyncio.to_thread(
+            interrupt_active_project,
+            projects_dir=PROJECTS_DIR,
+            reason_zh="已中断并退出看板。项目未结束，可再开库继续。",
+            pause_busy=bool(busy),
+        )
         await asyncio.to_thread(stop_runner)
         schedule_server_exit()
         return JSONResponse(
@@ -291,6 +298,7 @@ def create_app() -> FastAPI:
             result = await asyncio.to_thread(
                 release_library_runner,
                 confirm=bool(isinstance(payload, dict) and payload.get("confirm") is True),
+                interrupt=bool(isinstance(payload, dict) and payload.get("interrupt") is True),
                 projects_dir=PROJECTS_DIR,
             )
         except LibraryCreateError as exc:

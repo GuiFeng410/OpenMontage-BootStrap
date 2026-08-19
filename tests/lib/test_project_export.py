@@ -84,3 +84,22 @@ def test_chat_phrase_without_intent(project):
     result = pe.apply_project_export("demo-pro", confirm_phrase="结束导出")
     assert result["ok"] is True
     assert (project / "exports" / "final.mp4").is_file()
+
+
+def test_mark_interrupted_without_final(project):
+    result = pe.mark_interrupted("demo-pro", reason_zh="主动中断", projects_dir=project.parent)
+    assert result["ok"] is True
+    marker = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    assert marker["lifecycle_status"] == "interrupted"
+    assert marker["interrupt_reason_zh"] == "主动中断"
+    status = json.loads((project / "runner_status.json").read_text(encoding="utf-8"))
+    assert "已中断" in status["friendly_zh"] or "主动中断" in status["friendly_zh"]
+
+
+def test_mark_interrupted_skips_completed(project):
+    marker = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    marker["lifecycle_status"] = "completed"
+    (project / "project.json").write_text(json.dumps(marker), encoding="utf-8")
+    result = pe.mark_interrupted("demo-pro", projects_dir=project.parent)
+    assert result["ok"] is False
+    assert result["code"] == "already_completed"

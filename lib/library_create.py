@@ -38,16 +38,16 @@ COMMERCIAL_VIDEO_MODELS: tuple[dict[str, Any], ...] = (
         "channel": "tokenhub",
         "label_zh": "TokenHub·混元",
         "key_names": ("TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"),
-        "capability_zh": "看板暂不能开烧。有 Key 也不在本机分段白名单里。",
-        "board_generate": False,
+        "capability_zh": "看板可开烧。单段时长由模型定，长片自动拼接。",
+        "board_generate": True,
     },
     {
         "id": "pixverse-video-v6.0",
         "channel": "tokenhub",
         "label_zh": "TokenHub·Pixverse",
         "key_names": ("TOKENHUB_API_KEY", "TENCENT_TOKENHUB_API_KEY"),
-        "capability_zh": "看板暂不能开烧。有 Key 也不在本机分段白名单里。",
-        "board_generate": False,
+        "capability_zh": "看板可开烧。默认可约 5 秒一段，长片自动拼接。",
+        "board_generate": True,
     },
 )
 MAX_DURATION = 75
@@ -124,7 +124,7 @@ def resolve_commercial_video_model(
     picked = default_commercial_video_model(models)
     if picked is None:
         raise LibraryCreateError(
-            "重度需要看板能开烧的模型。目前可开烧：Agnes。请写入 Agnes Key 后刷新；混元 / Pixverse 暂不能在看板开烧。",
+            "重度需要已填 Key 的视频模型。可开烧：Agnes、混元、Pixverse。请写入对应 Key 后刷新。",
             code="missing_video_key",
         )
     return picked
@@ -303,7 +303,7 @@ def start_production(
     keys = _flags_from_live_scan(repo_root=root, environ=environ)
     if tier == "heavy" and not keys["video_key_present"]:
         raise LibraryCreateError(
-            "重度需要看板能开烧的模型。目前可开烧：Agnes。请写入 Agnes Key 后刷新；混元 / Pixverse 暂不能在看板开烧。",
+            "重度需要已填 Key 的视频模型。可开烧：Agnes、混元、Pixverse。请写入对应 Key 后刷新。",
             code="missing_video_key",
         )
     if tier == "medium" and not keys["stock_key_present"]:
@@ -337,7 +337,7 @@ def start_production(
         profile["ai_video"] = "enabled"
         if picked_model is None:
             raise LibraryCreateError(
-                "重度需要看板能开烧的模型。目前可开烧：Agnes。请写入 Agnes Key 后刷新；混元 / Pixverse 暂不能在看板开烧。",
+                "重度需要已填 Key 的视频模型。可开烧：Agnes、混元、Pixverse。请写入对应 Key 后刷新。",
                 code="missing_video_key",
             )
         profile["video_channel"] = picked_model["channel"]
@@ -420,9 +420,47 @@ def runner_occupant(*, projects_dir: Path | None = None) -> dict[str, str]:
     return {"project_id": pid, "title": title}
 
 
+def interrupt_active_project(
+    *,
+    projects_dir: Path | None = None,
+    reason_zh: str = "",
+    pause_busy: bool = True,
+) -> dict[str, Any]:
+    """Mark the bound project interrupted. Does not export or stop serve."""
+    occupant = runner_occupant(projects_dir=projects_dir)
+    if pause_busy:
+        from lib.board_produce import STATUS_PAUSED, busy_project_ids, write_job
+
+        copy = reason_zh or "已中断。项目未结束，可在库页继续。"
+        for pid in busy_project_ids(projects_dir=projects_dir):
+            try:
+                write_job(
+                    pid,
+                    {
+                        "status": STATUS_PAUSED,
+                        "code": "interrupted",
+                        "friendly_zh": copy,
+                    },
+                    projects_dir=projects_dir,
+                )
+            except Exception:
+                continue
+    pid = str(occupant.get("project_id") or "").strip()
+    if pid:
+        from lib.project_export import mark_interrupted
+
+        mark_interrupted(
+            pid,
+            reason_zh=reason_zh or "已中断。项目未结束，可在库页继续。",
+            projects_dir=projects_dir,
+        )
+    return occupant
+
+
 def release_library_runner(
     *,
     confirm: bool = False,
+    interrupt: bool = False,
     projects_dir: Path | None = None,
 ) -> dict[str, Any]:
     """Stop the unique runner without shutting the web server. Does not export."""
@@ -431,13 +469,17 @@ def release_library_runner(
     from lib.board_produce import busy_project_ids
 
     busy = busy_project_ids(projects_dir=projects_dir)
-    if busy:
+    if busy and not interrupt:
         raise LibraryCreateError(
-            "正在出片，不能放下。成片完成或失败后再放下，以免中断生成。",
+            "正在出片。确认中断后才能停下；不会结束导出。",
             code="producing",
             http_status=409,
         )
-    occupant = runner_occupant(projects_dir=projects_dir)
+    occupant = interrupt_active_project(
+        projects_dir=projects_dir,
+        reason_zh="已中断。项目未结束，可在库页继续。",
+        pause_busy=bool(busy),
+    )
     from backlot.runner import stop_runner
 
     stop_runner()
@@ -445,7 +487,7 @@ def release_library_runner(
     return {
         "ok": True,
         "released_project_id": occupant.get("project_id") or "",
-        "friendly_zh": f"已放下「{title}」。可以创建或继续另一个项目。网页服务还在。",
+        "friendly_zh": f"已中断「{title}」。可以创建或继续另一个项目。网页服务还在。",
     }
 
 
@@ -463,7 +505,7 @@ def _assert_runner_idle_or_same(project_id: str = "") -> None:
     if wanted and active == wanted:
         return
     raise LibraryCreateError(
-        f"本机正在做「{active}」。请先在库页点「放下再做别的」，再创建或继续另一个。",
+        f"本机正在做「{active}」。请先在库页点「中断并做别的」，再创建或继续另一个。",
         code="runner_busy",
         http_status=409,
     )
