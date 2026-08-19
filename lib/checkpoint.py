@@ -125,12 +125,9 @@ def get_pipeline_stages(pipeline_type: str | None) -> list[str]:
         # Graceful fallback: return all known stages in canonical order
         return list(STAGES)
 
-CHECKPOINT_SCHEMA_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "schemas"
-    / "checkpoints"
-    / "checkpoint.schema.json"
-)
+from lib.resources import get_resources
+
+CHECKPOINT_SCHEMA_PATH = get_resources().checkpoint_schema()
 
 # Canonical project root. Checkpoints, artifacts, and the project marker all
 # live under PROJECTS_DIR/<project_id>/ — this is the location the Backlot

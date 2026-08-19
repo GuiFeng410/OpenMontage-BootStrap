@@ -536,7 +536,9 @@ def install_node_deps(
     dry_run: bool = True,
     confirm_execute: bool = False,
 ) -> dict[str, Any]:
-    composer = REPO_ROOT / "remotion-composer"
+    from lib.resources import get_resources
+
+    composer = get_resources().remotion_composer()
     plan = {
         "action": "npm_install_remotion",
         "cwd": str(composer),

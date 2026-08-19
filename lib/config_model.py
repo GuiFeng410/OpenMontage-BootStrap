@@ -1,6 +1,6 @@
 """Runtime configuration model for OpenMontage.
 
-Loads config.yaml, merges with env overrides, and provides typed access.
+Loads config.yaml and provides typed access.
 """
 
 from __future__ import annotations
@@ -11,6 +11,9 @@ from typing import Optional
 
 import yaml
 from pydantic import BaseModel, Field
+
+from lib.paths import get_workspace
+from lib.resources import get_resources
 
 
 class BudgetMode(str, Enum):
@@ -75,7 +78,7 @@ class OpenMontageConfig(BaseModel):
     def load(cls, config_path: Optional[Path] = None) -> "OpenMontageConfig":
         """Load config from YAML file. Falls back to defaults if file missing."""
         if config_path is None:
-            config_path = Path(__file__).resolve().parent.parent / "config.yaml"
+            config_path = get_resources().config_yaml()
 
         if config_path.exists():
             with open(config_path) as f:
@@ -84,9 +87,9 @@ class OpenMontageConfig(BaseModel):
 
         return cls()
 
-    def resolve_path(self, key: str, project_root: Optional[Path] = None) -> Path:
-        """Resolve a relative path from PathsConfig against project root."""
-        if project_root is None:
-            project_root = Path(__file__).resolve().parent.parent
+    def resolve_path(self, key: str, base_root: Optional[Path] = None) -> Path:
+        """Resolve a relative path from PathsConfig against the workspace repo root."""
+        if base_root is None:
+            base_root = get_workspace().repo_root
         value = getattr(self.paths, key)
-        return (project_root / value).resolve()
+        return (base_root / value).resolve()

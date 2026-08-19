@@ -12,10 +12,11 @@ from typing import Any, Optional
 import yaml
 import jsonschema
 
-PIPELINE_DEFS_DIR = Path(__file__).resolve().parent.parent / "pipeline_defs"
+from lib.resources import get_resources
+
+PIPELINE_DEFS_DIR = get_resources().pipeline_defs()
 SCHEMA_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "schemas"
+    get_resources().resolve("schemas")
     / "pipelines"
     / "pipeline_manifest.schema.json"
 )

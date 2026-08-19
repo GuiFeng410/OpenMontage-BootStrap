@@ -284,13 +284,18 @@ class VideoCompose(BaseTool):
         "Play the composed output and verify cuts, subtitles, and overlays",
     ]
 
+    def _remotion_composer_dir(self) -> Path:
+        from lib.resources import get_resources
+
+        return get_resources().remotion_composer()
+
     def _remotion_available(self) -> bool:
         """Check if Remotion rendering is available (requires npx + composer project + node_modules)."""
         import shutil as _shutil
 
         if not _shutil.which("npx"):
             return False
-        composer_dir = Path(__file__).resolve().parent.parent.parent / "remotion-composer"
+        composer_dir = self._remotion_composer_dir()
         if not composer_dir.exists() or not (composer_dir / "package.json").exists():
             return False
         # Check that node_modules are actually installed — without this,
@@ -346,7 +351,7 @@ class VideoCompose(BaseTool):
                 "and motion-graphics pipelines that already use the scene-component stack."
             )
         else:
-            composer_dir = Path(__file__).resolve().parent.parent.parent / "remotion-composer"
+            composer_dir = self._remotion_composer_dir()
             if composer_dir.exists() and (composer_dir / "package.json").exists() and not (composer_dir / "node_modules").exists():
                 info["remotion_note"] = (
                     "Remotion project exists but node_modules are NOT installed. "
@@ -820,7 +825,7 @@ class VideoCompose(BaseTool):
                 ),
             )
 
-        composer_dir = Path(__file__).resolve().parent.parent.parent / "remotion-composer"
+        composer_dir = self._remotion_composer_dir()
         if not composer_dir.exists() or not (composer_dir / "node_modules").exists():
             return ToolResult(
                 success=False,
@@ -1898,7 +1903,7 @@ class VideoCompose(BaseTool):
         # Deep-copy props so we don't mutate the original
         props = json.loads(json.dumps(composition_data))
 
-        composer_dir = Path(__file__).resolve().parent.parent.parent / "remotion-composer"
+        composer_dir = self._remotion_composer_dir()
         if not composer_dir.exists():
             return ToolResult(
                 success=False,

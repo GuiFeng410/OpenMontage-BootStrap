@@ -16,11 +16,12 @@ from typing import Any
 
 import jsonschema
 
+from lib.resources import get_resources
+
 PLAYBOOK_SCHEMA_PATH = (
-    Path(__file__).resolve().parent.parent
-    / "schemas" / "styles" / "playbook.schema.json"
+    get_resources().resolve("schemas") / "styles" / "playbook.schema.json"
 )
-STYLES_DIR = Path(__file__).resolve().parent.parent / "styles"
+STYLES_DIR = get_resources().styles()
 CUSTOM_STYLES_DIR = STYLES_DIR / "custom"
 
 

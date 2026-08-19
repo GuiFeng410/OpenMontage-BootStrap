@@ -137,7 +137,9 @@ def _registry():
 
 
 def _remotion_ok() -> dict[str, Any]:
-    composer = REPO_ROOT / "remotion-composer"
+    from lib.resources import get_resources
+
+    composer = get_resources().remotion_composer()
     nm = composer / "node_modules"
     pkg = composer / "package.json"
     if not pkg.exists():
