@@ -11,6 +11,9 @@ Design contract (see internal/design/LIVING_STORYBOARD.md):
 - The agent's only duty: ``python -m backlot open <project>`` at pipeline init.
 """
 
-__version__ = "0.1.0"
+from openmontage.product_version import PRODUCT_VERSION
+
+
+__version__ = PRODUCT_VERSION
 
 DEFAULT_PORT = 4750

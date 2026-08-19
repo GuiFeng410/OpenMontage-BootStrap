@@ -6,7 +6,7 @@ PIP = $(RUN_PYTHON) -m pip
 
 .DEFAULT_GOAL := setup
 
-.PHONY: setup install install-dev install-gpu test test-ci test-contracts lint clean preflight demo demo-list hyperframes-doctor hyperframes-warm venv ensure-venv
+.PHONY: setup install install-dev install-gpu test test-ci test-contracts test-refactor-fast test-refactor-node test-refactor lint clean preflight demo demo-list hyperframes-doctor hyperframes-warm venv ensure-venv
 
 # ---- Virtual environment ----
 
@@ -99,6 +99,15 @@ test-ci: ensure-venv
 
 test-contracts: ensure-venv
 	$(RUN_PYTHON) -m pytest tests/contracts/ -v
+
+# Default refactor guardrails: focused, fast, and safe for every PR.
+test-refactor-fast: ensure-venv
+	$(RUN_PYTHON) -m pytest tests/contracts/test_refactor_guardrails.py tests/contracts/test_dual_entry_snapshot_contract.py -q --tb=short
+
+test-refactor-node:
+	node --test tests/backlot/test_board_module_exports.mjs
+
+test-refactor: test-refactor-fast test-refactor-node
 
 # ---- Utilities ----
 

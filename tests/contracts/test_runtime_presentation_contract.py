@@ -76,6 +76,10 @@ assert ALL_MANIFESTS, "No pipeline manifests found"
 # an explicit reason. Everything else is required to follow the contract.
 _EXCLUDED_PIPELINES = {
     "framework-smoke": "minimal 2-stage smoke test, no compose stage",
+    "bootstrap-commercial": (
+        "BootStrap custom seven-stage flow; runtime governance lives in "
+        "openmontage-bootstrap-03-usercheck and 04-produce"
+    ),
 }
 
 

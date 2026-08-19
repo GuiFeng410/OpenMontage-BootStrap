@@ -2,7 +2,7 @@ name: bootstrap-commercial
 version: "1.0"
 description: >
   BootStrap 商品宣传片：中文简报、身份审查、试片确认、分段制作、初稿审查、合成终稿、交付确认。
-  Agent 走 openmontage-bootstrap-03-usercheck → 04-produce；审批在聊天，Backlot 只读观察。
+  Agent 可走 openmontage-bootstrap-03-usercheck → 04-produce；网页只写 intent，由本机唯一 runner 消费并推进。
 category: custom
 stability: beta
 

@@ -1,0 +1,38 @@
+name: Full Test (Manual)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: full-test-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  full-python:
+    name: Full Python Suite
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.txt
+            requirements-dev.txt
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Install dependencies
+        run: make install-dev
+
+      - name: Run full non-QA Python suite
+        run: make test
