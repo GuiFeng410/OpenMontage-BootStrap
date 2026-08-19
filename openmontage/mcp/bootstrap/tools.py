@@ -12,6 +12,7 @@ from typing import Any
 
 from openmontage.mcp.bootstrap import install_state as install_state_mod
 from openmontage.mcp.bootstrap.env_file import ensure_env_file as _ensure_env_file
+from lib.error_codes import APPROVAL_BUNDLE_FAILED, to_doctor_error
 from lib.paths import get_workspace
 from openmontage.mcp.common.errors import ConfigError, DoctorError
 from openmontage.mcp.common.sandbox import project_dir
@@ -1392,19 +1393,14 @@ def produce_append_decision(project_id: str, decision_json: str) -> dict[str, An
 
 
 def _raise_approval_bundle_error(exc: Exception) -> None:
-    from lib.approval_bundle import ApprovalBundleError
-    from lib.interaction_intents import UnknownProjectError
-
-    if isinstance(exc, UnknownProjectError):
-        raise DoctorError("unknown project", code="unknown_project") from exc
-    if isinstance(exc, ApprovalBundleError):
-        raise DoctorError(exc.safe_message, code=exc.code) from exc
-    if isinstance(exc, DoctorError):
-        raise exc
-    raise DoctorError(
-        "approval bundle operation failed; intent changes were rolled back",
-        code="approval_bundle_failed",
-    ) from exc
+    mapped = to_doctor_error(
+        exc,
+        fallback_message="approval bundle operation failed; intent changes were rolled back",
+        fallback_code=APPROVAL_BUNDLE_FAILED,
+    )
+    if mapped is exc:
+        raise mapped
+    raise mapped from exc
 
 
 def produce_list_interaction_intents(project_id: str) -> dict[str, Any]:
@@ -1496,10 +1492,8 @@ def produce_apply_project_export(
             intent_id=intent_id,
             confirm_phrase=confirm_phrase,
         )
-    except UnknownProjectError as exc:
-        raise DoctorError("unknown project", code="unknown_project") from exc
-    except ProjectExportError as exc:
-        raise DoctorError(exc.safe_message, code=exc.code) from exc
+    except (UnknownProjectError, ProjectExportError) as exc:
+        raise to_doctor_error(exc) from exc
 
 
 def produce_runner_tick(project_id: str = "") -> dict[str, Any]:
@@ -1510,10 +1504,8 @@ def produce_runner_tick(project_id: str = "") -> dict[str, Any]:
 
     try:
         return tick_all(append_decision=produce_append_decision, project_id=project_id)
-    except UnknownProjectError as exc:
-        raise DoctorError("unknown project", code="unknown_project") from exc
-    except ProjectExportError as exc:
-        raise DoctorError(exc.safe_message, code=exc.code) from exc
+    except (UnknownProjectError, ProjectExportError) as exc:
+        raise to_doctor_error(exc) from exc
 
 
 def produce_list_intents(project_id: str) -> dict[str, Any]:
