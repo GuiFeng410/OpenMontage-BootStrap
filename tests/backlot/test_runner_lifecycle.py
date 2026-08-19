@@ -16,6 +16,7 @@ from backlot.runner import (
     spawn_detached,
 )
 from backlot.__main__ import _spawn_runner
+from lib.persistence.code_stamp import RUNNER_STAMP_MODULES
 
 
 def test_parse_lock_accepts_legacy_pid():
@@ -31,6 +32,30 @@ def test_parse_lock_reads_json_stamp():
 
 def test_runner_stamp_covers_approval_bundle():
     assert "lib/approval_bundle.py" in _STAMP_FILES
+    assert "backlot/read_models/commercial.py" in _STAMP_FILES
+    assert _STAMP_FILES == RUNNER_STAMP_MODULES
+
+
+def test_commercial_read_model_mtime_triggers_runner_restart(monkeypatch, tmp_path):
+    for rel in RUNNER_STAMP_MODULES:
+        path = tmp_path / rel
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("# stub\n", encoding="utf-8")
+    monkeypatch.setattr("backlot.runner.REPO_ROOT", tmp_path)
+    from backlot.runner import runner_code_stamp
+
+    before = runner_code_stamp()
+    commercial = tmp_path / "backlot" / "read_models" / "commercial.py"
+    commercial.write_text("# stub\nchanged\n", encoding="utf-8")
+    after = runner_code_stamp()
+    assert "backlot/read_models/commercial.py" in after
+    assert before != after
+    monkeypatch.setattr("backlot.runner.runner_alive", lambda: True)
+    monkeypatch.setattr(
+        "backlot.runner.read_lock",
+        lambda: {"pid": 1, "code_stamp": before, "project_id": "demo"},
+    )
+    assert runner_needs_restart() is True
 
 
 def test_run_loop_defaults_projects_root(monkeypatch):

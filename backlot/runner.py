@@ -6,25 +6,19 @@ import json
 import os
 import signal
 import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
 from lib.paths import REPO_ROOT
+from lib.persistence.code_stamp import RUNNER_STAMP_MODULES, runner_code_stamp as compute_runner_code_stamp
 
 
 LOCK_NAME = "runner.lock"
 LOG_NAME = "runner.log"
 POLL_SECONDS = 2.0
-_STAMP_FILES = (
-    "backlot/runner.py",
-    "lib/approval_bundle.py",
-    "lib/board_runner.py",
-    "lib/board_produce.py",
-    "lib/board_advance.py",
-    "lib/board_gap_plan.py",
-    "lib/board_assets_gate.py",
-)
+_STAMP_FILES = RUNNER_STAMP_MODULES
 
 
 def _backlot_dir() -> Path:
@@ -42,14 +36,7 @@ def log_path() -> Path:
 
 
 def runner_code_stamp() -> str:
-    parts: list[str] = []
-    for rel in _STAMP_FILES:
-        path = REPO_ROOT / rel
-        try:
-            parts.append(f"{rel}:{path.stat().st_mtime_ns}")
-        except OSError:
-            parts.append(f"{rel}:0")
-    return ";".join(parts)
+    return compute_runner_code_stamp(REPO_ROOT)
 
 
 class RunnerBusyError(Exception):
