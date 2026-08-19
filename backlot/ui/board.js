@@ -36,6 +36,7 @@ context.setActiveRender = (index, rerender = true) => {
 };
 context.capturePlaybackState = captureRenderPlaybackState;
 context.restorePlaybackState = restoreRenderPlaybackState;
+context.adoptHeroVideo = adoptHeroVideo;
 context.renderActivity = renderActivity;
 
 const THEME_KEY = "backlot.theme";
@@ -536,6 +537,26 @@ function captureRenderPlaybackState() {
   context.renderPlaybackState = saved;
 }
 
+function detachHeroVideos() {
+  const kept = [];
+  for (const video of app.querySelectorAll("video[src]")) {
+    video.remove();
+    kept.push(video);
+  }
+  context.keptVideos = kept;
+}
+
+function adoptHeroVideo(src) {
+  const list = context.keptVideos || [];
+  const idx = list.findIndex((video) => video.getAttribute("src") === src);
+  if (idx >= 0) {
+    const video = list.splice(idx, 1)[0];
+    video.dataset.heroReused = "1";
+    return video;
+  }
+  return el("video", { src, controls: "", preload: "metadata", playsinline: "" });
+}
+
 function restoreRenderPlaybackState(video, src) {
   const saved = context.renderPlaybackState.get(src);
   if (!saved) return;
@@ -562,11 +583,12 @@ function renderRenders(s) {
   // preload="metadata" gives the element its intrinsic aspect ratio (and a
   // poster frame) before playback — without it a portrait 9:16 render sits
   // in a letterboxed 100%-wide black box that reads as landscape.
-  const video = el("video", { src, controls: "", preload: "metadata" });
-  // Click the frame to start playback (controls handle pause/scrub) — the
-  // big player was inert to a click on the picture itself.
-  video.addEventListener("click", () => { if (video.paused) video.play().catch(() => {}); });
-  restoreRenderPlaybackState(video, src);
+  const video = adoptHeroVideo(src);
+  if (video.dataset.heroReused === "1") {
+    delete video.dataset.heroReused;
+    const saved = context.renderPlaybackState.get(src);
+    if (saved?.wasPlaying) video.play().catch(() => {});
+  } else restoreRenderPlaybackState(video, src);
   const versions = el("div", { class: "render-meta" },
     renders.map((r, i) => el("span", {
       class: `v${i === context.activeRender ? " active" : ""}`,
@@ -618,6 +640,7 @@ function render() {
   document.body.classList.toggle("first", context.firstPaint);
   context.firstPaint = false;
   captureRenderPlaybackState();
+  detachHeroVideos();
   app.innerHTML = "";
   app.append(renderSlate(s));
   app.append(renderStageRail(s, {

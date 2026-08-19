@@ -82,18 +82,36 @@ function renderRunnerStatus(status, bound = true) {
       : null);
 }
 
-function renderFinalVideo(projectId, finalVideo) {
+function renderFinalVideo(projectId, finalVideo, context = {}, { includePlayer = true } = {}) {
   if (!finalVideo?.exists || !finalVideo.path) return null;
   const src = mediaURL(projectId, finalVideo.path);
+  const video = includePlayer
+    ? heroVideo(src, context)
+    : null;
   return el("div", { class: "notice commercial-final-video" },
     el("b", {}, "成片预览"),
     el("div", { class: "hint" }, "可在本页播放。确认后点顶栏「结束并导出项目」，不必回聊天。"),
-    el("video", { controls: "", src, preload: "metadata", playsinline: "" }),
+    video,
     el("a", {
       class: "commercial-final-download",
       href: src,
       download: "final.mp4",
     }, "下载终稿"));
+}
+
+function heroVideo(src, context) {
+  const video = typeof context.adoptHeroVideo === "function"
+    ? context.adoptHeroVideo(src)
+    : el("video", { src, controls: "", preload: "metadata", playsinline: "" });
+  const reused = video.dataset.heroReused === "1";
+  if (reused) {
+    delete video.dataset.heroReused;
+    const saved = context.renderPlaybackState?.get?.(src);
+    if (saved?.wasPlaying) video.play().catch(() => {});
+  } else if (typeof context.restorePlaybackState === "function") {
+    context.restorePlaybackState(video, src);
+  }
+  return video;
 }
 
 function renderPausedOrWaitNotice(title, prompt) {
@@ -1012,17 +1030,22 @@ function renderCommercialPlayers(s, context) {
   if (context.activeRender >= players.length) context.setActiveRender(0, false);
   const current = players[context.activeRender];
   const src = mediaURL(s.project_id, current.path);
-  const video = el("video", {
-    src,
-    controls: "", preload: "metadata",
-  });
-  video.addEventListener("click", () => { if (video.paused) video.play().catch(() => {}); });
-  context.restorePlaybackState(video, src);
+  const video = heroVideo(src, context);
+  const download = (view === "delivery" || view === "compose")
+    && s.commercial?.final_video?.exists
+    ? el("a", {
+      class: "commercial-final-download",
+      href: mediaURL(s.project_id, s.commercial.final_video.path),
+      download: "final.mp4",
+    }, "下载终稿")
+    : null;
   return el("div", {},
     el("div", { class: "section-title" }, "成片预览",
       el("span", { class: "meta" }, current.path.split("/").pop())),
+    el("div", { class: "hint" }, "用播放条控制进度。确认后点顶栏「结束并导出项目」。"),
     el("div", { class: "render-hero" }, video),
-    tabs);
+    tabs,
+    download);
 }
 
 function renderCommercialStageEvidence(s, context) {
@@ -1216,7 +1239,6 @@ export function renderCommercialBoard(s, context) {
   if (runner) main.append(runner);
   const pause = renderFastTrackPause(s.commercial?.fast_track_pause);
   if (pause) main.append(pause);
-  const finalVideo = renderFinalVideo(s.project_id, s.commercial?.final_video);
   const sseBanner = renderSseBanner(s, context);
   if (sseBanner) main.append(sseBanner);
   const legacyNotice = renderCommercialLegacyNotice(s);
@@ -1250,6 +1272,10 @@ export function renderCommercialBoard(s, context) {
   if (beats) main.append(beats);
   if (stageEvidence) main.append(stageEvidence);
   if (players) main.append(players);
+  const skipBanner = Boolean(players && (view === "delivery" || view === "compose"));
+  const finalVideo = skipBanner
+    ? null
+    : renderFinalVideo(s.project_id, s.commercial?.final_video, context);
   if (finalVideo) main.prepend(finalVideo);
   if (!beats && !players && !summary && !precheck && !assetPool) {
     main.append(el("div", { class: "hint" },
