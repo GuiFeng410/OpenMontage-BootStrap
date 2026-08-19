@@ -13,7 +13,7 @@ import asyncio
 import json
 import time
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, StreamingResponse
@@ -82,6 +82,21 @@ class ChangeHub:
 hub = ChangeHub()
 
 
+def schedule_server_exit() -> None:
+    """Stop this serve process after the HTTP response is sent."""
+
+    def _exit() -> None:
+        _os._exit(0)
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.call_later(0.5, _exit)
+    except RuntimeError:
+        import threading
+
+        threading.Timer(0.5, _exit).start()
+
+
 def _runner_alive() -> bool:
     try:
         from backlot.runner import runner_alive
@@ -89,6 +104,35 @@ def _runner_alive() -> bool:
         return bool(runner_alive())
     except Exception:
         return False
+
+
+def _active_project_id() -> str:
+    try:
+        from backlot.runner import active_project_id
+
+        return str(active_project_id() or "")
+    except Exception:
+        return ""
+
+
+def _start_runner_for_project(project_id: str) -> dict[str, Any]:
+    from backlot.runner import RunnerBusyError, spawn_detached
+
+    wanted = str(project_id or "").strip()
+    if not wanted:
+        return {"runner_started": False}
+    try:
+        spawn_detached(wanted)
+        return {"runner_started": True}
+    except RunnerBusyError as exc:
+        return {
+            "runner_started": False,
+            "code": exc.code,
+            "friendly_zh": exc.friendly_zh,
+            "active_project_id": exc.active_project_id,
+        }
+    except Exception as exc:
+        return {"runner_started": False, "error": str(exc)}
 
 # Library summaries are expensive to derive (full state parse per project);
 # cache per project and invalidate from the watcher.
@@ -187,6 +231,7 @@ def create_app() -> FastAPI:
     @app.get("/api/health")
     async def health() -> dict:
         from lib.library_create import public_install_flags
+        from backlot.runner import runner_code_current
 
         flags = public_install_flags()
         return {
@@ -194,8 +239,43 @@ def create_app() -> FastAPI:
             "app": "backlot",
             "projects_dir": str(PROJECTS_DIR),
             "runner_alive": _runner_alive(),
+            "runner_code_current": bool(runner_code_current()),
+            "active_project_id": _active_project_id(),
             **flags,
         }
+
+    @app.post("/api/runtime/stop")
+    async def runtime_stop(request: Request) -> JSONResponse:
+        try:
+            payload = await request.json()
+        except Exception:
+            payload = {}
+        if not isinstance(payload, dict) or payload.get("confirm") is not True:
+            raise HTTPException(status_code=400, detail="confirm required")
+        interrupt = bool(payload.get("interrupt"))
+        from backlot.runner import stop_runner
+        from lib.board_produce import busy_project_ids
+
+        busy = await asyncio.to_thread(lambda: busy_project_ids(projects_dir=PROJECTS_DIR))
+        if busy and not interrupt:
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": "producing",
+                    "friendly_zh": (
+                        "正在出片，不能退出看板。成片完成或失败后再退出，以免中断生成。"
+                    ),
+                    "busy_projects": busy,
+                },
+            )
+        await asyncio.to_thread(stop_runner)
+        schedule_server_exit()
+        return JSONResponse(
+            {
+                "ok": True,
+                "friendly_zh": "看板即将退出。本机网页服务与 runner 会关掉。",
+            }
+        )
 
     @app.post("/api/keys/refresh")
     async def keys_refresh() -> dict:
@@ -277,9 +357,46 @@ def create_app() -> FastAPI:
                 status_code=exc.http_status,
                 detail={"code": exc.code, "friendly_zh": exc.friendly_zh},
             ) from exc
+        spawn = _start_runner_for_project(str(result.get("project_id") or ""))
+        result = {**result, **spawn}
         _invalidate_summary(result["project_id"])
         hub.publish(result["project_id"])
         return JSONResponse(status_code=201, content=result)
+
+    @app.post("/api/library/continue-project")
+    async def continue_library_project(request: Request) -> JSONResponse:
+        from lib.library_create import LibraryCreateError, continue_library_project as continue_project
+
+        try:
+            payload = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="invalid JSON body")
+        if not isinstance(payload, dict):
+            raise HTTPException(status_code=400, detail="body must be a JSON object")
+        try:
+            result = await asyncio.to_thread(
+                continue_project,
+                project_id=str(payload.get("project_id") or ""),
+            )
+        except LibraryCreateError as exc:
+            raise HTTPException(
+                status_code=exc.http_status,
+                detail={"code": exc.code, "friendly_zh": exc.friendly_zh},
+            ) from exc
+        spawn = _start_runner_for_project(str(result.get("project_id") or ""))
+        if spawn.get("runner_started") is False and spawn.get("code") == "runner_busy":
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": spawn.get("code"),
+                    "friendly_zh": spawn.get("friendly_zh"),
+                    "active_project_id": spawn.get("active_project_id"),
+                },
+            )
+        result = {**result, **spawn}
+        _invalidate_summary(result["project_id"])
+        hub.publish(result["project_id"])
+        return JSONResponse(content=result)
 
     @app.get("/api/projects")
     async def projects() -> list:

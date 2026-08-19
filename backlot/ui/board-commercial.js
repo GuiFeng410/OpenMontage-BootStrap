@@ -2,6 +2,7 @@ import { el, fmtMoney, fmtMoneyCny, mediaURL, thumbURL } from "./lib.js";
 import { stageNeedsDecision } from "./board-rail.js";
 import { renderDecisionIntentPanel } from "./board-intent-panel.js";
 import { renderProductionTierPanel } from "./board-tier.js";
+import { RUNNER_GONE_ZH, runnerBoundToProject } from "./board-runtime.js";
 
 export function isCommercial(state) {
   return state?.pipeline?.pipeline_type === "bootstrap-commercial";
@@ -55,7 +56,7 @@ function renderFastTrackPause(pause) {
     el("div", { class: "commercial-chat-only" }, "暂停原因写在本页；可在看板继续选。"));
 }
 
-function renderRunnerStatus(status) {
+function renderRunnerStatus(status, bound = true) {
   if (!status || typeof status !== "object") return null;
   const phase = status.phase || "idle";
   const label = {
@@ -69,10 +70,13 @@ function renderRunnerStatus(status) {
     idle: "本机空闲",
   }[phase] || phase;
   return el("div", { class: "notice commercial-runner-status" },
-    el("div", { class: "commercial-runner-phase" }, label),
+    el("div", { class: "commercial-runner-phase" }, bound ? label : "已冻结"),
     status.friendly_zh
       ? el("div", { class: "commercial-runner-copy" }, status.friendly_zh)
       : null,
+    bound
+      ? null
+      : el("div", { class: "commercial-runner-copy" }, RUNNER_GONE_ZH),
     status.current_question
       ? el("div", { class: "commercial-pause-question" }, status.current_question)
       : null);
@@ -92,7 +96,38 @@ function renderFinalVideo(projectId, finalVideo) {
     }, "下载终稿"));
 }
 
+function renderPausedOrWaitNotice(title, prompt) {
+  return el("div", { class: "notice commercial-notice" },
+    el("span", { style: "font-size:calc(16px * var(--fs-scale))" }, "◈"),
+    el("div", { class: "commercial-decision-body" },
+      el("b", {}, title),
+      el("div", {
+        class: "commercial-decision-prompt",
+        style: "white-space:pre-line",
+      }, prompt)));
+}
+
+function isProducePaused(s) {
+  const runner = s.commercial?.runner_status || {};
+  const dec = s.commercial?.decision || {};
+  const stop = s.commercial?.board_stop || {};
+  return runner.phase === "paused" || dec.paused === true || stop.paused === true;
+}
+
 export function renderAwaitingNotice(s, context) {
+  if (isCommercial(s) && !s.commercial?.completed && !runnerBoundToProject(s)) {
+    return renderPausedOrWaitNotice("已冻结", RUNNER_GONE_ZH);
+  }
+  if (isCommercial(s) && isProducePaused(s)) {
+    const runner = s.commercial?.runner_status || {};
+    const dec = s.commercial?.decision || {};
+    return renderPausedOrWaitNotice(
+      "已暂停",
+      runner.friendly_zh
+        || dec.prompt_zh
+        || "制作已暂停。请看本页原因；当前没有在调用视频模型。",
+    );
+  }
   const awaiting = s.stages.find((x) => x.status === "awaiting_human") ||
     (isCommercial(s) ? s.stages.find(stageNeedsDecision) : null);
   if (!awaiting) {
@@ -100,28 +135,20 @@ export function renderAwaitingNotice(s, context) {
       || s.commercial?.board_stop?.producing_wait;
     if (isCommercial(s) && producing) {
       const dec = s.commercial?.decision || {};
-      return el("div", { class: "notice commercial-notice" },
-        el("span", { style: "font-size:calc(16px * var(--fs-scale))" }, "◈"),
-        el("div", { class: "commercial-decision-body" },
-          el("b", {}, "制作中"),
-          el("div", {
-            class: "commercial-decision-prompt",
-            style: "white-space:pre-line",
-          }, dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。大约需要几分钟。")));
+      return renderPausedOrWaitNotice(
+        "制作中",
+        dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。大约需要几分钟。",
+      );
     }
     return null;
   }
   if (isCommercial(s)) {
     const dec = s.commercial?.decision;
     if (dec?.producing_wait) {
-      return el("div", { class: "notice commercial-notice" },
-        el("span", { style: "font-size:calc(16px * var(--fs-scale))" }, "◈"),
-        el("div", { class: "commercial-decision-body" },
-          el("b", {}, "制作中"),
-          el("div", {
-            class: "commercial-decision-prompt",
-            style: "white-space:pre-line",
-          }, dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。大约需要几分钟。")));
+      return renderPausedOrWaitNotice(
+        "制作中",
+        dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。大约需要几分钟。",
+      );
     }
     const prompt = dec?.prompt_zh || "请在本页确认后进入下一步。";
     const examples = dec?.examples_zh;
@@ -136,7 +163,9 @@ export function renderAwaitingNotice(s, context) {
           timestamp: awaiting.timestamp,
         },
         storage: window.sessionStorage,
+        interactionIntents: s.commercial?.interaction_intents,
         onDraftChange: context.requestRender,
+        runnerBound: runnerBoundToProject(s),
       });
     }
     if (s.commercial?.final_video?.exists) {
@@ -237,7 +266,7 @@ function renderCommercialSummary(s) {
     ["视频模型", b.video_model_zh],
     ["评审模式", b.review_mode_zh],
     ["画面构成", b.motion_mix_zh],
-    ["实验预算", b.budget_cny != null ? fmtMoneyCny(b.budget_cny) : null],
+    ["整单上限", b.budget_cny != null ? fmtMoneyCny(b.budget_cny) : null],
     ["候选策略", b.candidate_mode_zh],
     ["风格", b.style_label_zh],
   ].filter(([, v]) => v);
@@ -376,9 +405,9 @@ function renderCommercialCostPanel(s) {
   const body = el("div", { class: "panel-body" },
     el("div", { class: "cost-line" }, "合计 API：", el("b", {}, fmtMoneyCny(cc.spent_cny))),
     cc.budget_cny != null ? el("div", { class: "cost-line" },
-      "实验预算：", fmtMoneyCny(cc.budget_cny),
+      "整单上限：", fmtMoneyCny(cc.budget_cny),
       cc.remaining_cny != null ? ` · 剩余约 ${fmtMoneyCny(cc.remaining_cny)}` : "") : null,
-    el("div", { class: "cost-note" }, "人民币为主；美元见技术详情"));
+    el("div", { class: "cost-note" }, "只报整单预估与上限，不按段拆价"));
   return el("div", { class: "panel" },
     el("div", { class: "panel-head" }, el("h2", {}, "费用卡"), el("span", { class: "meta" }, "cost_log")),
     body);
@@ -451,6 +480,11 @@ export function commercialFocusStage(s, selectedStage = null) {
     ? (s.stages || []).filter((x) => allowed.has(x.name))
     : (s.stages || []);
   if (selectedStage && (!allowed || allowed.has(selectedStage))) return selectedStage;
+  const overlayStage = s.commercial?.board_stop?.stage;
+  if (overlayStage && (!allowed || allowed.has(overlayStage))) {
+    const stop = s.commercial?.board_stop || {};
+    if (stop.paused || stop.producing_wait || stop.needs_user_decision) return overlayStage;
+  }
   const awaiting = stages.find((x) => x.status === "awaiting_human");
   if (awaiting) return awaiting.name;
   const active = stages.find((x) => x.status === "in_progress");
@@ -839,10 +873,9 @@ function renderCommercialBeatCard(s, beat, index = 0, context) {
         beat.shot_plan_zh ? el("div", {}, beat.shot_plan_zh) : null));
     }
   } else {
-    body.append(
-      el("div", { class: "cbc-method" }, formatCommercialMethod(beat)),
-      beat.angle_use ? el("div", { class: "cbc-sub" }, beat.angle_use) : null,
-      beat.ref ? el("div", { class: "cbc-sub" }, `参考 · ${beat.ref}`) : null);
+    body.append(el("div", { class: "cbc-method" }, formatCommercialMethod(beat)));
+    if (beat.angle_use) body.append(el("div", { class: "cbc-sub" }, beat.angle_use));
+    if (beat.ref) body.append(el("div", { class: "cbc-sub" }, `参考 · ${beat.ref}`));
     if (["sample", "segment", "draft"].includes(view)) {
       body.append(renderBeatGenerationDetails(beat));
     }
@@ -1176,7 +1209,10 @@ export function renderCommercialBoard(s, context) {
   }
   const intentStatus = renderIntentStatus(s.commercial?.interaction_intents);
   if (intentStatus) main.append(intentStatus);
-  const runner = renderRunnerStatus(s.commercial?.runner_status);
+  const runner = renderRunnerStatus(
+    s.commercial?.runner_status,
+    runnerBoundToProject(s),
+  );
   if (runner) main.append(runner);
   const pause = renderFastTrackPause(s.commercial?.fast_track_pause);
   if (pause) main.append(pause);
@@ -1221,4 +1257,3 @@ export function renderCommercialBoard(s, context) {
   }
   return el("div", { class: "board commercial-board" }, main, aside);
 }
-

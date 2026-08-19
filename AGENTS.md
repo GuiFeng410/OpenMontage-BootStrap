@@ -62,4 +62,4 @@
   - MCP：`read_install_state` / `scan_video_keys` / `snapshot_install_state` / `ensure_env_file`；`verify_ready` 通过后会写入
   - **不会随 git clone / pull 出现**（gitignore）。会在：02 `verify_ready`、库页成功创建、Backlot `serve` 启动时写入或刷新
   - **开口 / 网页创建前先读此文件。** `verify_ready` 为真 → 禁止再走安装话术，必须给看板网址；文件不存在但 `projects/` 已有 `project.json` → 已用过本仓，禁止再 clone，仍按 `verify_ready` 决定是否走 02；文件不存在且无项目 → 01/02
-  - 看板：`python -m backlot open` 会拉起本机 runner（消费面板 intent 与结束导出；不调付费 API）
+  - 看板：`python -m backlot open` 只开网页服务看库；创建或库页「继续这个项目」才起唯一 runner（消费面板 intent 与结束导出；不调付费 API）

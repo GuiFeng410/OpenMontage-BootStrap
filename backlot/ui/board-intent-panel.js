@@ -15,6 +15,9 @@ import {
   buildDecisionIntent,
   submitDecisionIntent,
 } from "./board-intent-submit.js";
+import { RUNNER_GONE_ZH } from "./board-runtime.js";
+
+const locallySubmitted = new Map();
 
 function primarySubmitLabel(stage) {
   return stage === "assets_gate" ? "开始出片" : "进入下一步";
@@ -58,6 +61,7 @@ function renderChoiceRow({
   decisionKey,
   options,
   stale,
+  locked,
 }) {
   const row = el("div", { class: "gap-choice-row" });
   for (const option of options) {
@@ -71,14 +75,14 @@ function renderChoiceRow({
       ].filter(Boolean).join(" "),
       "data-option-id": option.id,
       "aria-pressed": selected ? "true" : "false",
-      disabled: stale || option.disabled ? "" : null,
+      disabled: stale || locked || option.disabled ? "" : null,
     },
     el("span", { class: "commercial-decision-option-head" },
       el("b", {}, option.label_zh)),
     option.description_zh
       ? el("span", { class: "commercial-decision-option-copy" }, option.description_zh)
       : null);
-    if (!stale && !option.disabled) {
+    if (!stale && !locked && !option.disabled) {
       bindOptionButton(button, {
         draftRef,
         storage,
@@ -98,6 +102,7 @@ function renderGapPlan({
   storage,
   onDraftChange,
   stale,
+  locked,
 }) {
   if (!gapPlan || typeof gapPlan !== "object") return null;
   const block = el("div", { class: "gap-plan" });
@@ -143,6 +148,7 @@ function renderGapPlan({
             ? "还没有可复用的已有图。"
             : action.description_zh,
       })),
+      locked,
     }));
     if (choice === "reuse" && reusePaths.length) {
       card.append(el("div", { class: "gap-plan-sublabel" }, "复用哪张"));
@@ -156,6 +162,7 @@ function renderGapPlan({
           id: path,
           label_zh: path,
         })),
+        locked,
       }));
     }
     block.append(card);
@@ -181,6 +188,7 @@ function renderGapPlan({
           disabled: !item.available,
           description_zh: item.available ? "" : "未填入 Key",
         })),
+        locked,
       })));
   }
   return block;
@@ -215,7 +223,9 @@ export function renderDecisionIntentPanel({
   stage,
   decision,
   storage,
+  interactionIntents = [],
   onDraftChange,
+  runnerBound = true,
 }) {
   const item = currentDecision(decision, stage);
   const revision = revisionFor({ projectId, stage, decision });
@@ -224,11 +234,26 @@ export function renderDecisionIntentPanel({
   let draft = inspection.draft || createDraft(identity);
   const stale = ["stale", "corrupt"].includes(inspection.status);
   const panelId = `commercial-intent-panel:${projectId}:${stage}`;
+  const submissionKey = `${projectId}:${stage}`;
+  const activeIntent = (Array.isArray(interactionIntents) ? interactionIntents : [])
+    .find((entry) => entry?.stage === stage
+      && entry?.revision === revision
+      && ["pending", "planned", "approved", "applied"].includes(entry?.status));
+  const submissionLocked = Boolean(activeIntent) || locallySubmitted.has(submissionKey);
+  const localSubmissionCopy = locallySubmitted.get(submissionKey) || "";
+  const submissionCopy = activeIntent?.status === "planned"
+    ? "选择已汇总，本机正在应用，请留在本页。"
+    : activeIntent?.status === "applied"
+      ? "选择已应用，正在进入下一步，请留在本页。"
+      : localSubmissionCopy || (submissionLocked
+        ? "选择已提交，等待本机处理，请留在本页。"
+        : "");
   const feedback = el("div", {
     class: "commercial-intent-feedback",
     role: "status",
     "aria-live": "polite",
   });
+  feedback.textContent = submissionCopy;
   let summary = null;
 
   const updateSummary = () => {
@@ -252,7 +277,7 @@ export function renderDecisionIntentPanel({
       class: classNames,
       "data-option-id": option.id ?? option.option_id ?? "",
       "aria-pressed": selected ? "true" : "false",
-      disabled: stale ? "" : null,
+      disabled: stale || submissionLocked ? "" : null,
     },
     el("span", { class: "commercial-decision-option-head" },
       el("b", {}, option.label_zh || option.label || option.id || "选项")),
@@ -262,16 +287,18 @@ export function renderDecisionIntentPanel({
     option.impact_zh
       ? el("span", { class: "commercial-decision-option-impact" }, `影响：${option.impact_zh}`)
       : null);
-    button.addEventListener("click", () => {
-      draft = selectOption(draft, item.key, option);
-      saveDraft(storage, draft);
-      if (typeof onDraftChange === "function") onDraftChange(draft);
-      const optionId = String(option.id ?? option.option_id ?? "");
-      const panelRoot = document.getElementById(panelId);
-      const replacement = [...(panelRoot?.querySelectorAll(".commercial-decision-option") || [])]
-        .find((node) => node.dataset.optionId === optionId);
-      if (replacement) replacement.focus();
-    });
+    if (!submissionLocked) {
+      button.addEventListener("click", () => {
+        draft = selectOption(draft, item.key, option);
+        saveDraft(storage, draft);
+        if (typeof onDraftChange === "function") onDraftChange(draft);
+        const optionId = String(option.id ?? option.option_id ?? "");
+        const panelRoot = document.getElementById(panelId);
+        const replacement = [...(panelRoot?.querySelectorAll(".commercial-decision-option") || [])]
+          .find((node) => node.dataset.optionId === optionId);
+        if (replacement) replacement.focus();
+      });
+    }
     optionList.append(button);
   }
 
@@ -287,6 +314,7 @@ export function renderDecisionIntentPanel({
     storage,
     onDraftChange: handleDraftChange,
     stale,
+    locked: submissionLocked,
   });
   draft = draftRef.draft;
 
@@ -335,6 +363,7 @@ export function renderDecisionIntentPanel({
       rows: "3",
       placeholder: `选填意见。不填也可以直接${primarySubmitLabel(stage)}。`,
       "aria-label": "选填意见",
+      disabled: submissionLocked ? "" : null,
       oninput: (event) => {
         draft = setDraftNote(draft, event.currentTarget.value);
         saveDraft(storage, draft);
@@ -362,14 +391,18 @@ export function renderDecisionIntentPanel({
     const submitButton = el("button", {
       type: "button",
       class: "commercial-intent-submit",
-      disabled: ready ? null : "",
+      disabled: ready && !submissionLocked ? null : "",
       onclick: async () => {
         if (!gapPlanReady(draft, decision?.gap_plan)) {
-          feedback.textContent = "请为每个缺口选一项；图生图还要选全片共用的生图模型。";
+          feedback.textContent = "请先选择本步处理方式；如有素材缺口，还要逐项选择补齐方式。";
           return;
         }
         submitButton.disabled = true;
         try {
+          if (!runnerBound) {
+            feedback.textContent = RUNNER_GONE_ZH;
+            return;
+          }
           const intent = await buildDecisionIntent({
             projectId,
             stage,
@@ -377,16 +410,24 @@ export function renderDecisionIntentPanel({
             summary: summary.value,
           });
           const result = await submitDecisionIntent({ intent });
-          feedback.textContent = result.ok
-            ? submittedFeedback(stage)
-            : "提交失败，请留在本页重试。";
+          if (result.ok) {
+            const successCopy = submittedFeedback(stage);
+            locallySubmitted.set(submissionKey, successCopy);
+            feedback.textContent = successCopy;
+            submitButton.textContent = "已提交，等待处理";
+            if (typeof onDraftChange === "function") onDraftChange(draft);
+          } else {
+            feedback.textContent = "提交失败，请留在本页重试。";
+          }
         } catch {
           feedback.textContent = "提交失败，请留在本页重试。";
         } finally {
-          submitButton.disabled = false;
+          submitButton.disabled = locallySubmitted.has(submissionKey);
         }
       },
-    }, ready ? primarySubmitLabel(stage) : "请先完成缺口选择");
+    }, submissionLocked
+      ? "已提交，等待处理"
+      : ready ? primarySubmitLabel(stage) : "请先完成本步选择");
     body.append(el("div", { class: "commercial-intent-basket" },
       el("div", { class: "commercial-intent-basket-head" },
         el("b", {}, "本步确认"),

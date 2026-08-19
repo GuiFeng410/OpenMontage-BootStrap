@@ -42,6 +42,21 @@ test("commercial board exposes stable interfaces", () => {
   assert.equal(typeof renderCommercialBoard, "function");
 });
 
+test("commercial content follows a paused board stop over stale checkpoints", () => {
+  const state = {
+    commercial: {
+      confirm_stop_ids: ["sample_review", "segment_build", "draft_review"],
+      board_stop: {stage: "segment_build", paused: true},
+    },
+    stages: [
+      {name: "sample_review", status: "in_progress"},
+      {name: "segment_build", status: "pending"},
+      {name: "draft_review", status: "pending"},
+    ],
+  };
+  assert.equal(commercialContentView(state), "segment");
+});
+
 test("replay module exposes controller factory", () => {
   assert.equal(typeof createReplayController, "function");
   const controller = createReplayController({ rerender() {} });

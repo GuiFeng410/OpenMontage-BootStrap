@@ -2210,9 +2210,63 @@ def _attach_commercial_board_echo(project_dir: Path, commercial: dict[str, Any])
     commercial["exported_at"] = marker.get("exported_at")
     commercial["completed"] = is_completed(marker)
     commercial["runner_status"] = read_runner_status(project_dir)
+    try:
+        from backlot.runner import active_project_id, runner_alive
+
+        alive = bool(runner_alive())
+        active = str(active_project_id() or "")
+        commercial["runner_bind"] = {
+            "alive": alive,
+            "active_project_id": active,
+            "bound": alive and active == project_dir.name,
+        }
+    except Exception:
+        commercial["runner_bind"] = {
+            "alive": False,
+            "active_project_id": "",
+            "bound": False,
+        }
+    run_error = None
+    try:
+        from lib.board_production_run import (
+            ProductionRunError,
+            read_produce_job,
+            read_production_run,
+        )
+
+        commercial["production_run"] = read_production_run(project_dir)
+        commercial["produce_job"] = read_produce_job(project_dir)
+    except ProductionRunError:
+        run_error = {
+            "code": "run_state_invalid",
+            "friendly_zh": "生产状态文件无效，已暂停且不会自动重试。",
+        }
+        commercial["production_run"] = None
+        commercial["produce_job"] = None
+    commercial["production_run_error"] = run_error
     stop = marker.get("board_stop") if isinstance(marker.get("board_stop"), dict) else None
     commercial["board_stop"] = stop
-    if stop and stop.get("producing_wait") and not commercial.get("decision"):
+    runner = commercial.get("runner_status") if isinstance(commercial.get("runner_status"), dict) else {}
+    paused = bool(stop and stop.get("paused")) or str(runner.get("phase") or "") == "paused"
+    if stop and paused:
+        commercial["decision"] = {
+            "stage": stop.get("stage") or "delivery_signoff",
+            "title_zh": stop.get("decision_title_zh") or "已暂停",
+            "prompt_zh": stop.get("decision_prompt_zh") or runner.get("friendly_zh") or "",
+            "options": [],
+            "producing_wait": False,
+            "paused": True,
+        }
+    elif run_error and not commercial.get("final_video"):
+        commercial["decision"] = {
+            "stage": (stop or {}).get("stage") or "delivery_signoff",
+            "title_zh": "已暂停",
+            "prompt_zh": run_error["friendly_zh"],
+            "options": [],
+            "producing_wait": False,
+            "paused": True,
+        }
+    elif stop and stop.get("producing_wait") and not commercial.get("decision"):
         commercial["decision"] = {
             "stage": stop.get("stage") or "delivery_signoff",
             "title_zh": stop.get("decision_title_zh") or "制作中",
@@ -2582,6 +2636,7 @@ def summarize_project(project_dir: Path) -> dict[str, Any]:
         if not s.get("undeclared") and (not allowed or s["name"] in allowed)
     ]
     brief = commercial.get("brief_summary") or {}
+    lifecycle = str(commercial.get("lifecycle_status") or "")
     return {
         "project_id": state["project_id"],
         "title": state["title"],
@@ -2604,6 +2659,9 @@ def summarize_project(project_dir: Path) -> dict[str, Any]:
         "user_stage_zh": commercial.get("user_stage_zh"),
         "production_tier_zh": brief.get("production_tier"),
         "imported_asset_count": brief.get("imported_asset_count"),
+        "lifecycle_status": lifecycle,
+        "completed": bool(commercial.get("completed")),
+        "export_path": str(commercial.get("export_path") or ""),
     }
 
 

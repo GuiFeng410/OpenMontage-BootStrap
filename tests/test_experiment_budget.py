@@ -145,6 +145,38 @@ def test_set_profile_persists_experiment_fields(sandbox: Path) -> None:
     assert marker["production_profile"]["motion_mix"] == "1:2"
 
 
+def test_set_profile_preserves_library_locked_choices(sandbox: Path) -> None:
+    produce_init_project("exp-locked", "Exp Locked", "bootstrap-commercial")
+    marker_path = sandbox / "exp-locked" / "project.json"
+    marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    marker["production_profile"] = {
+        "production_tier": "heavy",
+        "review_mode": "normal",
+        "review_mode_preset": "minimal",
+        "video_channel": "agnes",
+        "video_model": "agnes-video-v2.0",
+        "ai_share_pct": 100,
+    }
+    marker_path.write_text(
+        json.dumps(marker, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+
+    result = produce_set_production_profile(
+        "exp-locked",
+        "heavy",
+        api_budget_tier="micro",
+        budget_cny="1",
+        motion_mix="0:1",
+    )
+
+    profile = result["production_profile"]
+    assert profile["budget_cny"] == 1
+    assert profile["review_mode_preset"] == "minimal"
+    assert profile["video_channel"] == "agnes"
+    assert profile["video_model"] == "agnes-video-v2.0"
+
+
 def test_budget_snapshot_gate(sandbox: Path) -> None:
     produce_init_project("exp2", "Exp2", "animated-explainer")
     produce_set_production_profile("exp2", "heavy", api_budget_tier="economy", budget_cny="5")

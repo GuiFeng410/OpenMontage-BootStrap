@@ -340,7 +340,12 @@ test("gapPlanReady requires four-way choices before continue", () => {
     gaps: [{ beat_id: "B02" }],
   };
   const empty = baseDraft();
-  assert.equal(gapPlanReady(empty, gapPlan), true);
+  assert.equal(gapPlanReady(empty, gapPlan), false);
+  const revise = selectOption(empty, "brief_locked::current", {
+    id: "revise",
+    label_zh: "需要修改",
+  });
+  assert.equal(gapPlanReady(revise, gapPlan), true);
   const continueOnly = selectOption(empty, "brief_locked::current", {
     id: "continue",
     label_zh: "同意，进入下一步",
@@ -376,4 +381,14 @@ test("gapPlanReady requires four-way choices before continue", () => {
     label_zh: "Agnes 生图",
   });
   assert.equal(gapPlanReady(shared, twoGaps), true);
+});
+
+test("gapPlanReady requires a current-stage choice when there are no gaps", () => {
+  const empty = baseDraft();
+  assert.equal(gapPlanReady(empty, { gaps: [] }), false);
+  const continued = selectOption(empty, "assets_gate::current", {
+    id: "continue",
+    label_zh: "开始出片",
+  });
+  assert.equal(gapPlanReady(continued, { gaps: [] }), true);
 });

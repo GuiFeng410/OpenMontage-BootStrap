@@ -291,10 +291,18 @@ def apply_project_export(
         project_id,
         {
             "phase": "exported",
-            "friendly_zh": f"已结束并导出到 {export_rel}。这个项目不会再自动续做。",
+            "friendly_zh": f"已结束并导出到 {export_rel}。请回库页查看。这个项目不会再自动续做。",
             "export_path": export_rel,
+            "library_path": "/",
+            "stop_runner": True,
         },
     )
+    try:
+        from backlot.runner import stop_runner
+
+        stop_runner()
+    except Exception:
+        pass
     return {
         "ok": True,
         "already_completed": False,
@@ -302,5 +310,6 @@ def apply_project_export(
         "intent_id": applied["intent_id"],
         "export_path": export_rel,
         "source_path": str(FINAL_REL).replace("\\", "/"),
-        "friendly_zh": f"已拷贝成片到 {export_rel}，项目已结束。",
+        "library_path": "/",
+        "friendly_zh": f"已拷贝成片到 {export_rel}，项目已结束。请回库页。",
     }

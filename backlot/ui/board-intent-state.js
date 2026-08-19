@@ -118,12 +118,13 @@ export function selectedOptionId(draft, decisionKey) {
 }
 
 export function gapPlanReady(draft, gapPlan) {
-  const continuePicked = (draft?.selections || []).some(
+  const currentChoice = (draft?.selections || []).find(
     (item) => String(item.decision_key || "").endsWith("::current")
-      && item.option_id === "continue",
   );
+  if (!currentChoice) return false;
+  if (currentChoice.option_id !== "continue") return true;
   const gaps = Array.isArray(gapPlan?.gaps) ? gapPlan.gaps : [];
-  if (!continuePicked || !gaps.length) return true;
+  if (!gaps.length) return true;
   for (const gap of gaps) {
     const beatId = gap.beat_id;
     const choice = selectedOptionId(draft, `gap::${beatId}`);

@@ -11,7 +11,8 @@ import {
   renderStageDrawer, renderStageRail, stageLabel,
 } from "/ui/board-rail.js";
 import { bindRerender, renderEditTab } from "/ui/board-edit.js";
-import { renderExportButton } from "/ui/board-export.js";
+import { renderExportButton, maybeRedirectAfterExport } from "/ui/board-export.js";
+import { renderQuitButton } from "/ui/board-runtime.js";
 import {
   commercialFocusStage, isCommercial, renderAwaitingNotice, renderCommercialBoard,
 } from "/ui/board-commercial.js";
@@ -180,6 +181,7 @@ function renderSlate(s) {
       onclick: () => { context.editOpen = !context.editOpen; render(); },
     }, "✂ 剪辑"),
     renderExportButton(s),
+    renderQuitButton(s),
     renderThemeToggle(),
     liveEl,
     cost,
@@ -610,6 +612,7 @@ function renderNoState(s) {
 function render() {
   if (!context.state) return;
   const s = replayController.viewFor(context.state, context.editOpen);
+  if (maybeRedirectAfterExport(s)) return;
   document.title = `Backlot — ${s.title}`;
   document.body.classList.toggle("first", context.firstPaint);
   context.firstPaint = false;

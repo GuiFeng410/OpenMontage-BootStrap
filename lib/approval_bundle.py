@@ -227,6 +227,11 @@ def _build_approval_payload(
     local_provider = "local" if allow_local_default else ""
     local_model = "deterministic" if allow_local_default else ""
     local_runtime = "remotion" if allow_local_default else ""
+    # Backlot commercial projects use the same deterministic default as
+    # board_produce.build_compose_bundle when the library did not persist one.
+    commercial_runtime = (
+        "remotion" if marker.get("pipeline_type") == "bootstrap-commercial" else ""
+    )
     light_runtime = (
         profile.get("light_presentation")
         if profile.get("light_presentation") in _RUNTIME_IDS
@@ -270,6 +275,7 @@ def _build_approval_payload(
         profile.get("render_runtime"),
         light_runtime,
         local_runtime,
+        commercial_runtime,
     )
     missing = [
         name

@@ -1,4 +1,5 @@
 import { el, fmtAgo, getJSON, subscribe, thumbURL } from "/ui/lib.js";
+import { renderQuitButton } from "/ui/board-runtime.js";
 import {
   buildCreateProductVideoPrompt,
   copyCreatePrompt,
@@ -49,6 +50,7 @@ function renderThemeToggle() {
 }
 
 applyTheme(currentTheme);
+document.getElementById("liveBadge").before(renderQuitButton());
 document.getElementById("liveBadge").before(renderThemeToggle());
 
 function miniRail(states) {
@@ -334,10 +336,14 @@ function card(p) {
     poster.append(el("span", { class: "lp-live" }, `◈ ${LABELS["AWAITING YOU"]}`));
   }
 
+  const completed = Boolean(p.completed || p.lifecycle_status === "completed");
+  const stopLine = p.user_stage_zh
+    ? (completed ? "已结束并导出" : `当前停点：${p.user_stage_zh}`)
+    : (completed ? "已结束并导出" : `编号 ${p.project_id}`);
   const meta = el("div", { class: "lb-meta" },
     el("span", { class: "chip" }, p.pipeline_type || LABELS.unknown),
     p.review_mode_zh ? el("span", { class: "chip" }, p.review_mode_zh) : null,
-    p.user_stage_zh ? el("span", { class: "chip" }, p.user_stage_zh) : null,
+    el("span", { class: "chip" }, stopLine),
     p.production_tier_zh ? el("span", { class: "chip" }, `制作档 ${p.production_tier_zh}`) : null,
     p.imported_asset_count ? el("span", { class: "chip" }, `${p.imported_asset_count} 个素材`) : null,
     p.scene_count ? el("span", { class: "chip" }, `${p.scene_count} ${LABELS.scenes}`) : null,
@@ -346,7 +352,11 @@ function card(p) {
   );
 
   const staticSuffix = new URLSearchParams(location.search).has("static") ? "?static=1" : "";
-  return el("a", { class: `lib-card${p.live ? " live-card" : ""}`, href: `/p/${p.project_id}${staticSuffix}`, style: "text-decoration:none;color:inherit" },
+  const href = `/p/${p.project_id}${staticSuffix}`;
+  const node = el("div", {
+    class: `lib-card${p.live ? " live-card" : ""}`,
+    style: "text-decoration:none;color:inherit;cursor:pointer",
+  },
     poster,
     el("div", { class: "lib-body" },
       el("h3", {}, p.title || p.project_id),
@@ -354,6 +364,48 @@ function card(p) {
       p.stage_states.length ? miniRail(p.stage_states) : null,
     ),
   );
+  if (completed && p.export_path) {
+    const download = el("a", {
+      class: "chip",
+      href: `/media/${encodeURIComponent(p.project_id)}/${String(p.export_path).split("/").map(encodeURIComponent).join("/")}`,
+      download: "final.mp4",
+      style: "margin:8px 12px 12px;display:inline-block",
+    }, "下载成片");
+    download.addEventListener("click", (event) => event.stopPropagation());
+    node.append(download);
+  }
+  if (completed) {
+    node.addEventListener("click", () => {
+      window.location.href = href;
+    });
+  } else {
+    node.addEventListener("click", async () => {
+      const ok = window.confirm(
+        `继续这个项目？\n编号：${p.project_id}\n${stopLine}\n将占用本机唯一 runner，从当前停点接着做，不会新建，也不会自动开烧。`,
+      );
+      if (!ok) return;
+      try {
+        const response = await fetch("/api/library/continue-project", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ project_id: p.project_id }),
+        });
+        const data = await response.json().catch(() => ({}));
+        const detail = data.detail;
+        const message = (detail && detail.friendly_zh)
+          || data.friendly_zh
+          || "无法继续这个项目";
+        if (!response.ok) {
+          window.alert(message);
+          return;
+        }
+        window.location.href = `${data.board_path || href}`;
+      } catch {
+        window.alert("无法继续这个项目。请回聊天让 Agent 停 runner 后再试。");
+      }
+    });
+  }
+  return node;
 }
 
 async function render() {

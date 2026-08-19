@@ -30,6 +30,9 @@ DECISION_STALE_KEYS = (
     "decision_options",
     "recommendation_zh",
     "examples_zh",
+    "paused",
+    "pause_code",
+    "producing_wait",
 )
 
 
@@ -50,6 +53,76 @@ LIGHT_COMPOSE_WAIT_ZH = (
 DELIVERY_READY_ZH = (
     "成片已就绪，请在本页预览播放。确认后点顶栏「结束并导出项目」。不必回聊天。"
 )
+
+_REVIEW_STAGE_ARTIFACT = {
+    "sample_review": "sample_reel",
+    "segment_build": "review_overview",
+    "draft_review": "full_draft_pro",
+    "final_compose": "final_review",
+}
+_REVIEW_VIDEO_EXTENSIONS = frozenset({".mp4", ".webm", ".mov", ".m4v", ".mkv"})
+
+
+def _project_video_ready(project: Path, raw_path: Any) -> bool:
+    rel = str(raw_path or "").strip()
+    if not rel or Path(rel).is_absolute() or Path(rel).suffix.lower() not in _REVIEW_VIDEO_EXTENSIONS:
+        return False
+    candidate = (project / rel).resolve()
+    try:
+        candidate.relative_to(project.resolve())
+    except ValueError:
+        return False
+    return candidate.is_file() and candidate.stat().st_size > 0
+
+
+def review_stage_evidence(
+    project_id: str,
+    stage: str,
+    *,
+    projects_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Return whether a review stop has real canonical media to approve."""
+    artifact_name = _REVIEW_STAGE_ARTIFACT.get(stage)
+    if not artifact_name:
+        return {"ready": True, "stage": stage}
+    project = projects_root(projects_dir) / project_id
+    artifact = project / "artifacts" / f"{artifact_name}.json"
+    try:
+        data = json.loads(artifact.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        data = {}
+    ready = False
+    if artifact_name == "sample_reel":
+        beats = data.get("beat_ids") if isinstance(data, dict) else None
+        ready = bool(isinstance(beats, list) and beats) and _project_video_ready(
+            project, data.get("path")
+        )
+    elif artifact_name == "review_overview":
+        overview = data.get("overview") if isinstance(data, dict) else None
+        ready = bool(isinstance(overview, list) and overview) and all(
+            isinstance(item, dict)
+            and _project_video_ready(project, item.get("output_path"))
+            for item in overview
+        )
+    elif artifact_name == "full_draft_pro":
+        ready = isinstance(data, dict) and _project_video_ready(project, data.get("path"))
+    elif artifact_name == "final_review":
+        ready = (
+            isinstance(data, dict)
+            and data.get("status") == "pass"
+            and _project_video_ready(project, data.get("output_path"))
+        )
+    label = STAGE_LABEL_ZH.get(stage, stage)
+    return {
+        "ready": ready,
+        "stage": stage,
+        "artifact": artifact_name,
+        "friendly_zh": (
+            f"「{label}」还没有可评审的视频证据。当前未创建制作任务，也没有调用视频模型。"
+            "普通/专业网页自动制作尚未接线；请在聊天中按 04-produce 继续，"
+            "真实证据写回看板后即可在本页确认。"
+        ),
+    }
 
 
 def producing_wait_copy_zh(
@@ -139,6 +212,20 @@ def stop_card_metadata(
     projects_dir: Path | None = None,
 ) -> dict[str, Any]:
     label = STAGE_LABEL_ZH.get(stage, stage)
+    if stage in _REVIEW_STAGE_ARTIFACT and project_id:
+        evidence = review_stage_evidence(
+            project_id, stage, projects_dir=projects_dir
+        )
+        if not evidence["ready"]:
+            return {
+                "needs_user_decision": False,
+                "producing_wait": False,
+                "paused": True,
+                "pause_code": "review_evidence_missing",
+                "decision_title_zh": "已暂停",
+                "decision_prompt_zh": evidence["friendly_zh"],
+                "decision_options": [],
+            }
     prompt = f"请确认「{label}」后进入下一步。"
     if stage == "assets_gate":
         prompt = "请确认素材后开始出片。成片将出现在交付确认页。"

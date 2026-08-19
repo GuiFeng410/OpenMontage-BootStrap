@@ -10,16 +10,19 @@ import lib.board_advance as board_advance
 import lib.board_runner as runner
 import lib.interaction_intents as ii
 import lib.project_export as pe
+from lib.checkpoint import CheckpointValidationError
 from tests.lib.test_project_export import _export_intent, _write_project
 
 
 def _patch_projects(monkeypatch, root: Path) -> None:
     import lib.board_produce as board_produce
+    import lib.library_create as library_create
 
     monkeypatch.setattr(ii, "PROJECTS_DIR", root)
     monkeypatch.setattr(pe, "PROJECTS_DIR", root)
     monkeypatch.setattr(runner, "PROJECTS_DIR", root)
     monkeypatch.setattr(board_produce, "PROJECTS_DIR", root)
+    monkeypatch.setattr(library_create, "remember_machine_seen", lambda **_kwargs: {})
     monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(root))
 
 
@@ -32,6 +35,7 @@ def test_tick_exports_when_final_exists(monkeypatch, tmp_path):
     project = _write_project(root)
     (project / "renders" / "final.mp4").write_bytes(b"film")
     _patch_projects(monkeypatch, root)
+    monkeypatch.setattr("backlot.runner.stop_runner", lambda **_k: True)
     ii.create_or_conflict("demo-pro", _export_intent())
 
     result = runner.tick("demo-pro", append_decision=lambda *_: {})
@@ -61,6 +65,143 @@ def test_tick_seeds_stop_after_start_signal(monkeypatch, tmp_path):
     )
     options = checkpoint["metadata"]["decision_options"]
     assert all("recommended" not in item for item in options)
+
+
+def test_list_pending_retries_planned_intent(monkeypatch, tmp_path):
+    from tests.lib.test_approval_bundle import _decision_intent
+
+    root = tmp_path / "projects"
+    project = _write_project(root)
+    _patch_projects(monkeypatch, root)
+    intent = _decision_intent(status="planned")
+    intents_dir = project / "intents"
+    intents_dir.mkdir(parents=True, exist_ok=True)
+    (intents_dir / "decision-001.json").write_text(
+        json.dumps(intent, ensure_ascii=False),
+        encoding="utf-8",
+    )
+
+    listed = runner._list_pending("demo-pro")
+
+    assert [item["status"] for item in listed] == ["planned"]
+
+
+def test_tick_all_without_project_id_does_not_scan(monkeypatch, tmp_path):
+    root = tmp_path / "projects"
+    _write_project(root, project_id="bad-project")
+    _write_project(root, project_id="good-project")
+    _patch_projects(monkeypatch, root)
+    called = []
+    monkeypatch.setattr(
+        runner,
+        "tick",
+        lambda project_id, **_kwargs: called.append(project_id) or {"project_id": project_id},
+    )
+
+    result = runner.tick_all(append_decision=lambda *_: {})
+
+    assert result["count"] == 0
+    assert result["skipped"] is True
+    assert result["reason"] == "no_project_id"
+    assert called == []
+
+
+def test_tick_all_only_ticks_requested_project(monkeypatch, tmp_path):
+    root = tmp_path / "projects"
+    _write_project(root, project_id="bad-project")
+    _write_project(root, project_id="good-project")
+    _patch_projects(monkeypatch, root)
+
+    def fake_tick(project_id, **_kwargs):
+        if project_id == "bad-project":
+            raise CheckpointValidationError("missing=['beat_06']")
+        return {"project_id": project_id, "phase": runner.PHASE_IDLE}
+
+    monkeypatch.setattr(runner, "tick", fake_tick)
+
+    result = runner.tick_all(append_decision=lambda *_: {}, project_id="good-project")
+
+    assert result["count"] == 1
+    assert result["projects"][0] == {
+        "project_id": "good-project",
+        "phase": runner.PHASE_IDLE,
+    }
+
+
+def test_record_assets_authorization_is_persisted_and_idempotent(
+    monkeypatch, tmp_path
+):
+    root = tmp_path / "projects"
+    project = _write_project(
+        root,
+        production_profile={
+            "review_mode_preset": "minimal",
+            "production_tier": "heavy",
+            "provider": "agnes",
+        },
+    )
+    _patch_projects(monkeypatch, root)
+
+    assert runner._record_stage_authorization(
+        "demo-pro", "assets_gate", "assets-approve-1", "auth-r1"
+    ) is True
+    assert runner._record_stage_authorization(
+        "demo-pro", "assets_gate", "assets-approve-1", "auth-r1"
+    ) is False
+
+    run = json.loads((project / "production_run.json").read_text(encoding="utf-8"))
+    assert run["authorization_refs"] == [
+        {
+            "authorization_revision": "auth-r1",
+            "scope": "batch",
+            "intent_ref": "intents/assets-approve-1.json",
+            "decision_ref": "",
+            "created_at": run["authorization_refs"][0]["created_at"],
+        }
+    ]
+    assert run["stage_results"]["sample_review"]["status"] == "not_required"
+    assert run["stage_results"]["draft_review"]["status"] == "not_required"
+    assert not (project / "checkpoint_sample_review.json").exists()
+    assert not (project / "checkpoint_draft_review.json").exists()
+
+
+def test_recover_applied_assets_authorization(monkeypatch, tmp_path):
+    root = tmp_path / "projects"
+    project = _write_project(
+        root,
+        production_profile={"review_mode_preset": "minimal"},
+    )
+    _patch_projects(monkeypatch, root)
+    intent = project / "intents" / "assets-applied.json"
+    intent.parent.mkdir(parents=True, exist_ok=True)
+    intent.write_text(
+        json.dumps(
+            {
+                "intent_type": "decision",
+                "intent_id": "assets-applied",
+                "project_id": "demo-pro",
+                "stage": "assets_gate",
+                "revision": "auth-r2",
+                "status": "applied",
+                "payload": {
+                    "selections": [
+                        {
+                            "decision_key": "assets_gate::current",
+                            "option_id": "continue",
+                        }
+                    ]
+                },
+                "created_at": "2026-08-19T00:00:00+00:00",
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+    assert runner._recover_applied_authorization("demo-pro") is True
+    assert runner._recover_applied_authorization("demo-pro") is False
+    run = json.loads((project / "production_run.json").read_text(encoding="utf-8"))
+    assert run["authorization_refs"][0]["authorization_revision"] == "auth-r2"
 
 
 def test_tick_advances_to_next_stop_after_apply(monkeypatch, tmp_path):
@@ -258,6 +399,98 @@ def test_tick_recovers_stuck_brief_locked(monkeypatch, tmp_path):
     assert overlay["board_stop"]["stage"] == "assets_gate"
 
 
+def test_tick_recovers_brief_locked_without_disk_artifacts(monkeypatch, tmp_path):
+    from PIL import Image
+
+    root = tmp_path / "projects"
+    project = _write_project(
+        root,
+        production_profile={
+            "review_mode_preset": "minimal",
+            "imported_asset_count": 3,
+            "duration_seconds": 10,
+        },
+    )
+    _patch_projects(monkeypatch, root)
+    img = project / "assets" / "images" / "hero.png"
+    img.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (800, 800), (180, 40, 40)).save(img)
+    for name, color in (("side.png", (40, 180, 40)), ("detail.png", (40, 40, 180))):
+        Image.new("RGB", (800, 800), color).save(project / "assets" / "images" / name)
+    from lib.checkpoint import merge_write_checkpoint
+
+    merge_write_checkpoint(
+        root,
+        "demo-pro",
+        "brief_locked",
+        "in_progress",
+        {},
+        pipeline_type="bootstrap-commercial",
+        human_approval_required=True,
+        metadata_patch={"needs_user_decision": True},
+    )
+    board_advance.write_stop_card("demo-pro", "brief_locked", projects_dir=root)
+    intent_path = project / "intents" / "dec-applied-no-artifacts.json"
+    intent_path.parent.mkdir(parents=True, exist_ok=True)
+    intent_path.write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "intent_type": "approval_bundle",
+                "intent_id": "dec-applied-no-artifacts",
+                "project_id": "demo-pro",
+                "stage": "brief_locked",
+                "revision": "r1",
+                "summary": "applied",
+                "summary_sha256": "abc",
+                "payload": {
+                    "selections": [
+                        {
+                            "decision_key": "brief_locked::current",
+                            "option_id": "continue",
+                        }
+                    ],
+                    "theme": "手链",
+                    "duration_seconds": 10.0,
+                    "production_tier": "heavy",
+                    "review_mode": "normal",
+                    "provider": "agnes",
+                    "model": "agnes-video-v2.0",
+                    "runtime": "remotion",
+                    "asset_strategy": "reuse-approved",
+                    "allow_deterministic_reuse": True,
+                    "max_generations": 2,
+                    "unit_price_cny": 0.0,
+                    "total_budget_cny": 0.0,
+                    "resolution": "1080x1920",
+                    "quality_target": "draft",
+                    "auto_retry_count": 1,
+                    "auto_stages": ["brief_locked", "assets_gate"],
+                    "pause_conditions": ["generated_image_review"],
+                    "expires_at": "2026-08-19T08:47:21.029Z",
+                    "revoke_method": "聊天发送撤销快速模式",
+                },
+                "expires_at": "2026-08-19T08:47:21.029Z",
+                "created_at": "2026-08-18T08:47:21.029Z",
+                "status": "applied",
+                "provider": "agnes",
+                "model": "agnes-video-v2.0",
+                "runtime": "remotion",
+                "cost_cap_cny": 0.0,
+                "call_cap": 2,
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    assert not (project / "artifacts").exists()
+    result = runner.tick("demo-pro", append_decision=lambda *_: {})
+    assert "recover_stuck_stage" in result["actions"]
+    assert (project / "artifacts" / "gap_plan.json").is_file()
+    overlay = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    assert overlay["board_stop"]["stage"] == "assets_gate"
+
+
 def test_tick_reopens_delivery_completed_without_video(monkeypatch, tmp_path):
     from tests.lib.test_board_advance import (
         _seed_minimal_ready_for_delivery,
@@ -321,6 +554,79 @@ def test_tick_starts_light_compose_after_assets_gate(monkeypatch, tmp_path):
     assert "1–3 分钟" in result["friendly_zh"]
 
 
+def test_tick_normal_mode_pauses_without_sample_job_or_evidence(monkeypatch, tmp_path):
+    from tests.lib.test_board_advance import _seed_minimal_ready_for_delivery
+
+    root = tmp_path / "projects"
+    project = _write_project(
+        root,
+        production_profile={
+            "review_mode_preset": "normal",
+            "production_tier": "light",
+            "production_start_requested_at": "2026-08-18T00:00:00+00:00",
+        },
+    )
+    _patch_projects(monkeypatch, root)
+    _seed_minimal_ready_for_delivery(root, "demo-pro")
+
+    result = runner.tick("demo-pro", append_decision=lambda *_: {})
+
+    assert result["phase"] == "paused"
+    assert "produce_start" not in result["actions"]
+    assert "未创建制作任务" in result["friendly_zh"]
+    assert not (project / "artifacts" / "produce_job.json").exists()
+    marker = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    assert marker["board_stop"]["stage"] == "sample_review"
+    assert marker["board_stop"]["paused"] is True
+    assert marker["board_stop"]["decision_options"] == []
+
+
+def test_complete_review_stage_seals_real_sample_evidence(monkeypatch, tmp_path):
+    from lib.checkpoint import merge_write_checkpoint, read_checkpoint
+    from tests.lib.test_board_advance import _seed_minimal_ready_for_delivery
+
+    root = tmp_path / "projects"
+    project = _write_project(
+        root,
+        production_profile={"review_mode_preset": "normal"},
+    )
+    _patch_projects(monkeypatch, root)
+    _seed_minimal_ready_for_delivery(root, "demo-pro")
+    sample = project / "assets" / "video" / "sample.mp4"
+    sample.parent.mkdir(parents=True)
+    sample.write_bytes(b"film")
+    artifact = {
+        "version": "1.0",
+        "path": "assets/video/sample.mp4",
+        "beat_ids": ["beat_01"],
+        "duration_seconds": 5,
+        "status": "pending",
+    }
+    merge_write_checkpoint(
+        root,
+        "demo-pro",
+        "sample_review",
+        "awaiting_human",
+        {"sample_reel": artifact},
+        pipeline_type="bootstrap-commercial",
+        human_approval_required=True,
+        metadata_patch={
+            "needs_user_decision": True,
+            "paused": True,
+            "pause_code": "review_evidence_missing",
+        },
+    )
+
+    runner._complete_review_stage("demo-pro", "sample_review")
+
+    checkpoint = read_checkpoint(root, "demo-pro", "sample_review")
+    assert checkpoint["status"] == "completed"
+    assert checkpoint["human_approved"] is True
+    assert checkpoint["metadata"]["needs_user_decision"] is False
+    assert "paused" not in checkpoint["metadata"]
+    assert "pause_code" not in checkpoint["metadata"]
+
+
 def test_tick_heavy_without_key_stays_paused(monkeypatch, tmp_path):
     import lib.board_produce as board_produce
     from tests.lib.test_board_advance import _seed_minimal_ready_for_delivery
@@ -348,6 +654,12 @@ def test_tick_heavy_without_key_stays_paused(monkeypatch, tmp_path):
     assert "不降为轻度" in result["friendly_zh"]
     marker = json.loads((project / "project.json").read_text(encoding="utf-8"))
     assert marker["production_profile"]["production_tier"] == "heavy"
+    assert marker["board_stop"]["decision_title_zh"] == "已暂停"
+    assert marker["board_stop"].get("producing_wait") is not True
+    again = runner.tick("demo-pro", append_decision=lambda *_: {})
+    assert "seed_stop" not in again["actions"]
+    overlay = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    assert overlay["board_stop"]["decision_title_zh"] == "已暂停"
 
 
 def test_tick_opens_delivery_when_final_exists(monkeypatch, tmp_path):
@@ -371,3 +683,38 @@ def test_tick_opens_delivery_when_final_exists(monkeypatch, tmp_path):
     assert overlay["board_stop"]["decision_options"] == []
     assert overlay["board_stop"]["needs_user_decision"] is False
 
+
+def test_tick_pauses_when_delivery_preview_cannot_open(monkeypatch, tmp_path):
+    import lib.board_produce as board_produce
+
+    root = tmp_path / "projects"
+    project = _write_project(
+        root,
+        production_profile={
+            "review_mode_preset": "minimal",
+            "production_tier": "light",
+        },
+    )
+    _patch_projects(monkeypatch, root)
+    from tests.lib.test_board_advance import _seed_minimal_ready_for_delivery
+
+    _seed_minimal_ready_for_delivery(root, "demo-pro")
+    board_produce.write_job(
+        "demo-pro",
+        {"status": board_produce.STATUS_RUNNING, "job_id": "j1"},
+        projects_dir=root,
+    )
+    (project / "renders" / "final.mp4").write_bytes(b"film")
+    assert board_produce.poll("demo-pro", projects_dir=root)["status"] == "done"
+    monkeypatch.setattr(
+        board_advance,
+        "open_delivery_preview",
+        lambda *_args, **_kwargs: (_ for _ in ()).throw(OSError("locked")),
+    )
+
+    result = runner.tick("demo-pro", append_decision=lambda *_: {})
+
+    assert result["phase"] == runner.PHASE_PAUSED
+    assert "delivery_ready" not in result["actions"]
+    assert "delivery_paused" in result["actions"]
+    assert "未标记为可交付" in result["friendly_zh"]

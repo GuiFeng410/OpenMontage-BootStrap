@@ -218,3 +218,6 @@
   color: var(--text-3);
   max-width: 220px;
 }
+.quit-tab-btn {
+  border-color: var(--border);
+}

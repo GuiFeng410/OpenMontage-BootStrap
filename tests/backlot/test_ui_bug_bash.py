@@ -33,6 +33,12 @@ def _available_local_port() -> int:
 def staged_backlot_server(tmp_path_factory):
     original_stage_dir = backlot_screenshot_stage.STAGE_DIR
     original_projects_dir = os.environ.get("OPENMONTAGE_PROJECTS_DIR")
+    install_state_path = (
+        backlot_screenshot_stage.REPO_ROOT / ".openmontage" / "install-state.json"
+    )
+    original_install_state = (
+        install_state_path.read_bytes() if install_state_path.is_file() else None
+    )
     stage_dir = tmp_path_factory.mktemp("backlot-screenshot-stage")
     server = None
     try:
@@ -82,6 +88,11 @@ def staged_backlot_server(tmp_path_factory):
             os.environ.pop("OPENMONTAGE_PROJECTS_DIR", None)
         else:
             os.environ["OPENMONTAGE_PROJECTS_DIR"] = original_projects_dir
+        if original_install_state is None:
+            install_state_path.unlink(missing_ok=True)
+        else:
+            install_state_path.parent.mkdir(parents=True, exist_ok=True)
+            install_state_path.write_bytes(original_install_state)
 
 
 def _write_json(path: Path, data: dict) -> None:
@@ -913,7 +924,7 @@ def test_intent_basket_summary_contains_selected_option_and_pending_copy(
             expect(summary).to_have_attribute("readonly", "")
             value = summary.input_value()
             assert "中度" in value
-            assert "确认面板选择" in value
+            assert "点「进入下一步」后请留在本页" in value
             assert "尚未正式执行" in value
             expect(page.locator(".commercial-chat-only")).to_contain_text(
                 "点「进入下一步」后请留在本页。意见可不填。"
@@ -1065,7 +1076,9 @@ def test_intent_panel_is_keyboard_accessible(staged_backlot_server):
                 f"{staged_backlot_server}/p/{project_id}?static=1",
                 wait_until="networkidle",
             )
-            heavy = page.get_by_role("button", name=/重度/)
+            heavy = page.locator(
+                '.commercial-decision-option[data-option-id="heavy"]'
+            )
             heavy.focus()
             page.keyboard.press("Space")
 
@@ -1142,6 +1155,7 @@ def test_commercial_submit_intent_posts_pending(staged_backlot_server):
             expect(page.locator(".commercial-intent-feedback")).to_have_text(
                 "已进入下一步，请留在本页等待本机处理。"
             )
+            expect(page.get_by_role("button", name="已提交，等待处理")).to_be_disabled()
             assert len(posted) == 1
             assert posted[0]["intent_type"] == "decision"
             assert posted[0]["status"] == "pending"
@@ -2102,7 +2116,7 @@ def test_commercial_stage_evidence_retry_copy_and_generation_details(
                 wait_until="networkidle",
             )
             sample_stage = page.locator(".stage").filter(has_text="试片确认")
-            assert "重试中·此前已通过" in sample_stage.inner_text()
+            assert "等你在本页确认" in sample_stage.inner_text()
 
             evidence = page.locator(".commercial-stage-evidence")
             assert "项目相对路径" in evidence.inner_text()
@@ -2333,6 +2347,10 @@ def test_planned_entries_only_render_in_assets_view(staged_backlot_server):
             for stage_label in ("试片确认", "分段制作", "初稿审查"):
                 page.locator(".stage").filter(has_text=stage_label).click()
                 assert page.locator(".planned-entry-card").count() == 0
+                assert all(
+                    "null" not in text
+                    for text in page.locator(".commercial-beat-card").all_inner_texts()
+                )
         finally:
             browser.close()
 

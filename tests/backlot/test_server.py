@@ -38,6 +38,7 @@ def client(projects_root, monkeypatch):
         return None
 
     monkeypatch.setattr(server_mod, "_watch_projects", no_watch)
+    monkeypatch.setattr(server_mod, "schedule_server_exit", lambda: None)
     with TestClient(server_mod.create_app()) as c:
         yield c
 
@@ -96,6 +97,8 @@ class TestBacklotServerApi:
         assert "verify_ready" in payload
         assert "video_key_present" in payload
         assert "stock_key_present" in payload
+        assert "runner_code_current" in payload
+        assert isinstance(payload["runner_code_current"], bool)
 
     def test_keys_refresh_never_returns_secret_values(self, client, monkeypatch):
         monkeypatch.setattr(
@@ -143,6 +146,8 @@ class TestBacklotServerApi:
         assert payload["ok"] is True
         assert payload["app"] == "backlot"
         assert payload["projects_dir"]
+        assert "active_project_id" in payload
+        assert payload["active_project_id"] == "" or isinstance(payload["active_project_id"], str)
 
     def test_create_project_rejects_empty_title(self, client, monkeypatch):
         from lib.library_create import LibraryCreateError
@@ -157,6 +162,17 @@ class TestBacklotServerApi:
         )
         assert response.status_code == 400
         assert response.json()["detail"]["code"] == "missing_title"
+
+    def test_continue_project_rejects_missing_id(self, client, monkeypatch):
+        from lib.library_create import LibraryCreateError
+
+        def boom(**kwargs):
+            raise LibraryCreateError("无效的项目编号", code="bad_project")
+
+        monkeypatch.setattr("lib.library_create.continue_library_project", boom)
+        response = client.post("/api/library/continue-project", json={})
+        assert response.status_code == 400
+        assert response.json()["detail"]["code"] == "bad_project"
 
     def test_library_static_assets_and_css_cache_bust(self, client):
         css = client.get("/ui/library.css")
@@ -266,6 +282,32 @@ class TestBacklotPerformanceBudgets:
 
         assert response.status_code == 200
         assert elapsed < 1.5
+
+
+    def test_runtime_stop_requires_confirm(self, client):
+        response = client.post("/api/runtime/stop", json={})
+        assert response.status_code == 400
+
+    def test_runtime_stop_blocks_when_producing(self, client, projects_root, monkeypatch):
+        project = _make_project(projects_root, "busy")
+        _write_json(
+            project / "artifacts" / "produce_job.json",
+            {"status": "running", "engine": "paid_video"},
+        )
+        stopped = {"n": 0}
+        monkeypatch.setattr("backlot.runner.stop_runner", lambda: stopped.__setitem__("n", 1))
+        response = client.post("/api/runtime/stop", json={"confirm": True})
+        assert response.status_code == 409
+        assert response.json()["detail"]["code"] == "producing"
+        assert stopped["n"] == 0
+
+    def test_runtime_stop_ok_when_idle(self, client, monkeypatch):
+        stopped = {"n": 0}
+        monkeypatch.setattr("backlot.runner.stop_runner", lambda: stopped.__setitem__("n", 1))
+        response = client.post("/api/runtime/stop", json={"confirm": True})
+        assert response.status_code == 200
+        assert response.json()["ok"] is True
+        assert stopped["n"] == 1
 
 
 class TestFindingsFixes:

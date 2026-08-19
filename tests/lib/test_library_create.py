@@ -5,6 +5,7 @@ import pytest
 
 from lib.library_create import (
     LibraryCreateError,
+    continue_library_project,
     create_library_project,
     list_commercial_video_models,
     public_install_flags,
@@ -339,3 +340,55 @@ def test_start_production_rejects_model_without_key(
             environ={},
         )
     assert caught.value.code == "missing_model_key"
+
+
+def test_create_blocked_when_runner_busy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    monkeypatch.setattr("backlot.runner.active_project_id", lambda: "other-pro")
+    with pytest.raises(LibraryCreateError) as caught:
+        create_library_project(title="Jade", repo_root=tmp_path)
+    assert caught.value.code == "runner_busy"
+    assert caught.value.http_status == 409
+
+
+def test_continue_rejects_completed_project(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    snapshot_install_state(repo_root=tmp_path, verify_ready=True)
+    project = tmp_path / "projects" / "shop-demo"
+    project.mkdir(parents=True)
+    (project / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "shop-demo",
+                "pipeline_type": "bootstrap-commercial",
+                "lifecycle_status": "completed",
+            }
+        ),
+        encoding="utf-8",
+    )
+    with pytest.raises(LibraryCreateError) as caught:
+        continue_library_project(project_id="shop-demo", repo_root=tmp_path)
+    assert caught.value.code == "already_completed"
+
+
+def test_continue_same_project_ok(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path / "projects"))
+    snapshot_install_state(repo_root=tmp_path, verify_ready=True)
+    monkeypatch.setattr("backlot.runner.active_project_id", lambda: "shop-demo")
+    project = tmp_path / "projects" / "shop-demo"
+    project.mkdir(parents=True)
+    (project / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": "shop-demo",
+                "pipeline_type": "bootstrap-commercial",
+                "board_stop": {"stage": "assets_gate", "decision_prompt_zh": "素材检查"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    result = continue_library_project(project_id="shop-demo", repo_root=tmp_path)
+    assert result["ok"] is True
+    assert result["project_id"] == "shop-demo"
+    assert result["current_stop"] == "assets_gate"
+    assert result["spawn_runner"] is True

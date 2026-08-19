@@ -68,7 +68,7 @@ metadata:
 
 商品片从 03 接收 `bootstrap-commercial` 的 `project_id` 和固定 Backlot 网址。进入 04 后：
 
-1. 必须接收 03 初始化工具返回的实际 `project_id`。先调用 `produce_read_state` 核对管线，再运行 `python -m backlot open <project_id>`（会同时拉起本机 runner）；主动把**同一网址**发给用户，不创建第二个看板项目。聊天须含：`你可以查看该网址了解详细信息：{URL}`。进入 04 后**禁止重新调用 produce_init_project**；缺少项目 ID、状态或完整简报时退回 03，不得猜测新建或续作。已 `lifecycle_status=completed` 的项目不得续做。
+1. 必须接收 03 初始化工具返回的实际 `project_id`。先调用 `produce_read_state` 核对管线。新会话先 `python -m backlot open` 打开**库页**（不起 runner），让用户点选「继续这个项目」再绑唯一 runner；不要假定续做上次、不要 `open <project_id>` 抢先开工。主动把**库页或该项目网址**发给用户，不创建第二个看板项目。聊天须含：`你可以查看该网址了解详细信息：{URL}`。进入 04 后**禁止重新调用 produce_init_project**；缺少项目 ID、状态或完整简报时退回 03，不得猜测新建或续作。已 `lifecycle_status=completed` 的项目不得续做。
 2. 每进入试片 / 分段 / 初稿 / 合成 / 交付阶段并写完对应 checkpoint 后，聊天固定一句：`已进入第 N 阶段：{中文名}。请打开看板查看最新证据（若未自动更新请刷新页面）。`
 3. 试片、专业批次、初稿和交付需要用户裁定时，先用 `produce_write_checkpoint` 写入当前阶段证据：`artifacts_json` 带阶段产物，`metadata_json` 带当前唯一决策、选项、推荐、回复示例和 `partial_progress`，`cost_snapshot_json` 带累计费用。
 4. 网页可用时，完整审查卡、候选、抽帧、费用明细放网页；聊天只发“网址或阶段句 + 当前一个问题 + 推荐 + 回复示例”。网页打不开时仍须先发出同一完整 URL，再退回完整 Grill 卡，流程继续。禁止用「看板暂不可用」代替发链接。

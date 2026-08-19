@@ -305,6 +305,50 @@ def test_plan_promotes_pending_decision_to_approval_bundle(approval_project) -> 
     assert stored["note"] == "用现有素材"
 
 
+def test_plan_heavy_board_decision_uses_commercial_runtime_default(
+    approval_project,
+) -> None:
+    _write_profile(
+        approval_project,
+        {
+            "production_tier": "heavy",
+            "duration_seconds": 5,
+            "review_mode": "normal",
+            "budget_cny": 1,
+            "video_channel": "agnes",
+            "video_model": "agnes-video-v2.0",
+        },
+    )
+    _write_intent(
+        approval_project,
+        _decision_intent(
+            payload={
+                "selections": [
+                    {
+                        "decision_key": "brief_locked::current",
+                        "option_id": "continue",
+                        "label_zh": "同意，进入下一步",
+                    }
+                ],
+                "note": "",
+            }
+        ),
+    )
+
+    result = approval_bundle.plan_approval_bundle(
+        "demo-pro",
+        "decision-001",
+        checkpoint_revision="revision-001",
+    )
+
+    payload = result["intent"]["payload"]
+    assert payload["production_tier"] == "heavy"
+    assert payload["provider"] == "agnes"
+    assert payload["model"] == "agnes-video-v2.0"
+    assert payload["runtime"] == "remotion"
+    assert payload["total_budget_cny"] == 1
+
+
 def test_plan_decision_without_evidence_fails_closed(approval_project) -> None:
     _write_intent(approval_project, _decision_intent())
 

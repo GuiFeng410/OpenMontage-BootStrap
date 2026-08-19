@@ -15,8 +15,10 @@ from typing import Any, Callable
 import lib.approval_bundle as approval_bundle
 import lib.board_advance as board_advance
 import lib.board_produce as board_produce
+import lib.board_production_run as production_run
 import lib.interaction_intents as intents
 import lib.project_export as project_export
+from lib.checkpoint import CheckpointValidationError
 from lib.paths import PROJECTS_DIR
 
 PHASE_IDLE = "idle"
@@ -28,18 +30,25 @@ PHASE_READY = "ready"
 PHASE_EXPORTED = "exported"
 PHASE_NEEDS_CHAT = "needs_chat"
 
+_PAID_AUTHORIZATION_SCOPES = {
+    "assets_gate": "batch",
+    "sample_review": "batch",
+}
+
 
 def _list_pending(project_id: str) -> list[dict[str, Any]]:
     listed = []
     for item in approval_bundle.list_interaction_intents(project_id):
-        if item.get("status") == "pending":
+        if item.get("status") in {"pending", "planned"}:
             listed.append(item)
     return listed
 
 
 def _has_final(project_id: str) -> bool:
-    path = project_export._final_path(project_id)
-    return path.is_file() and path.stat().st_size > 0
+    return board_produce.final_ready_for_delivery(
+        project_id,
+        projects_dir=PROJECTS_DIR,
+    )
 
 
 def _consume_export(project_id: str, pending: list[dict[str, Any]]) -> dict[str, Any] | None:
@@ -81,6 +90,43 @@ def _complete_brief_locked(
         },
         pipeline_type="bootstrap-commercial",
         human_approval_required=True,
+        human_approved=True,
+        metadata_patch={
+            "needs_user_decision": False,
+            "approval_source": "panel_intent",
+        },
+        metadata_remove_keys=board_advance.DECISION_STALE_KEYS,
+    )
+
+
+def _complete_review_stage(project_id: str, stage: str) -> None:
+    from lib.checkpoint import merge_write_checkpoint, read_checkpoint
+
+    evidence = board_advance.review_stage_evidence(
+        project_id, stage, projects_dir=PROJECTS_DIR
+    )
+    if not evidence.get("ready"):
+        raise approval_bundle.ApprovalBundleError(
+            "review evidence missing",
+            code="review_evidence_missing",
+            safe_message=str(evidence.get("friendly_zh") or "当前阶段还没有可评审视频。"),
+        )
+    current = read_checkpoint(PROJECTS_DIR, project_id, stage)
+    artifacts = current.get("artifacts") if isinstance(current, dict) else None
+    if not isinstance(artifacts, dict) or not artifacts:
+        raise approval_bundle.ApprovalBundleError(
+            "review checkpoint artifacts missing",
+            code="review_evidence_missing",
+            safe_message="当前阶段视频已发现，但 checkpoint 证据不完整，请先写回阶段证据。",
+        )
+    merge_write_checkpoint(
+        PROJECTS_DIR,
+        project_id,
+        stage,
+        "completed",
+        artifacts,
+        pipeline_type=str(current.get("pipeline_type") or "bootstrap-commercial"),
+        human_approval_required=bool(current.get("human_approval_required")),
         human_approved=True,
         metadata_patch={
             "needs_user_decision": False,
@@ -169,6 +215,27 @@ def _consume_decision(
             "action": "revise" if delivery_action == "revise" else "continue",
             "artifacts": {},
         }
+    elif stage in {"sample_review", "segment_build", "draft_review", "final_compose"}:
+        from lib.board_gap_plan import stop_action_from_intent
+
+        review_action = stop_action_from_intent(raw)
+        if review_action != "revise":
+            evidence = board_advance.review_stage_evidence(
+                project_id, stage, projects_dir=PROJECTS_DIR
+            )
+            if not evidence.get("ready"):
+                board_advance.write_stop_card(
+                    project_id, stage, projects_dir=PROJECTS_DIR
+                )
+                raise approval_bundle.ApprovalBundleError(
+                    "review evidence missing",
+                    code="review_evidence_missing",
+                    safe_message=str(evidence.get("friendly_zh") or "当前阶段还没有可评审视频。"),
+                )
+        lock_result = {
+            "action": "revise" if review_action == "revise" else "continue",
+            "artifacts": {},
+        }
     planned = approval_bundle.plan_approval_bundle(
         project_id,
         intent_id,
@@ -181,6 +248,31 @@ def _consume_decision(
         checkpoint_revision=revision,
         append_decision=append_decision,
     )
+    if (
+        stage in _PAID_AUTHORIZATION_SCOPES
+        and (lock_result or {}).get("action") != "revise"
+    ):
+        try:
+            _record_stage_authorization(
+                project_id,
+                stage,
+                intent_id,
+                revision,
+            )
+        except (production_run.ProductionRunError, OSError) as exc:
+            raise approval_bundle.ApprovalBundleError(
+                str(exc),
+                code="run_state_invalid",
+                safe_message=(
+                    "选择已应用，但生产授权状态无法安全写入。已暂停且不会调用视频模型，"
+                    "请留在本页刷新恢复。"
+                ),
+            ) from exc
+    if (
+        stage in {"sample_review", "segment_build", "draft_review", "final_compose"}
+        and (lock_result or {}).get("action") != "revise"
+    ):
+        _complete_review_stage(project_id, stage)
     return {
         "planned": planned,
         "applied": applied,
@@ -232,6 +324,86 @@ def _has_applied_brief_locked_intent(project_id: str) -> bool:
     return _has_applied_stage_intent(project_id, "brief_locked")
 
 
+def _last_applied_stage_intent(project_id: str, stage: str) -> dict[str, Any] | None:
+    intents_dir = PROJECTS_DIR / project_id / "intents"
+    if not intents_dir.is_dir():
+        return None
+    latest: dict[str, Any] | None = None
+    latest_key = ""
+    for path in sorted(intents_dir.glob("*.json")):
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            continue
+        if not isinstance(data, dict):
+            continue
+        if str(data.get("stage") or "") != stage:
+            continue
+        if str(data.get("status") or "") != "applied":
+            continue
+        if data.get("intent_type") not in {"decision", "approval_bundle"}:
+            continue
+        key = str(data.get("created_at") or path.stem)
+        if key >= latest_key:
+            latest_key = key
+            latest = data
+    return latest
+
+
+def _record_stage_authorization(
+    project_id: str,
+    stage: str,
+    intent_id: str,
+    revision: str,
+) -> bool:
+    scope = _PAID_AUTHORIZATION_SCOPES.get(stage)
+    if not scope:
+        return False
+    project = PROJECTS_DIR / project_id
+    existing = production_run.read_production_run(project)
+    if existing and any(
+        item.get("authorization_revision") == revision
+        for item in existing.get("authorization_refs") or []
+        if isinstance(item, dict)
+    ):
+        return False
+    run, _created = production_run.load_or_initialize_production_run(
+        project,
+        persist=False,
+    )
+    updated = production_run.add_authorization_ref(
+        run,
+        authorization_revision=revision,
+        scope=scope,
+        intent_ref=f"intents/{intent_id}.json",
+    )
+    production_run.write_production_run(project, updated)
+    return True
+
+
+def _recover_applied_authorization(project_id: str) -> bool:
+    for stage in _PAID_AUTHORIZATION_SCOPES:
+        raw = _last_applied_stage_intent(project_id, stage)
+        if not raw:
+            continue
+        intent_id = str(raw.get("intent_id") or "").strip()
+        revision = str(raw.get("revision") or "").strip()
+        if not intent_id or not revision:
+            continue
+        from lib.board_gap_plan import stop_action_from_intent
+
+        if stop_action_from_intent(raw) == "revise":
+            continue
+        if _record_stage_authorization(
+            project_id,
+            stage,
+            intent_id,
+            revision,
+        ):
+            return True
+    return False
+
+
 def _recover_stuck_assets_gate(
     project_id: str,
     marker: dict[str, Any],
@@ -264,15 +436,31 @@ def _recover_stuck_brief_locked(
     project_id: str,
     marker: dict[str, Any],
 ) -> bool:
-    """Complete brief_locked when plan artifacts exist but checkpoint was not advanced."""
+    """Complete brief_locked when intent was applied but checkpoint/artifacts lag."""
     from lib.checkpoint import read_checkpoint
+    from lib.board_gap_plan import GapPlanError, lock_gap_plan_from_intent
 
     checkpoint = read_checkpoint(PROJECTS_DIR, project_id, "brief_locked")
     if not isinstance(checkpoint, dict) or checkpoint.get("status") == "completed":
         return False
-    artifacts = _load_plan_artifacts_from_disk(project_id)
-    if not artifacts or not _has_applied_brief_locked_intent(project_id):
+    if not _has_applied_brief_locked_intent(project_id):
         return False
+    artifacts = _load_plan_artifacts_from_disk(project_id)
+    if not artifacts:
+        raw = _last_applied_stage_intent(project_id, "brief_locked")
+        if not raw:
+            return False
+        try:
+            lock_result = lock_gap_plan_from_intent(
+                project_id,
+                raw,
+                projects_dir=PROJECTS_DIR,
+            )
+        except GapPlanError:
+            return False
+        if lock_result.get("action") != "continue" or not lock_result.get("artifacts"):
+            return False
+        artifacts = lock_result["artifacts"]
     try:
         _complete_brief_locked(project_id, artifacts)
         board_advance.advance_after_apply(
@@ -305,8 +493,9 @@ def _recover_stuck_delivery_signoff(
         checkpoint = read_checkpoint(PROJECTS_DIR, project_id, "delivery_signoff")
     except CheckpointValidationError:
         checkpoint = {"status": "completed"}
-    already_waiting = bool(stop.get("producing_wait")) and (
-        not isinstance(checkpoint, dict) or checkpoint.get("status") != "completed"
+    already_waiting = bool(stop.get("paused")) or (
+        bool(stop.get("producing_wait"))
+        and (not isinstance(checkpoint, dict) or checkpoint.get("status") != "completed")
     )
     if already_waiting:
         return False
@@ -333,6 +522,8 @@ def tick(
             "runner_alive": runner_alive,
             "friendly_zh": "项目已结束并导出，不再自动续做。",
             "export_path": marker.get("export_path"),
+            "stop_runner": True,
+            "library_path": "/",
         }
         project_export.write_runner_status(project_id, status)
         return {"project_id": project_id, **status, "actions": []}
@@ -349,6 +540,8 @@ def tick(
             "runner_alive": runner_alive,
             "friendly_zh": export_result.get("friendly_zh"),
             "export_path": export_result.get("export_path"),
+            "stop_runner": phase == PHASE_EXPORTED,
+            "library_path": "/" if phase == PHASE_EXPORTED else "",
         }
         if phase != PHASE_EXPORTED:
             project_export.write_runner_status(project_id, status)
@@ -424,8 +617,37 @@ def tick(
                 project_id, projects_dir=PROJECTS_DIR
             ) or marker
 
+    if not remaining_early:
+        try:
+            if _recover_applied_authorization(project_id):
+                actions.append("recover_authorization")
+        except (production_run.ProductionRunError, OSError) as exc:
+            status = {
+                "phase": PHASE_PAUSED,
+                "runner_alive": runner_alive,
+                "friendly_zh": (
+                    "生产授权状态无法安全恢复。已暂停且不会调用视频模型，"
+                    "请先修复生产状态文件。"
+                ),
+            }
+            project_export.write_runner_status(project_id, status)
+            return {
+                "project_id": project_id,
+                **status,
+                "actions": actions,
+                "error": str(exc),
+            }
+
     seeded = None
-    if "approval_bundle" not in actions and not recovered:
+    existing_job = board_produce.read_job(project_id) or {}
+    job_status = str(existing_job.get("status") or "")
+    job_blocks_seed = job_status in {
+        board_produce.STATUS_PAUSED,
+        board_produce.STATUS_QUEUED,
+        board_produce.STATUS_RUNNING,
+        board_produce.STATUS_FAILED,
+    }
+    if "approval_bundle" not in actions and not recovered and not job_blocks_seed:
         try:
             marker = board_advance.read_marker(
                 project_id, projects_dir=PROJECTS_DIR
@@ -458,18 +680,42 @@ def tick(
         )
         if produce.get("action"):
             actions.append(str(produce["action"]))
-    except Exception:
-        produce = {"action": "", "status": ""}
+    except Exception as exc:
+        produce = {
+            "action": "produce_paused",
+            "status": board_produce.STATUS_PAUSED,
+            "job": {
+                "status": board_produce.STATUS_PAUSED,
+                "code": "produce_state_error",
+                "friendly_zh": (
+                    "生产状态无法安全推进，已暂停且不会自动重试。"
+                    "请留在本页查看状态后再处理。"
+                ),
+                "error": str(exc),
+            },
+        }
+        actions.append("produce_paused")
 
     if _has_final(project_id):
         try:
             opened = board_advance.open_delivery_preview(
                 project_id, projects_dir=PROJECTS_DIR
             )
-            if opened.get("ok"):
-                actions.append("delivery_ready")
-        except Exception:
-            pass
+        except Exception as exc:
+            opened = {"ok": False, "error": str(exc)}
+        if not opened.get("ok"):
+            actions.append("delivery_paused")
+            status = {
+                "phase": PHASE_PAUSED,
+                "runner_alive": runner_alive,
+                "friendly_zh": (
+                    "终稿证据已完成，但交付预览暂时无法打开。"
+                    "项目未标记为可交付，请留在本页重试。"
+                ),
+            }
+            project_export.write_runner_status(project_id, status)
+            return {"project_id": project_id, **status, "actions": actions}
+        actions.append("delivery_ready")
         status = {
             "phase": PHASE_READY,
             "runner_alive": runner_alive,
@@ -483,6 +729,7 @@ def tick(
     produce_job = produce.get("job") if isinstance(produce.get("job"), dict) else {}
     produce_status = str(produce.get("status") or produce_job.get("status") or "")
     produce_copy = str(produce_job.get("friendly_zh") or "")
+    board_stop = marker.get("board_stop") if isinstance(marker.get("board_stop"), dict) else {}
     if remaining:
         status = {
             "phase": PHASE_QUEUED,
@@ -496,10 +743,19 @@ def tick(
             "friendly_zh": produce_copy or "制作已暂停。请留在本页刷新可用性，不要改档除非你要求。",
         }
     elif produce_status == board_produce.STATUS_FAILED:
+        exhausted = bool(produce_job.get("retry_exhausted"))
         status = {
             "phase": PHASE_PAUSED,
             "runner_alive": runner_alive,
+            "retry_exhausted": exhausted,
+            "stop_runner": exhausted,
             "friendly_zh": produce_copy or "制作失败，请留在本页查看原因。",
+        }
+    elif board_stop.get("paused"):
+        status = {
+            "phase": PHASE_PAUSED,
+            "runner_alive": runner_alive,
+            "friendly_zh": str(board_stop.get("decision_prompt_zh") or "制作已暂停。"),
         }
     elif produce_status in {
         board_produce.STATUS_QUEUED,
@@ -584,7 +840,15 @@ def tick_all(
     project_id: str = "",
     runner_alive: bool = True,
 ) -> dict[str, Any]:
-    ids = [project_id] if project_id.strip() else list_project_ids()
+    wanted = str(project_id or "").strip()
+    if not wanted:
+        return {
+            "projects": [],
+            "count": 0,
+            "skipped": True,
+            "reason": "no_project_id",
+        }
+    ids = [wanted]
     results = []
     for item in ids:
         try:
@@ -602,4 +866,18 @@ def tick_all(
                     "error": str(exc),
                 }
             )
+        except CheckpointValidationError as exc:
+            status = {
+                "phase": PHASE_PAUSED,
+                "runner_alive": runner_alive,
+                "friendly_zh": (
+                    "该项目的阶段证据校验失败，已单独暂停；"
+                    "其他项目仍可继续。请修复项目证据后再恢复。"
+                ),
+            }
+            try:
+                project_export.write_runner_status(item, status)
+            except (OSError, project_export.ProjectExportError):
+                pass
+            results.append({"project_id": item, **status, "error": str(exc)})
     return {"projects": results, "count": len(results)}

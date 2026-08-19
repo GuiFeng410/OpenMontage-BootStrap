@@ -383,6 +383,24 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _assert_runner_idle_or_same(project_id: str = "") -> None:
+    try:
+        from backlot.runner import active_project_id
+    except Exception:
+        return
+    active = str(active_project_id() or "").strip()
+    wanted = str(project_id or "").strip()
+    if not active:
+        return
+    if wanted and active == wanted:
+        return
+    raise LibraryCreateError(
+        f"本机正在做「{active}」。请先结束或冻结当前项目，再创建或继续另一个。",
+        code="runner_busy",
+        http_status=409,
+    )
+
+
 def slug_project_id(title: str) -> str:
     ascii_part = _SLUG_RE.sub("-", (title or "").strip().lower()).strip("-")
     base = ascii_part[:32] if ascii_part else "commercial"
@@ -483,6 +501,7 @@ def create_library_project(
     theme = (title or "").strip()
     if not theme:
         raise LibraryCreateError("请先填写商品主题", code="missing_title")
+    _assert_runner_idle_or_same("")
     location = (asset_location or product_url or "").strip()
     duration = _parse_duration(duration_seconds)
     mode = _normalize_review_mode(review_mode)
@@ -555,4 +574,52 @@ def create_library_project(
             )
         ),
         "request_id": str(uuid4()),
+        "spawn_runner": True,
+    }
+
+
+def continue_library_project(
+    *,
+    project_id: str,
+    repo_root: Path | None = None,
+) -> dict[str, Any]:
+    """Bind the unique runner to an existing unfinished project. Does not burn."""
+    from lib.project_export import is_completed
+
+    root = Path(repo_root or REPO_ROOT)
+    projects = prepare_local_runtime(repo_root=root)
+    pid = str(project_id or "").strip()
+    if not pid or any(c in pid for c in "/\\:") or pid in {".", ".."}:
+        raise LibraryCreateError("无效的项目编号", code="bad_project")
+    marker_path = projects / pid / "project.json"
+    if not marker_path.is_file():
+        raise LibraryCreateError("找不到该项目", code="unknown_project", http_status=404)
+    try:
+        marker = json.loads(marker_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise LibraryCreateError("项目标记损坏", code="bad_marker") from exc
+    if not isinstance(marker, dict):
+        raise LibraryCreateError("项目标记损坏", code="bad_marker")
+    if is_completed(marker):
+        raise LibraryCreateError(
+            "这个项目已经结束并导出。请在库页下载成片，不要续做。",
+            code="already_completed",
+            http_status=409,
+        )
+    _assert_runner_idle_or_same(pid)
+    stop = marker.get("board_stop") if isinstance(marker.get("board_stop"), dict) else {}
+    stage = str(stop.get("stage") or "")
+    prompt = str(stop.get("decision_prompt_zh") or "")
+    try:
+        remember_machine_seen(repo_root=root, latest_project_id=pid)
+    except Exception:
+        pass
+    return {
+        "ok": True,
+        "project_id": pid,
+        "board_path": f"/p/{pid}",
+        "current_stop": stage,
+        "user_stage_zh": prompt or stage,
+        "friendly_zh": "已继续这个项目。从当前停点接着做，不会新建，也不会自动开烧。",
+        "spawn_runner": True,
     }

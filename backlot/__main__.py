@@ -83,36 +83,10 @@ def _spawn_server(port: int):
 
 
 def _spawn_runner(project_id: str | None):
-    """Start the local intent runner beside Backlot; idempotent if already alive."""
-    from backlot.runner import log_path, runner_alive
-    from lib.paths import REPO_ROOT
+    """Start the unique runner for one project. Empty id is a no-op."""
+    from backlot.runner import spawn_detached
 
-    if runner_alive():
-        return log_path()
-    cmd = [sys.executable, "-m", "backlot", "runner"]
-    if project_id:
-        cmd.append(project_id)
-    log_fh = open(log_path(), "a", encoding="utf-8")
-    log_fh.write(f"\n--- spawn runner project={project_id or '*'} ---\n")
-    log_fh.flush()
-    env = os.environ.copy()
-    env.setdefault("OPENMONTAGE_P1_ALLOW_WRITES", "true")
-    env.setdefault("PYTHONUTF8", "1")
-    env.setdefault("OPENMONTAGE_PROJECTS_DIR", str(REPO_ROOT / "projects"))
-    kwargs: dict = {
-        "stdout": log_fh,
-        "stderr": log_fh,
-        "stdin": subprocess.DEVNULL,
-        "env": env,
-    }
-    if os.name == "nt":
-        kwargs["creationflags"] = (
-            subprocess.CREATE_NEW_PROCESS_GROUP | getattr(subprocess, "DETACHED_PROCESS", 0x00000008)
-        )
-    else:
-        kwargs["start_new_session"] = True
-    subprocess.Popen(cmd, **kwargs)
-    return log_path()
+    return spawn_detached(str(project_id or "").strip())
 
 
 def cmd_open(project_id: str | None) -> int:
@@ -140,10 +114,6 @@ def cmd_open(project_id: str | None) -> int:
         webbrowser.open(url)
     except Exception:
         pass
-    try:
-        _spawn_runner(project_id)
-    except Exception as exc:
-        print(f"backlot: runner not started ({exc})")
     print(f"backlot: {url}")
     return 0
 

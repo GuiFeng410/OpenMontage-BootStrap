@@ -64,7 +64,8 @@ def test_missing_final_does_not_complete(project):
     assert stored["status"] == "failed"
 
 
-def test_copy_and_complete(project):
+def test_copy_and_complete(project, monkeypatch):
+    monkeypatch.setattr("backlot.runner.stop_runner", lambda **_k: True)
     (project / "renders" / "final.mp4").write_bytes(b"fake-mp4")
     ii.create_or_conflict("demo-pro", _export_intent())
     result = pe.apply_project_export("demo-pro", intent_id="export-001")

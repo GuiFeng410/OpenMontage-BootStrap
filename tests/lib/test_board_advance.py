@@ -106,6 +106,46 @@ def test_delivery_with_final_is_preview_not_continue(tmp_path: Path) -> None:
     assert DELIVERY_READY_ZH in overlay["decision_prompt_zh"]
 
 
+def test_sample_stop_without_real_evidence_is_paused(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    _write_project(root)
+
+    meta = stop_card_metadata("sample_review", "shop-demo", projects_dir=root)
+
+    assert meta["paused"] is True
+    assert meta["producing_wait"] is False
+    assert meta["needs_user_decision"] is False
+    assert meta["decision_options"] == []
+    assert "未创建制作任务" in meta["decision_prompt_zh"]
+    assert "没有调用视频模型" in meta["decision_prompt_zh"]
+
+
+def test_sample_stop_requires_canonical_video_and_beat_ids(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    project = root / "shop-demo"
+    _write_project(root)
+    (project / "artifacts").mkdir()
+    (project / "assets" / "video").mkdir(parents=True)
+    (project / "assets" / "video" / "sample.mp4").write_bytes(b"film")
+    (project / "artifacts" / "sample_reel.json").write_text(
+        json.dumps(
+            {
+                "version": "1.0",
+                "path": "assets/video/sample.mp4",
+                "beat_ids": ["beat_01"],
+                "status": "pending",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    meta = stop_card_metadata("sample_review", "shop-demo", projects_dir=root)
+
+    assert meta.get("paused") is not True
+    assert meta["needs_user_decision"] is True
+    assert meta["decision_options"]
+
+
 def test_strip_recommend_drops_badge_fields() -> None:
     cleaned = strip_recommend(
         {

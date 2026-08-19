@@ -619,6 +619,10 @@ def run_set_production_profile(
     if not marker:
         raise DoctorError(f"Project marker missing for: {project_id}", code="not_found")
     existing = marker.get("production_profile") if isinstance(marker.get("production_profile"), dict) else {}
+    # This setter is also used after the library has locked operational choices.
+    # Preserve those choices while updating tier/budget fields so adding a cost
+    # cap cannot silently erase the selected provider, model, or review preset.
+    profile = {**existing, **profile}
     has_existing_experiment = any(
         k in existing for k in ("api_budget_tier", "budget_cny", "review_mode", "motion_mix")
     )

@@ -120,6 +120,49 @@ SCRIPT = {
 
 
 class TestBoardState:
+    def test_commercial_state_reads_run_without_lazy_write(self, projects_root):
+        p = _make_project(projects_root, "commercial-run-read-only")
+        _write(
+            p / "project.json",
+            {
+                "project_id": p.name,
+                "pipeline_type": "bootstrap-commercial",
+                "production_profile": {
+                    "review_mode_preset": "minimal",
+                    "production_tier": "heavy",
+                },
+            },
+        )
+
+        commercial = load_board_state(p)["commercial"]
+
+        assert commercial["production_run"] is None
+        assert commercial["produce_job"] is None
+        assert commercial["production_run_error"] is None
+        assert not (p / "production_run.json").exists()
+
+    def test_commercial_invalid_run_pauses_projection_without_overwrite(
+        self, projects_root
+    ):
+        p = _make_project(projects_root, "commercial-invalid-run")
+        _write(
+            p / "project.json",
+            {
+                "project_id": p.name,
+                "pipeline_type": "bootstrap-commercial",
+                "production_profile": {"review_mode_preset": "minimal"},
+            },
+        )
+        invalid = p / "production_run.json"
+        invalid.write_text("{broken", encoding="utf-8")
+
+        commercial = load_board_state(p)["commercial"]
+
+        assert commercial["production_run_error"]["code"] == "run_state_invalid"
+        assert commercial["decision"]["paused"] is True
+        assert commercial["decision"]["producing_wait"] is False
+        assert invalid.read_text(encoding="utf-8") == "{broken"
+
     def test_full_project(self, projects_root):
         p = _make_project(projects_root, "film")
         _write(p / "project.json", {"project_id": "film", "title": "My Film",

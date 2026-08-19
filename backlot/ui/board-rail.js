@@ -18,10 +18,18 @@ function stageWasCompletedBefore(st) {
   return (st?.history_entries || []).some((entry) => entry?.status === "completed");
 }
 
-function stageSubZh(st) {
+function stageSubZh(st, s) {
+  const phase = s?.commercial?.runner_status?.phase;
+  const pausedStage = s?.commercial?.board_stop?.stage;
+  if (phase === "paused" && st?.name === pausedStage) {
+    return "已暂停\n看本页原因，未在调模型";
+  }
   if (st?.metadata?.producing_wait) return "制作中\n请留在本页等待成片";
   if (st?.name === "delivery_signoff" && st.status !== "completed") {
-    return "成片已就绪\n本页预览后点结束并导出";
+    if (s?.commercial?.final_video) {
+      return "成片已就绪\n本页预览后点结束并导出";
+    }
+    return st.status === "in_progress" ? "等待成片\n完成后可在本页预览" : "待开始";
   }
   const nextHint = st?.name === "assets_gate" ? "点开始出片继续" : "点进入下一步继续";
   if (st.status === "awaiting_human") return `等你在本页确认\n${nextHint}`;
@@ -99,7 +107,7 @@ export function renderStageRail(s, {
       : st.status === "failed" ? "failed" : "";
     const icon = STAGE_ICONS[st.status] || String(pendingIndex);
     if (!STAGE_ICONS[st.status]) pendingIndex += 1;
-    const sub = commercial ? stageSubZh(st) : stageSub(st);
+    const sub = commercial ? stageSubZh(st, s) : stageSub(st);
     const isFocus = focusStageName && st.name === focusStageName;
     const node = el("div", {
       class: `stage ${cls}${selectedStage === st.name ? " selected" : ""}${isFocus ? " focus" : ""}${st.undeclared ? " undeclared" : ""}`,
