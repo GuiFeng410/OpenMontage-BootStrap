@@ -56,7 +56,9 @@ def _consume_export(project_id: str, pending: list[dict[str, Any]]) -> dict[str,
     if not exports:
         return None
     latest = exports[-1]
-    return project_export.apply_project_export(
+    from lib.application.export_project import export_project
+
+    return export_project(
         project_id,
         intent_id=str(latest["intent_id"]),
     )
@@ -75,32 +77,28 @@ def _complete_brief_locked(
     project_id: str,
     artifacts: dict[str, Any],
 ) -> None:
-    from lib.checkpoint import merge_write_checkpoint
+    from lib.application.approve_stage import approve_stage
 
-    merge_write_checkpoint(
-        PROJECTS_DIR,
+    approve_stage(
         project_id,
         "brief_locked",
-        "completed",
-        {
+        "panel_intent",
+        artifacts={
             "brief": artifacts["brief"],
             "asset_precheck": artifacts["asset_precheck"],
             "video_plan": artifacts["video_plan"],
             "segment_cards": artifacts["segment_cards"],
         },
         pipeline_type="bootstrap-commercial",
-        human_approval_required=True,
-        human_approved=True,
-        metadata_patch={
-            "needs_user_decision": False,
-            "approval_source": "panel_intent",
-        },
+        metadata={"approval_source": "panel_intent"},
         metadata_remove_keys=board_advance.DECISION_STALE_KEYS,
+        record_approval_note=False,
     )
 
 
 def _complete_review_stage(project_id: str, stage: str) -> None:
-    from lib.checkpoint import merge_write_checkpoint, read_checkpoint
+    from lib.application.approve_stage import approve_stage
+    from lib.checkpoint import read_checkpoint
 
     evidence = board_advance.review_stage_evidence(
         project_id, stage, projects_dir=PROJECTS_DIR
@@ -119,20 +117,16 @@ def _complete_review_stage(project_id: str, stage: str) -> None:
             code="review_evidence_missing",
             safe_message="当前阶段视频已发现，但 checkpoint 证据不完整，请先写回阶段证据。",
         )
-    merge_write_checkpoint(
-        PROJECTS_DIR,
+    approve_stage(
         project_id,
         stage,
-        "completed",
-        artifacts,
+        "panel_intent",
+        artifacts=artifacts,
         pipeline_type=str(current.get("pipeline_type") or "bootstrap-commercial"),
-        human_approval_required=bool(current.get("human_approval_required")),
-        human_approved=True,
-        metadata_patch={
-            "needs_user_decision": False,
-            "approval_source": "panel_intent",
-        },
+        metadata={"approval_source": "panel_intent"},
         metadata_remove_keys=board_advance.DECISION_STALE_KEYS,
+        human_approval_required=bool(current.get("human_approval_required")),
+        record_approval_note=False,
     )
 
 
@@ -675,9 +669,9 @@ def tick(
         marker = board_advance.read_marker(
             project_id, projects_dir=PROJECTS_DIR
         ) or marker
-        produce = board_produce.sync_produce(
-            project_id, marker, projects_dir=PROJECTS_DIR
-        )
+        from lib.application.sync_production_job import sync_production_job
+
+        produce = sync_production_job(project_id)
         if produce.get("action"):
             actions.append(str(produce["action"]))
     except Exception as exc:

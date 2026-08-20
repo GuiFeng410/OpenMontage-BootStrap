@@ -1483,11 +1483,12 @@ def produce_apply_project_export(
     confirm_phrase: str = "",
 ) -> dict[str, Any]:
     """Copy renders/final.mp4 to exports/ and mark the project completed."""
+    from lib.application.export_project import export_project
     from lib.interaction_intents import UnknownProjectError
-    from lib.project_export import ProjectExportError, apply_project_export
+    from lib.project_export import ProjectExportError
 
     try:
-        return apply_project_export(
+        return export_project(
             project_id,
             intent_id=intent_id,
             confirm_phrase=confirm_phrase,

@@ -12,6 +12,7 @@ from uuid import uuid4
 
 import lib.interaction_intents as intents
 from lib.paths import PROJECTS_DIR
+from lib.persistence.json_store import JsonStore
 
 EXPORT_PHRASE = "结束导出"
 FINAL_REL = Path("renders") / "final.mp4"
@@ -34,7 +35,17 @@ def _now_iso() -> str:
 
 
 def _project_dir(project_id: str) -> Path:
-    return intents._project_dir(project_id)
+    import sys
+
+    from lib.paths import PROJECTS_DIR as live_projects_dir
+    from lib.paths import get_workspace
+
+    facade = sys.modules.get("lib.project_export")
+    if facade is not None:
+        current = getattr(facade, "PROJECTS_DIR", None)
+        if current is not None and current is not live_projects_dir:
+            return Path(current) / project_id
+    return get_workspace().project_dir(project_id)
 
 
 def _marker_path(project_id: str) -> Path:
@@ -103,24 +114,16 @@ def mark_interrupted(
     marker["interrupted_at"] = _now_iso()
     if reason_zh:
         marker["interrupt_reason_zh"] = reason_zh
-    marker_path.write_text(
-        json.dumps(marker, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
+    JsonStore.write_atomic(marker_path, marker)
     status_path = project / RUNNER_STATUS_NAME
-    status_path.write_text(
-        json.dumps(
-            {
-                "version": "1.0",
-                "updated_at": _now_iso(),
-                "phase": "paused",
-                "friendly_zh": reason_zh or "已中断。项目未结束，可在库页继续。",
-            },
-            ensure_ascii=False,
-            indent=2,
-        )
-        + "\n",
-        encoding="utf-8",
+    JsonStore.write_atomic(
+        status_path,
+        {
+            "version": "1.0",
+            "updated_at": _now_iso(),
+            "phase": "paused",
+            "friendly_zh": reason_zh or "已中断。项目未结束，可在库页继续。",
+        },
     )
     return {
         "ok": True,
@@ -137,7 +140,7 @@ def write_runner_status(project_id: str, payload: dict[str, Any]) -> Path:
         "updated_at": _now_iso(),
         **payload,
     }
-    path.write_text(json.dumps(body, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    JsonStore.write_atomic(path, body)
     return path
 
 
@@ -153,8 +156,7 @@ def read_runner_status(project_dir: Path) -> dict[str, Any] | None:
 
 
 def _write_marker(project_id: str, marker: dict[str, Any]) -> None:
-    path = _marker_path(project_id)
-    path.write_text(json.dumps(marker, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    JsonStore.write_atomic(_marker_path(project_id), marker)
 
 
 def _final_path(project_id: str) -> Path:

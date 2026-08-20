@@ -576,73 +576,30 @@ def run_set_production_profile(
     experimental API budget caps, not selling prices.
     """
     require_p1_writes()
-    pdir = project_dir(project_id)
-    if not pdir.exists():
-        raise DoctorError(f"Project not found: {project_id}", code="not_found")
-    profile: dict[str, Any] = _normalize_production_profile(
-        production_tier, visual_source, tts_source
-    )
-    wants_experiment = any(
-        [
-            str(api_budget_tier).strip(),
-            str(budget_cny).strip(),
-            str(review_mode).strip(),
-            str(candidate_mode).strip(),
-            str(motion_target_band).strip(),
-            str(motion_mix).strip(),
-            str(motion_mix_source).strip(),
-            str(style_label_zh).strip(),
-            str(style_playbook).strip(),
-            str(usd_cny_rate).strip(),
-            str(duration_seconds).strip(),
-        ]
-    )
-    marker = _read_marker(project_id)
-    if not marker:
-        raise DoctorError(f"Project marker missing for: {project_id}", code="not_found")
-    existing = marker.get("production_profile") if isinstance(marker.get("production_profile"), dict) else {}
-    # This setter is also used after the library has locked operational choices.
-    # Preserve those choices while updating tier/budget fields so adding a cost
-    # cap cannot silently erase the selected provider, model, or review preset.
-    profile = {**existing, **profile}
-    has_existing_experiment = any(
-        k in existing for k in ("api_budget_tier", "budget_cny", "review_mode", "motion_mix")
-    )
-    if wants_experiment or has_existing_experiment:
-        _ensure_repo_on_path()
-        from lib.experiment_budget import DEFAULT_USD_CNY, merge_experiment_fields_into_profile
+    require_projects_root()
+    from lib.application.errors import ApplicationError
+    from lib.application.lock_production_profile import lock_production_profile
 
-        rate = float(usd_cny_rate) if str(usd_cny_rate).strip() else float(
-            existing.get("usd_cny_rate") or DEFAULT_USD_CNY
+    try:
+        return lock_production_profile(
+            project_id,
+            production_tier,
+            visual_source=visual_source,
+            tts_source=tts_source,
+            api_budget_tier=api_budget_tier,
+            budget_cny=budget_cny,
+            review_mode=review_mode,
+            candidate_mode=candidate_mode,
+            motion_target_band=motion_target_band,
+            motion_mix=motion_mix,
+            motion_mix_source=motion_mix_source,
+            style_label_zh=style_label_zh,
+            style_playbook=style_playbook,
+            usd_cny_rate=usd_cny_rate,
+            duration_seconds=duration_seconds,
         )
-        dur_raw = str(duration_seconds).strip() or existing.get("duration_seconds")
-        try:
-            duration_i = int(float(dur_raw)) if dur_raw not in (None, "") else None
-        except (TypeError, ValueError):
-            duration_i = None
-        profile = merge_experiment_fields_into_profile(
-            profile,
-            api_budget_tier=(api_budget_tier or existing.get("api_budget_tier") or "standard"),
-            budget_cny=budget_cny or existing.get("budget_cny"),
-            review_mode=review_mode or existing.get("review_mode") or "normal",
-            candidate_mode=candidate_mode or existing.get("candidate_mode") or "adaptive",
-            motion_target_band=motion_target_band or existing.get("motion_target_band"),
-            motion_mix=motion_mix or existing.get("motion_mix") or "0:1",
-            motion_mix_source=motion_mix_source or existing.get("motion_mix_source") or "",
-            duration_seconds=duration_i,
-            style_label_zh=style_label_zh or existing.get("style_label_zh"),
-            style_playbook=style_playbook or existing.get("style_playbook"),
-            usd_cny_rate=rate,
-        )
-        if duration_i is not None:
-            profile["duration_seconds"] = duration_i
-    marker["production_profile"] = profile
-    path = _write_marker(project_id, marker)
-    return {
-        "project_id": project_id,
-        "marker_path": str(path),
-        "production_profile": profile,
-    }
+    except ApplicationError as exc:
+        raise DoctorError(exc.message, code=exc.code) from exc
 
 
 def run_get_project_state(project_id: str) -> dict[str, Any]:
@@ -1017,11 +974,8 @@ def run_approve_checkpoint(
             "MCP cannot invent approval."
         )
     require_p1_writes()
-    _ensure_repo_on_path()
-    from lib.checkpoint import merge_write_checkpoint
-
-    root = require_projects_root()
-    project = project_dir(project_id)
+    require_projects_root()
+    project_dir(project_id)
     try:
         supplied_artifacts = json.loads(artifacts_json) if artifacts_json else {}
     except json.JSONDecodeError as exc:
@@ -1035,15 +989,6 @@ def run_approve_checkpoint(
         raise DoctorError(f"metadata_json invalid: {exc}", code="bad_request") from exc
     if not isinstance(supplied_metadata, dict):
         raise DoctorError("metadata_json must be an object", code="bad_request")
-    supplied_metadata["needs_user_decision"] = False
-    stale_metadata_keys = (
-        "decision_title_zh",
-        "decision_context_zh",
-        "decision_prompt_zh",
-        "decision_options",
-        "recommendation_zh",
-        "examples_zh",
-    )
 
     if cost_snapshot_json:
         try:
@@ -1055,39 +1000,24 @@ def run_approve_checkpoint(
     else:
         cost_snapshot = None
 
-    supplied_metadata["approval_note"] = approval_text.strip()
-    path, written, marker_update = merge_write_checkpoint(
-        root,
-        project_id,
-        stage,
-        "completed",
-        supplied_artifacts,
-        pipeline_type=pipeline_type or None,
-        human_approval_required=True,
-        human_approved=True,
-        cost_snapshot_patch=cost_snapshot,
-        metadata_patch=supplied_metadata,
-        metadata_remove_keys=stale_metadata_keys,
-        project_marker_builder=lambda artifacts: (
-            _build_production_profile_marker_update(project_id, artifacts)
-        ),
-    )
-    artifacts = written["artifacts"]
-    synced_profile = (
-        marker_update.get("production_profile")
-        if isinstance(marker_update, dict)
-        else None
-    )
-    result: dict[str, Any] = {
-        "checkpoint_path": str(path),
-        "stage": stage,
-        "status": "completed",
-        "artifact_keys": sorted(artifacts.keys()),
-        "materialized_hint_zh": "已写入 checkpoint，并尽量落盘 artifacts/*.json；请刷新看板核对。",
-    }
-    if synced_profile:
-        result["production_profile"] = synced_profile
-    return result
+    from lib.application.approve_stage import approve_stage
+    from lib.application.errors import ApplicationError
+
+    try:
+        return approve_stage(
+            project_id,
+            stage,
+            approval_text,
+            artifacts=supplied_artifacts,
+            pipeline_type=pipeline_type,
+            metadata=supplied_metadata,
+            cost_snapshot=cost_snapshot,
+            project_marker_builder=lambda artifacts: (
+                _build_production_profile_marker_update(project_id, artifacts)
+            ),
+        )
+    except ApplicationError as exc:
+        raise DoctorError(exc.message, code=exc.code) from exc
 
 
 def run_append_decision(project_id: str, decision_json: str) -> dict[str, Any]:

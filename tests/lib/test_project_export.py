@@ -48,6 +48,7 @@ def _export_intent(project_id="demo-pro"):
 def project(monkeypatch, tmp_path):
     root = tmp_path / "projects"
     project = _write_project(root)
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(root))
     monkeypatch.setattr(ii, "PROJECTS_DIR", root)
     monkeypatch.setattr(pe, "PROJECTS_DIR", root)
     return project
