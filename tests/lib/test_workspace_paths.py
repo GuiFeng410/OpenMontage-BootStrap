@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import pytest
 
 import lib.paths as paths_mod
-from lib.paths import WorkspacePaths, get_workspace
+from lib.paths import WorkspacePaths, ensure_import_roots, get_workspace
 from openmontage.mcp.common.errors import ConfigError, SandboxError
 
 
@@ -43,3 +44,26 @@ def test_project_dir_require_marker(
     (tmp_path / "demo").mkdir()
     (tmp_path / "demo" / "project.json").write_text("{}", encoding="utf-8")
     assert get_workspace().project_dir("demo", require_marker=True).is_dir()
+
+
+def test_src_root_is_repo_src(tmp_path: Path) -> None:
+    ws = WorkspacePaths(repo_root=tmp_path)
+    assert ws.src_root == (tmp_path / "src").resolve()
+
+
+def test_ensure_import_roots_puts_src_first_and_keeps_repo(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    monkeypatch.setattr(sys, "path", list(sys.path))
+    src = str((tmp_path / "src").resolve())
+    root = str(tmp_path.resolve())
+    sys.path.insert(0, root)
+    sys.path.append(src)
+    returned = ensure_import_roots(tmp_path)
+    assert returned == tmp_path.resolve()
+    assert sys.path[0] == src
+    assert sys.path.count(src) == 1
+    assert root in sys.path
+    ensure_import_roots(tmp_path)
+    assert sys.path.count(src) == 1
+    assert sys.path[0] == src

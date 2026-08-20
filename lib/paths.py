@@ -8,6 +8,7 @@ board watches it. Resolve it at call time, not at import time.
 from __future__ import annotations
 
 import os
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -107,6 +108,10 @@ class WorkspacePaths:
         return resolved
 
     @property
+    def src_root(self) -> Path:
+        return (self.repo_root / "src").resolve()
+
+    @property
     def env_file(self) -> Path:
         return self.repo_root / ".env"
 
@@ -117,6 +122,25 @@ class WorkspacePaths:
     @property
     def backlot_dir(self) -> Path:
         return self.repo_root / ".backlot"
+
+
+def ensure_import_roots(repo_root: Path | None = None) -> Path:
+    """Put checkout ``src/`` first on ``sys.path``, then the repo root.
+
+    After G5-D the ``openmontage`` package lives under ``src/``. A leftover
+    ``openmontage/`` directory at repo root is only a shim and must not win.
+    ``src/`` may be absent; inserting a missing directory is harmless.
+    """
+    root = Path(repo_root).expanduser().resolve() if repo_root is not None else get_workspace().repo_root
+    src = (root / "src").resolve()
+    root_s = str(root)
+    src_s = str(src)
+    if src_s in sys.path:
+        sys.path.remove(src_s)
+    sys.path.insert(0, src_s)
+    if root_s not in sys.path:
+        sys.path.append(root_s)
+    return root
 
 
 def get_workspace() -> WorkspacePaths:
