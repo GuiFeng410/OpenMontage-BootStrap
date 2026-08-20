@@ -112,7 +112,7 @@ export function StageDrawer({ state, selectedStage, onToggleStage }: Props) {
         <div className="hint" style={{ marginBottom: 12, lineHeight: 1.6 }}>
           商品片阶段详情已在下方「方案摘要 / Beat 胶片条 / 成片预览」展示。
           <br />
-          原始 JSON 见 <code>artifacts/</code> 目录；点选确认请打开默认站看板。
+          原始 JSON 见 <code>artifacts/</code> 目录；点选确认请留在本页。
         </div>
         {stageNeedsDecision(st) && prompt ? (
           <div className="commercial-decision-hint">

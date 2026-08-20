@@ -41,7 +41,7 @@ export function LibraryPage() {
   const liveCount = projects.filter((p) => p.live).length;
 
   return (
-    <div className="wrap" data-backlot-next="library">
+      <div className="wrap" data-backlot-spa="library">
       <header className="slate">
         <div className="clapper" />
         <div>

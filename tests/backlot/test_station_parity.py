@@ -1,4 +1,4 @@
-"""Same-fixture parity: vanilla `/` `/p/` vs React `/next/` `/next/p/`. Default routes stay vanilla."""
+"""Same-fixture parity: default `/` `/p/` vs alias `/next/` `/next/p/`."""
 
 from __future__ import annotations
 
@@ -39,15 +39,15 @@ def client(monkeypatch):
         yield c
 
 
-def test_default_routes_still_vanilla(client):
+def test_default_routes_are_spa(client):
     home = client.get("/")
     board = client.get("/p/demo-commercial")
     assert home.status_code == 200
     assert board.status_code == 200
-    assert "/ui/library.js" in home.text
-    assert 'id="root"' not in home.text
-    assert "/ui/board.js" in board.text
-    assert 'id="root"' not in board.text
+    assert "/ui/library.js" not in home.text
+    assert 'id="root"' in home.text
+    assert "/ui/board.js" not in board.text
+    assert 'id="root"' in board.text
     nxt = client.get("/next/")
     assert nxt.status_code == 200
     assert 'id="root"' in nxt.text
@@ -322,7 +322,7 @@ def test_board_edit_copy_parity(parity_server, station, _library_path, board_pat
             browser.close()
 
 
-def test_export_gap_blocks_default_switch(parity_server):
+def test_export_and_interrupt_on_default_board(parity_server):
     playwright_sync = pytest.importorskip("playwright.sync_api")
     sync_playwright = playwright_sync.sync_playwright
     expect = playwright_sync.expect
@@ -335,8 +335,9 @@ def test_export_gap_blocks_default_switch(parity_server):
         try:
             _goto_state(page, parity_server, "/p/demo-commercial?static=1", payload)
             expect(page.get_by_role("button", name="结束并导出项目")).to_be_visible()
+            expect(page.get_by_role("button", name="中断")).to_be_visible()
             _goto_state(page, parity_server, "/next/p/demo-commercial?static=1", payload)
-            expect(page.get_by_role("button", name="结束并导出项目")).to_have_count(0)
+            expect(page.get_by_role("button", name="结束并导出项目")).to_be_visible()
         finally:
             browser.close()
 

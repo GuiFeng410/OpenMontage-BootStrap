@@ -662,16 +662,25 @@ def create_app() -> FastAPI:
 
     # ---- UI ------------------------------------------------------------
 
+    def _spa_ready() -> bool:
+        return (UI_NEXT_DIR / "index.html").is_file()
+
     @app.get("/p/{project_id}")
-    async def board_page(project_id: str) -> HTMLResponse:
+    async def board_page(project_id: str):
+        if _spa_ready():
+            return _next_index()
         return _ui_html("board.html", ("board.css", "board.js"))
 
     @app.get("/p/{project_path:path}")
-    async def board_page_path(project_path: str) -> HTMLResponse:
+    async def board_page_path(project_path: str):
+        if _spa_ready():
+            return _next_index()
         return _ui_html("board.html", ("board.css", "board.js"))
 
     @app.get("/")
-    async def library_page() -> HTMLResponse:
+    async def library_page():
+        if _spa_ready():
+            return _next_index()
         return _ui_html("index.html", ("board.css", "library.css", "library.js"))
 
     @app.get("/next")
@@ -685,6 +694,9 @@ def create_app() -> FastAPI:
 
     if UI_DIR.is_dir():
         app.mount("/ui", StaticFiles(directory=UI_DIR), name="ui")
+    spa_assets = UI_NEXT_DIR / "assets"
+    if spa_assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=spa_assets), name="spa-assets")
     if UI_NEXT_DIR.is_dir():
         app.mount("/next", StaticFiles(directory=UI_NEXT_DIR), name="ui-next")
 

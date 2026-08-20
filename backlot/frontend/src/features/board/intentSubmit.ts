@@ -52,6 +52,44 @@ export async function buildDecisionIntent({
   };
 }
 
+export async function buildExportIntent({
+  projectId,
+  stage = "delivery_signoff",
+  now = new Date(),
+  intentId,
+  digestSha256 = browserDigestSha256,
+}: {
+  projectId: string;
+  stage?: string;
+  now?: Date | string;
+  intentId?: string;
+  digestSha256?: (value: string) => Promise<string>;
+}) {
+  const createdAt = now instanceof Date ? now : new Date(now);
+  const expiresAt = new Date(createdAt.getTime() + 24 * 60 * 60 * 1000);
+  const summary = "结束并导出项目";
+  const summarySha256 = await digestSha256(summary);
+  const id =
+    intentId ||
+    (globalThis.crypto?.randomUUID
+      ? `export-${globalThis.crypto.randomUUID()}`
+      : `export-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  return {
+    version: "1.0",
+    intent_type: "project_export",
+    intent_id: id,
+    project_id: projectId,
+    stage,
+    revision: "export-v1",
+    summary,
+    summary_sha256: summarySha256,
+    payload: { action: "end_and_export" },
+    expires_at: expiresAt.toISOString(),
+    created_at: createdAt.toISOString(),
+    status: "pending",
+  };
+}
+
 export async function submitDecisionIntent({
   fetchImpl = fetch,
   intent,

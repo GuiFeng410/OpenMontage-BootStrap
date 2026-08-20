@@ -114,7 +114,7 @@ function DoneNotice({ state }: { state: BoardState }) {
   return (
     <div className="notice commercial-done-notice">
       <span>✓</span>
-      <span>七阶段已完成。点顶栏阶段可回看该阶段证据。确认后请到默认站点「结束并导出项目」。</span>
+      <span>七阶段已完成。点顶栏阶段可回看该阶段证据。确认后点顶栏「结束并导出项目」。</span>
     </div>
   );
 }
@@ -174,7 +174,7 @@ function AwaitingNotice({ state }: { state: BoardState }) {
         <div className="commercial-decision-body">
           <b>交付确认</b>
           <div className="commercial-decision-prompt" style={{ whiteSpace: "pre-line" }}>
-            {prompt || "成片已就绪。播放与导出请打开默认站看板。"}
+            {prompt || "成片已就绪，请在本页预览。确认后点顶栏「结束并导出项目」。"}
           </div>
         </div>
       </div>

@@ -46,6 +46,21 @@ export function mediaURL(projectId: string, relPath: string) {
     .join("/")}`;
 }
 
+export function fmtDuration(seconds?: number | null) {
+  if (seconds == null || !Number.isFinite(Number(seconds))) return "";
+  const n = Math.max(0, Number(seconds));
+  const m = Math.floor(n / 60);
+  const s = Math.round(n % 60);
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+export function libraryHref() {
+  const suffix = new URLSearchParams(window.location.search).has("static")
+    ? "?static=1"
+    : "";
+  return `/${suffix}`;
+}
+
 export function vanillaBoardHref(projectId: string) {
   const suffix = new URLSearchParams(window.location.search).has("static")
     ? "?static=1"

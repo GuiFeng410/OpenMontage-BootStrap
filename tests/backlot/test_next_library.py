@@ -1,4 +1,4 @@
-"""React library page on /next/. Vanilla / stays the default station."""
+"""React library page is the default station at `/`. `/next/` is an alias."""
 
 from __future__ import annotations
 
@@ -28,21 +28,21 @@ def client(monkeypatch):
         yield c
 
 
-def test_default_library_html_unchanged(client):
+def test_default_library_is_spa(client):
     page = client.get("/")
     assert page.status_code == 200
-    assert 'id="runner-occupant"' in page.text
-    assert "/ui/library.js" in page.text
-    assert 'id="root"' not in page.text
+    assert 'id="root"' in page.text
+    assert "/ui/library.js" not in page.text
+    assert "/ui/library.css" in page.text
 
 
-def test_next_library_shell_and_bundle_copy(client):
-    page = client.get("/next/")
+def test_library_shell_and_bundle_copy(client):
+    page = client.get("/")
     assert page.status_code == 200
     assert "Backlot" in page.text
     assert "/ui/library.css" in page.text
     assert 'id="root"' in page.text
-    src = re.search(r'src="(/next/assets/[^"]+)"', page.text)
+    src = re.search(r'src="(/assets/[^"]+)"', page.text)
     assert src, page.text
     js = client.get(src.group(1))
     assert js.status_code == 200
@@ -57,6 +57,9 @@ def test_next_library_shell_and_bundle_copy(client):
         "/api/library/events",
     ):
         assert needle in text, needle
+    alias = client.get("/next/")
+    assert alias.status_code == 200
+    assert 'id="root"' in alias.text
 
 
 def _available_local_port() -> int:
@@ -126,8 +129,8 @@ def test_next_library_onboarding_renders(next_library_server):
         page = browser.new_page(viewport={"width": 1280, "height": 900})
         try:
             page.goto(
-                next_library_server + "/next/?static=1",
-                wait_until="networkidle",
+                next_library_server + "/?static=1",
+                wait_until="domcontentloaded",
             )
             expect(page.get_by_role("heading", name="项目库")).to_be_visible()
             expect(page.locator(".library-onboarding")).to_contain_text("创建新商品片")

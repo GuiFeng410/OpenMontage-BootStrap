@@ -4,10 +4,11 @@ import { BeatFilmstrip } from "./Beats";
 import { CommercialPlayer } from "./CommercialPlayer";
 import { EditTab } from "./EditTab";
 import { EvidencePanels, ReviewFold } from "./Evidence";
+import { GenericBoard } from "./GenericBoard";
 import { HeaderSlate } from "./HeaderSlate";
 import { IntentStatus } from "./IntentStatus";
 import { BoardNotices } from "./Notices";
-import { vanillaBoardHref } from "./format";
+import { maybeRedirectAfterExport } from "./ExportButton";
 import {
   isCommercial,
   normalizeBoardState,
@@ -62,7 +63,7 @@ export function BoardPage() {
 
   if (error && !state) {
     return (
-      <div className="wrap" data-backlot-next="board">
+      <div className="wrap" data-backlot-spa="board">
         <div className="empty" style={{ marginTop: 80 }}>
           <div className="big">PROJECT NOT FOUND</div>
           <div>{error}</div>
@@ -72,28 +73,38 @@ export function BoardPage() {
   }
   if (!state) {
     return (
-      <div className="wrap" data-backlot-next="board">
+      <div className="wrap" data-backlot-spa="board">
         <p className="hint">正在加载看板…</p>
+      </div>
+    );
+  }
+
+  if (maybeRedirectAfterExport(state)) {
+    return (
+      <div className="wrap" data-backlot-spa="board">
+        <p className="hint">正在返回项目库…</p>
       </div>
     );
   }
 
   if (!isCommercial(state)) {
     return (
-      <div className="wrap" data-backlot-next="board">
-        <HeaderSlate state={state} />
+      <div className="wrap" data-backlot-spa="board">
+        <HeaderSlate
+          state={state}
+          editOpen={editOpen}
+          onToggleEdit={() => setEditOpen((open) => !open)}
+        />
         <StageRail state={state} selectedStage={selectedStage} onToggleStage={onToggleStage} />
-        <div className="hint" style={{ padding: 24 }}>
-          非商品片看板尚未迁入 React。请使用
-          <a href={vanillaBoardHref(state.project_id)}> 默认站 </a>。
-        </div>
+        <StageDrawer state={state} selectedStage={selectedStage} onToggleStage={onToggleStage} />
+        {editOpen ? <EditTab state={state} /> : <GenericBoard state={state} />}
       </div>
     );
   }
 
   const hideAssetPanels = shouldHideMinimalAssetPanels(state);
   return (
-    <div className="wrap" data-backlot-next="board">
+      <div className="wrap" data-backlot-spa="board">
       <HeaderSlate
         state={state}
         editOpen={editOpen}

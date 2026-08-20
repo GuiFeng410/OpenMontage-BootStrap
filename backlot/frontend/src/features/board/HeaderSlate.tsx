@@ -1,7 +1,9 @@
 import { ThemeToggle } from "../library/ThemeToggle";
 import { QuitButton } from "../library/QuitButton";
-import { fmtAgo, fmtMoney, fmtMoneyCny, vanillaBoardHref } from "./format";
-import { isCommercial } from "./model";
+import { ExportButton } from "./ExportButton";
+import { InterruptButton } from "./InterruptButton";
+import { fmtAgo, fmtMoney, fmtMoneyCny, libraryHref } from "./format";
+import { isCommercial, isProduceBusy } from "./model";
 import type { BoardState } from "./types";
 
 type Props = {
@@ -17,12 +19,12 @@ export function HeaderSlate({ state, editOpen = false, onToggleEdit }: Props) {
     <header className="slate">
       <div className="clapper" />
       <div>
-        <a className="wordmark" href="/next/" style={{ textDecoration: "none" }}>
+        <a className="wordmark" href={libraryHref()} style={{ textDecoration: "none" }}>
           Backlot
         </a>
         <h1>
           {commercial ? (
-            <a href="/next/" style={{ color: "inherit", textDecoration: "none" }} title="返回项目库切换其它项目">
+            <a href={libraryHref()} style={{ color: "inherit", textDecoration: "none" }} title="返回项目库切换其它项目">
               {state.title}
             </a>
           ) : (
@@ -31,15 +33,8 @@ export function HeaderSlate({ state, editOpen = false, onToggleEdit }: Props) {
         </h1>
         {commercial ? (
           <div className="project-switch-hint">
-            <a href="/next/" style={{ color: "var(--text-3)", fontSize: "calc(10.5px * var(--fs-scale))" }}>
+            <a href={libraryHref()} style={{ color: "var(--text-3)", fontSize: "calc(10.5px * var(--fs-scale))" }}>
               ← 所有项目
-            </a>
-            {" · "}
-            <a
-              href={vanillaBoardHref(state.project_id)}
-              style={{ color: "var(--text-3)", fontSize: "calc(10.5px * var(--fs-scale))" }}
-            >
-              打开默认站看板
             </a>
           </div>
         ) : null}
@@ -49,7 +44,9 @@ export function HeaderSlate({ state, editOpen = false, onToggleEdit }: Props) {
       {onToggleEdit ? (
         <EditTabButton state={state} editOpen={editOpen} onToggleEdit={onToggleEdit} />
       ) : null}
-      <QuitButton />
+      <ExportButton state={state} />
+      <InterruptButton state={state} />
+      <QuitButton produceBusy={isProduceBusy(state)} />
       <ThemeToggle />
       <LiveBadge state={state} />
       <CostBlock state={state} />

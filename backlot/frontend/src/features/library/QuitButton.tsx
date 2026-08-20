@@ -14,7 +14,7 @@ async function stopBacklotRuntime({ interrupt = false } = {}) {
   return { ok: true, friendly_zh: payload.friendly_zh || "看板即将退出。" };
 }
 
-export function QuitButton() {
+export function QuitButton({ produceBusy = false }: { produceBusy?: boolean }) {
   const [feedback, setFeedback] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -23,12 +23,19 @@ export function QuitButton() {
       <button
         type="button"
         className="edit-tab-btn quit-tab-btn"
-        title="关掉本机网页服务和 runner。当前项目标为已中断，不是结束导出。"
+        title={
+          produceBusy
+            ? "正在出片。确认后会中断并关掉网页服务。"
+            : "关掉本机网页服务和 runner。当前项目标为已中断，不是结束导出。"
+        }
         disabled={busy}
         onClick={async () => {
+          if (produceBusy && !window.confirm("正在生成。确认中断？项目会标为已中断，不会结束导出。")) {
+            return;
+          }
           setBusy(true);
           try {
-            const result = await stopBacklotRuntime();
+            const result = await stopBacklotRuntime({ interrupt: produceBusy });
             setFeedback(result.friendly_zh);
             if (result.ok) {
               window.setTimeout(() => {

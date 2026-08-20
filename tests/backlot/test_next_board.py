@@ -1,4 +1,4 @@
-"""React commercial board shell on /next/p/<id>. Vanilla /p/ stays the default station."""
+"""React commercial board is the default station at `/p/<id>`. `/next/p/` is an alias."""
 
 from __future__ import annotations
 
@@ -34,19 +34,19 @@ def client(monkeypatch):
         yield c
 
 
-def test_vanilla_board_html_unchanged(client):
+def test_default_board_is_spa(client):
     page = client.get("/p/demo-commercial")
     assert page.status_code == 200
-    assert "/ui/board.js" in page.text
-    assert 'id="root"' not in page.text
+    assert 'id="root"' in page.text
+    assert "/ui/board.js" not in page.text
 
 
-def test_next_board_shell_in_bundle(client):
-    page = client.get("/next/p/demo-commercial")
+def test_board_shell_in_bundle(client):
+    page = client.get("/p/demo-commercial")
     assert page.status_code == 200
     assert 'id="root"' in page.text
     assert "/ui/board-commercial.css" in page.text
-    match = re.search(r'src="(/next/assets/[^"]+)"', page.text)
+    match = re.search(r'src="(/assets/[^"]+)"', page.text)
     assert match, page.text
     js = client.get(match.group(1))
     assert js.status_code == 200
@@ -58,7 +58,6 @@ def test_next_board_shell_in_bundle(client):
         "commercial-review-fold",
         "请留在本页确认",
         "/api/project/",
-        "打开默认站看板",
         "回顾",
         "commercial-decision-option",
         "/intents",
@@ -69,9 +68,16 @@ def test_next_board_shell_in_bundle(client):
         "edit-clip",
         "render-hero",
         "cuts_revision",
+        "结束并导出项目",
+        "export-tab-btn",
+        "interrupt-tab-btn",
+        "project_export",
     ):
         assert needle in text, needle
     assert "/ui/board-edit.css" in page.text
+    alias = client.get("/next/p/demo-commercial")
+    assert alias.status_code == 200
+    assert 'id="root"' in alias.text
 
 
 def _available_local_port() -> int:
@@ -160,7 +166,9 @@ def test_next_board_readonly_shell_renders(next_board_server):
             expect(page.locator(".commercial-beat-card[data-beat='beat_1']")).to_be_visible()
             expect(page.locator(".commercial-review-fold")).to_contain_text("回顾")
             expect(page.locator(".commercial-decision-option")).to_have_count(0)
-            expect(page.get_by_role("link", name="打开默认站看板")).to_be_visible()
+            expect(page.get_by_role("link", name="所有项目")).to_be_visible()
+            expect(page.get_by_role("button", name="结束并导出项目")).to_be_visible()
+            expect(page.get_by_role("button", name="中断")).to_be_visible()
             expect(page.get_by_role("button", name="✂ 剪辑")).to_be_visible()
         finally:
             browser.close()
@@ -485,6 +493,80 @@ def test_next_board_edit_delete_reorder_and_submit(next_board_server):
             assert body["base"]["cuts_revision"]
             assert body["base"]["source_render"] == "renders/draft.mp4"
             assert any(item.get("type") in {"delete", "reorder"} for item in body["actions"])
+        finally:
+            browser.close()
+
+
+def test_default_board_export_posts_project_export(next_board_server):
+    playwright_sync = pytest.importorskip("playwright.sync_api")
+    sync_playwright = playwright_sync.sync_playwright
+    expect = playwright_sync.expect
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    payload["commercial"]["final_video"] = {"exists": True, "path": "renders/final.mp4"}
+    payload["commercial"]["completed"] = False
+    posts: list[dict] = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            page.route(
+                "**/api/project/*/state",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps(payload),
+                ),
+            )
+
+            def handle_intent(route):
+                if route.request.method != "POST":
+                    route.fallback()
+                    return
+                posts.append(json.loads(route.request.post_data or "{}"))
+                route.fulfill(status=201, content_type="application/json", body="{}")
+
+            page.route("**/intents", handle_intent)
+            page.goto(next_board_server + "/p/demo-commercial?static=1", wait_until="domcontentloaded")
+            expect(page.get_by_role("button", name="结束并导出项目")).to_be_visible()
+            expect(page.get_by_role("button", name="中断")).to_be_visible()
+            page.get_by_role("button", name="结束并导出项目").click()
+            expect(page.locator(".export-tab-feedback").first).to_contain_text("已提交结束导出")
+            assert posts and posts[0]["intent_type"] == "project_export"
+            assert posts[0]["payload"]["action"] == "end_and_export"
+        finally:
+            browser.close()
+
+
+def test_generic_board_shows_disk_notice(next_board_server):
+    playwright_sync = pytest.importorskip("playwright.sync_api")
+    sync_playwright = playwright_sync.sync_playwright
+    expect = playwright_sync.expect
+    payload = {
+        "project_id": "film",
+        "title": "Film",
+        "pipeline": {"pipeline_type": "explainer", "known": True},
+        "stages": [{"name": "script", "status": "pending"}],
+        "artifacts": {},
+        "media": {"renders": [], "snapshots": [], "music": []},
+        "events": [],
+        "has_pipeline_state": False,
+        "commercial": None,
+    }
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            page.route(
+                "**/api/project/*/state",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps(payload),
+                ),
+            )
+            page.goto(next_board_server + "/p/film?static=1", wait_until="domcontentloaded")
+            expect(page.locator(".notice").first).to_contain_text("No pipeline state")
+            expect(page.get_by_role("button", name="结束并导出项目")).to_have_count(0)
         finally:
             browser.close()
 

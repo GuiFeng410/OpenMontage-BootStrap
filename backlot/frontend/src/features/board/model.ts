@@ -89,6 +89,11 @@ export function runnerBoundToProject(s: BoardState) {
   return Boolean(s.commercial?.runner_status?.runner_alive);
 }
 
+export function isProduceBusy(s: BoardState) {
+  const phase = s.commercial?.runner_status?.phase;
+  return phase === "producing" || phase === "queued" || phase === "applying";
+}
+
 export function isProducePaused(s: BoardState) {
   const runner = s.commercial?.runner_status || {};
   const dec = s.commercial?.decision || {};
@@ -218,7 +223,7 @@ export function stageWasCompletedBefore(st: StageState) {
 }
 
 export function projectIdFromPath() {
-  const raw = window.location.pathname.replace(/^\/next\/p\//, "");
+  const raw = window.location.pathname.replace(/^\/next\/p\//, "").replace(/^\/p\//, "");
   try {
     return decodeURIComponent(raw);
   } catch {
