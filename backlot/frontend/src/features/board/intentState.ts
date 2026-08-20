@@ -137,10 +137,14 @@ export function summarizeDraft(draft: IntentDraft) {
   }
   const note = draft.note.trim();
   if (note) lines.push(`备注：${note}`);
-  lines.push(
-    `点「${draft.stage === "assets_gate" ? "开始出片" : "进入下一步"}」后请留在本页。`,
-    "以上选择仍在等待确认，尚未正式执行。",
-  );
+  const current = selectedOptionId(draft, `${draft.stage}::current`);
+  const clickLabel =
+    current === "generate"
+      ? "开始生成补图"
+      : draft.stage === "assets_gate"
+        ? "开始出片"
+        : "进入下一步";
+  lines.push(`点「${clickLabel}」后请留在本页。`, "以上选择仍在等待确认，尚未正式执行。");
   return lines.join("\n");
 }
 
@@ -217,11 +221,23 @@ export function clearDraft(storage: DraftStorage, { projectId, stage }: { projec
   }
 }
 
-export function primarySubmitLabel(stage: string) {
+export function primarySubmitLabel(
+  stage: string,
+  draft?: IntentDraft | null,
+  options?: DecisionOption[],
+) {
+  const current = selectedOptionId(draft, `${stage}::current`);
+  const hit = (options || []).find(
+    (item) => String(item.id ?? item.option_id ?? "") === current,
+  );
+  if (hit?.label_zh) return String(hit.label_zh);
   return stage === "assets_gate" ? "开始出片" : "进入下一步";
 }
 
-export function submittedFeedback(stage: string) {
-  if (stage === "assets_gate") return "已点开始出片，请留在本页等待本机处理。";
+export function submittedFeedback(stage: string, draft?: IntentDraft | null, options?: DecisionOption[]) {
+  if (stage === "assets_gate") {
+    const label = primarySubmitLabel(stage, draft, options);
+    return `已点${label}，请留在本页等待本机处理。`;
+  }
   return "已进入下一步，请留在本页等待本机处理。";
 }

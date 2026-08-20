@@ -141,7 +141,16 @@ function stageSubZh(st: StageState, s: BoardState) {
     }
     return st.status === "in_progress" ? "等待成片\n完成后可在本页预览" : "待开始";
   }
-  const nextHint = st.name === "assets_gate" ? "点开始出片继续" : "点进入下一步继续";
+  const options = Array.isArray(st.metadata?.decision_options)
+    ? (st.metadata?.decision_options as { id?: string }[])
+    : [];
+  const firstId = String(options[0]?.id || "");
+  const nextHint =
+    firstId === "generate"
+      ? "点开始生成补图继续"
+      : st.name === "assets_gate"
+        ? "点开始出片继续"
+        : "点进入下一步继续";
   if (st.status === "awaiting_human") return `等你在本页确认\n${nextHint}`;
   if (stageNeedsDecision(st)) return `等你在本页确认\n${nextHint}`;
   if (st.status === "in_progress" && stageWasCompletedBefore(st)) {

@@ -254,7 +254,7 @@ produce_plan_approval_bundle
 | `medium_source`（中度） | `stock` 才走 Stock 下载；`user_assets` 只用项目内素材；无 Stock Key 禁止走 stock |
 | `ai_video=disabled` 或不存在 | **禁止**调用付费 AI 视频生成 |
 | `ai_video=enabled` + `video_channel` / `video_model` | **只使用**该渠道与模型；禁止改用其它视频供应商 |
-| `video_plan`（表 3） | 按已确认分段的画面/文案要点生成与拼接；不得擅自改段数或重写规划。表 3 的 I2I 缺图 Beat 可先写 `gap_fill="i2i"`、`assignment_status="i2i_planned"`、`planned_output_path`、provider/model 并省略 `ref_image`；但 04 不得消费该开放状态。审图 approved 后，03 才把真实批准路径回填 `ref_image` / actual ledger 并关闭矩阵。04 只读取 approved 用户图/精确复用/生成图；任何缺口开放、批准后仍无 `ref_image`、账本/计划漂移均让整个付费视频调用停止并退回 03 |
+| `video_plan`（表 3） | 按已确认分段的画面/文案要点生成与拼接；不得擅自改段数或重写规划。表 3 的 I2I 缺图 Beat 可先写 `gap_fill="i2i"`、`assignment_status="i2i_planned"`、`planned_output_path`、provider/model 并省略 `ref_image`；但 04 不得消费该开放状态。审图 approved 后，有看板时由 runner（无看板时由 03）把真实批准路径回填 `ref_image` / actual ledger 并关闭矩阵。04 只读取 approved 用户图/精确复用/生成图；任何缺口开放、批准后仍无 `ref_image`、账本/计划漂移均让整个付费视频调用停止并退回 03 |
 | `motion_mix` | 按推荐目标**大概**安排整片 AI 生成总秒数（±约 15%）；不按段数硬凑。审查中用户改 beat 方式后更新计划，**允许终稿偏离**；偏离只告知，不否决交付 |
 | `budget_cny` | 实验 API 上限（¥1/3/5/8/12）。单笔 beat 计划费用 ≥¥5 → **提示即可**（不论累计）。触顶停烧仍走 B6 |
 

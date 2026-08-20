@@ -568,7 +568,7 @@ v2 仍遵守既有硬门：浏览器不调付费 API、聊天一次只问一个�
 1. **必须先读**本目录 `references/product-prompt-template.md`。  
 2. **必须再读** `references/asset-preprocess-gate.md`，先输出 `beat × 所需画面 × 候选图片` 覆盖矩阵；总张数够不代表段覆盖或关键角度够。每张上传图必须归 `used` / `reuse_pending` / `unused` 并写原因。
 3. 每个缺口只允许四选：补传、I2I、显式复用、降级/不补。I2I 不是默认项；无当前可用 image provider 时标“不可执行”且不推荐。**禁止把 Pixverse 或 video provider 当图片生成器**。
-4. 表 3 写入已确认的缺口动作，但此时只规划 I2I、不生成：缺图 Beat 写 `gap_fill="i2i"`、`assignment_status="i2i_planned"`、`planned_output_path`、provider/model，`ref_image` 可省略。用户确认表 3 并完成 `brief_locked` 后，进入顶层 `assets_gate` 执行补图、候选重试、审图与复用授权。
+4. 表 3 写入已确认的缺口动作，但此时只规划 I2I、不生成：缺图 Beat 写 `gap_fill="i2i"`、`assignment_status="i2i_planned"`、`planned_output_path`、provider/model，`ref_image` 可省略。用户确认表 3 并完成 `brief_locked` 后进入顶层 `assets_gate`。**有看板时由本机 runner 在用户点「开始生成补图」后执行补图、重试与审图**；聊天仅在看板不可用时作为退路。禁止方案页一点同意就静默硬烧图。
 5. 生成图确认是 `assets_gate` 内部子闸，不是第八阶段。所有档位、普通/专业/快速模式均须用户审图：普通可一次批量确认全部候选；专业逐张确认并可逐张重生成；快速不能绕过。
 6. 未经 `approved` 的生成图不得写入 `ref_image`、不得当实际素材、不得进入试片或 video generation。`assets_gate=completed` 前不交接 produce。
 

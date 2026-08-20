@@ -249,6 +249,43 @@ def test_tick_advances_to_next_stop_after_apply(monkeypatch, tmp_path):
     )
 
 
+def test_tick_generate_does_not_leave_assets_gate(monkeypatch, tmp_path):
+    root = tmp_path / "projects"
+    project = _write_project(
+        root,
+        production_profile={
+            "review_mode_preset": "minimal",
+            "production_start_requested_at": "2026-08-18T00:00:00+00:00",
+        },
+    )
+    _patch_projects(monkeypatch, root)
+    board_advance.write_stop_card("demo-pro", "assets_gate", projects_dir=root)
+    pending_once = [
+        {"intent_type": "decision", "intent_id": "dec-gen", "revision": "r-gen"}
+    ]
+    calls = {"n": 0}
+
+    def fake_list(_project_id: str):
+        calls["n"] += 1
+        return pending_once if calls["n"] == 1 else []
+
+    monkeypatch.setattr(runner, "_list_pending", fake_list)
+    monkeypatch.setattr(
+        runner,
+        "_consume_decision",
+        lambda *_args, **_kwargs: {
+            "planned": {"intent": {"stage": "assets_gate"}},
+            "applied": {"intent": {"stage": "assets_gate"}},
+            "stop_action": "generate",
+        },
+    )
+    result = runner.tick("demo-pro", append_decision=lambda *_: {})
+    assert "approval_bundle" in result["actions"]
+    assert "next_stop" not in result["actions"]
+    overlay = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    assert overlay["board_stop"]["stage"] == "assets_gate"
+
+
 def test_tick_keeps_failure_on_page(monkeypatch, tmp_path):
     root = tmp_path / "projects"
     _write_project(root)
@@ -275,20 +312,24 @@ def test_tick_keeps_failure_on_page(monkeypatch, tmp_path):
     assert "确认面板选择" not in (result.get("current_question") or "")
 
 
-def test_runner_modules_do_not_call_paid_generate() -> None:
+def test_paid_generate_is_runner_i2i_and_produce_only() -> None:
     runner_src = Path(runner.__file__).read_text(encoding="utf-8")
     advance_src = Path(board_advance.__file__).read_text(encoding="utf-8")
-    from lib import board_gap_plan, board_produce
+    from lib import board_gap_plan, board_i2i
+    from lib.produce import video_adapter
 
     gap_src = Path(board_gap_plan.__file__).read_text(encoding="utf-8")
-    produce_src = Path(board_produce.__file__).read_text(encoding="utf-8")
-    for blob in (runner_src, advance_src, gap_src):
+    i2i_src = Path(board_i2i.__file__).read_text(encoding="utf-8")
+    video_src = Path(video_adapter.__file__).read_text(encoding="utf-8")
+    for blob in (advance_src, gap_src):
         assert "video_generate" not in blob
-    for blob in (runner_src, advance_src, gap_src, produce_src):
         assert "image_generate" not in blob
         assert "tts_generate" not in blob
         assert "stock_download" not in blob
-    assert "video_generate" in produce_src
+    assert "image_generate" not in runner_src
+    assert "run_i2i_generate" in runner_src
+    assert "image_generate" in i2i_src
+    assert "video_generate" in video_src
 
 
 def test_tick_recovers_stuck_brief_locked(monkeypatch, tmp_path):

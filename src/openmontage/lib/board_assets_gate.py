@@ -135,7 +135,11 @@ def plan_allows_auto_seal(project_dir: Path) -> bool:
             return False
         gap_fill = str(segment.get("gap_fill") or "")
         status = str(segment.get("assignment_status") or "")
-        if gap_fill == "i2i" or status == "i2i_planned":
+        if gap_fill == "i2i" or status in {
+            "i2i_planned",
+            "generating",
+            "i2i_review_pending",
+        }:
             return False
         if gap_fill != "user_upload" or status != "assigned":
             return False
@@ -169,11 +173,35 @@ def build_asset_ledger_from_plan(
         path = str(segment.get("ref_image") or "").strip()
         gap_fill = str(segment.get("gap_fill") or "")
         status = str(segment.get("assignment_status") or "")
-        if gap_fill == "i2i" or status == "i2i_planned":
+        if status in {"i2i_planned", "generating", "i2i_review_pending"} or (
+            gap_fill == "i2i" and status != "assigned"
+        ):
             raise AssetsGateError(
                 "存在图生图计划，须在本页完成生成与审图后再进入下一步。",
                 code="i2i_not_closed",
             )
+        if gap_fill == "i2i" and status == "assigned" and beat_id and path:
+            scan_row = _precheck_row(precheck, path)
+            user_class = str(
+                scan_row.get("user_class")
+                or scan_row.get("suggested_class")
+                or _class_for_beat(gap_plan, beat_id)
+            ).strip() or "product_hero"
+            counts[user_class] = counts.get(user_class, 0) + 1
+            from lib.board_i2i import i2i_ledger_row
+
+            row = i2i_ledger_row(
+                beat_id=beat_id,
+                path=path,
+                segment=segment,
+                user_class=user_class,
+                file_name=str(scan_row.get("file") or Path(path).name),
+            )
+            if scan_row:
+                row = {**scan_row, **row}
+            entries.append(row)
+            used_paths.add(path)
+            continue
         if gap_fill != "user_upload" or status != "assigned" or not beat_id or not path:
             raise AssetsGateError(
                 "分段素材未全部锁定为用户图，无法自动完成素材检查。",

@@ -21,13 +21,13 @@ import type {
   GapPlan,
   InteractionIntent,
 } from "./types";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 const locallySubmitted = new Map<string, string>();
 
 const GAP_ACTIONS: DecisionOption[] = [
   { id: "upload", label_zh: "补传", description_zh: "稍后在素材检查页上传。" },
-  { id: "i2i", label_zh: "图生图", description_zh: "锁定生图模型；同意方案后才生成。" },
+  { id: "i2i", label_zh: "图生图", description_zh: "锁定生图模型；素材检查页再生成。" },
   { id: "reuse", label_zh: "复用", description_zh: "用已有图片覆盖这一段。" },
   { id: "skip", label_zh: "不补", description_zh: "本段不补图，改为概念表达。" },
 ];
@@ -60,7 +60,13 @@ export function DecisionPanel({
   const [draft, setDraft] = useState<IntentDraft>(
     () => inspection.draft || createDraft(identity),
   );
-  const stale = ["stale", "corrupt"].includes(inspection.status);
+  useEffect(() => {
+    const next = inspectStoredDraft(storage, identity);
+    setDraft(next.draft || createDraft(identity));
+  }, [projectId, stage, revision, storage]);
+  const stale = ["stale", "corrupt"].includes(
+    inspectStoredDraft(storage, identity).status,
+  );
   const submissionKey = `${projectId}:${stage}`;
   const activeIntent = interactionIntents.find(
     (entry) =>
@@ -79,8 +85,10 @@ export function DecisionPanel({
   );
   const itemKey = `${stage}::current`;
   const options = Array.isArray(decision.options) ? decision.options : [];
-  const ready = gapPlanReady(draft, decision.gap_plan);
+  const gapPlan = stage === "brief_locked" ? decision.gap_plan : undefined;
+  const ready = gapPlanReady(draft, gapPlan);
   const summary = summarizeDraft(draft);
+  const submitLabel = primarySubmitLabel(stage, draft, options);
 
   const applyDraft = (next: IntentDraft) => {
     setDraft(next);
@@ -99,7 +107,7 @@ export function DecisionPanel({
           {decision.prompt_zh || "请在本页确认后进入下一步。"}
         </div>
         <GapPlanBlock
-          gapPlan={decision.gap_plan}
+          gapPlan={gapPlan}
           draft={draft}
           stale={stale}
           locked={submissionLocked}
@@ -149,7 +157,7 @@ export function DecisionPanel({
                 : "之前保存的选择与当前版本不一致，旧草稿未应用。"}
             </div>
             <button type="button" className="commercial-intent-submit" disabled>
-              {primarySubmitLabel(stage)}
+              {submitLabel}
             </button>
             <button
               type="button"
@@ -177,7 +185,7 @@ export function DecisionPanel({
             <textarea
               className="commercial-intent-note"
               rows={3}
-              placeholder={`选填意见。不填也可以直接${primarySubmitLabel(stage)}。`}
+              placeholder={`选填意见。不填也可以直接${submitLabel}。`}
               aria-label="选填意见"
               disabled={submissionLocked}
               value={draft.note}
@@ -190,7 +198,7 @@ export function DecisionPanel({
                 disabled={!ready || submissionLocked}
                 onClick={async (event) => {
                   const button = event.currentTarget;
-                  if (!gapPlanReady(draft, decision.gap_plan)) {
+                  if (!gapPlanReady(draft, gapPlan)) {
                     setFeedback("请先选择本步处理方式；如有素材缺口，还要逐项选择补齐方式。");
                     return;
                   }
@@ -208,7 +216,7 @@ export function DecisionPanel({
                     });
                     const result = await submitDecisionIntent({ intent });
                     if (result.ok) {
-                      const successCopy = submittedFeedback(stage);
+                      const successCopy = submittedFeedback(stage, draft, options);
                       locallySubmitted.set(submissionKey, successCopy);
                       setFeedback(successCopy);
                       button.textContent = "已提交，等待处理";
@@ -222,7 +230,7 @@ export function DecisionPanel({
                   }
                 }}
               >
-                {submissionLocked ? "已提交，等待处理" : ready ? primarySubmitLabel(stage) : "请先完成本步选择"}
+                {submissionLocked ? "已提交，等待处理" : ready ? submitLabel : "请先完成本步选择"}
               </button>
               <button
                 type="button"
@@ -248,7 +256,7 @@ export function DecisionPanel({
         <div className="commercial-chat-only">
           {stale
             ? "选择已过期，请先清空并重选。"
-            : `点「${primarySubmitLabel(stage)}」后请留在本页。意见可不填。`}
+            : `点「${submitLabel}」后请留在本页。意见可不填。`}
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 """Seed commercial board stop cards for the local runner.
 
-Does not call paid generate. Options are listed without a recommended badge.
+Options are listed without a recommended badge. Paid image generate
+is triggered by the runner after an assets_gate generate intent.
 """
 
 from __future__ import annotations
@@ -183,11 +184,55 @@ def final_video_ready(project_id: str, *, projects_dir: Path | None = None) -> b
     return path.is_file() and path.stat().st_size > 0
 
 
-def stop_options(stage: str) -> list[dict[str, str]]:
+def stop_options(
+    stage: str,
+    project_id: str = "",
+    *,
+    projects_dir: Path | None = None,
+) -> list[dict[str, str]]:
     label = STAGE_LABEL_ZH.get(stage, stage)
     continue_label = primary_submit_label_zh(stage)
     if stage == "assets_gate":
         continue_desc = "确认素材无误后，按已锁定档位开始生成成片。"
+        mode = ""
+        if project_id:
+            from lib.board_gap_plan import projects_root
+            from lib.board_i2i import i2i_mode
+
+            mode = i2i_mode(projects_root(projects_dir) / project_id)
+        if mode == "generating":
+            return []
+        if mode == "i2i_planned":
+            return [
+                {
+                    "id": "generate",
+                    "label_zh": "开始生成补图",
+                    "description_zh": "按方案页已锁模型生成缺口画面。生成后请在本页审图。",
+                },
+                {
+                    "id": "revise",
+                    "label_zh": "要修改后再继续",
+                    "description_zh": f"先改「{label}」，改完再进入下一步。",
+                },
+            ]
+        if mode == "i2i_review":
+            return [
+                {
+                    "id": "continue",
+                    "label_zh": "通过这些补图并开始出片",
+                    "description_zh": "批准当前 AI 补图后开始生成成片。",
+                },
+                {
+                    "id": "generate",
+                    "label_zh": "重做补图",
+                    "description_zh": "按同一已锁模型重新生成缺口画面。",
+                },
+                {
+                    "id": "revise",
+                    "label_zh": "要修改后再继续",
+                    "description_zh": f"先改「{label}」，改完再进入下一步。",
+                },
+            ]
     else:
         continue_desc = f"确认当前「{label}」内容，继续后面的步骤。"
     return [
@@ -228,11 +273,30 @@ def stop_card_metadata(
     prompt = f"请确认「{label}」后进入下一步。"
     if stage == "assets_gate":
         prompt = "请确认素材后开始出片。成片将出现在交付确认页。"
+        if project_id:
+            from lib.board_gap_plan import projects_root
+            from lib.board_i2i import i2i_mode
+
+            mode = i2i_mode(projects_root(projects_dir) / project_id)
+            if mode == "generating":
+                return {
+                    "needs_user_decision": False,
+                    "producing_wait": True,
+                    "decision_title_zh": "正在生成补图",
+                    "decision_prompt_zh": "正在按已锁模型生成缺口画面，请留在本页。生成后请审图。",
+                    "decision_options": [],
+                }
+            if mode == "i2i_planned":
+                prompt = "方案已锁定图生图。请先生成缺口画面，审图通过后再开始出片。"
+            elif mode == "i2i_review":
+                prompt = "补图已生成。请过目 AI 画面，通过后开始出片。"
     metadata: dict[str, Any] = {
         "needs_user_decision": True,
         "decision_title_zh": label,
         "decision_prompt_zh": prompt,
-        "decision_options": stop_options(stage),
+        "decision_options": stop_options(
+            stage, project_id, projects_dir=projects_dir
+        ),
     }
     if stage == "delivery_signoff" and project_id:
         if not final_video_ready(project_id, projects_dir=projects_dir):

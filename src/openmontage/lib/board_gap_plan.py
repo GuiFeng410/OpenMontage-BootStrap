@@ -483,6 +483,7 @@ def _plan_artifacts(
                 segment["asset_source"] = "i2i"
                 segment["provider"] = gap.get("i2i_model")
                 segment["model"] = gap.get("i2i_model")
+                segment["planned_output_path"] = f"assets/images/i2i_{beat_id}.png"
                 asset_plan = f"图生图（{gap.get('i2i_model')}），本步只锁定计划、不生成"
             elif choice == "reuse":
                 segment["gap_fill"] = "none"

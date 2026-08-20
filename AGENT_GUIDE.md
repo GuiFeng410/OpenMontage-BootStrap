@@ -70,7 +70,7 @@ Installer 默认：**5 MCP 一并注册** + **6 Skill（02–07）一并启用**
 5. **04 只执行已锁定简报**；商品片图片数量/类型/缺图由 **03** 负责。
 6. 素材按项目隔离：`$OPENMONTAGE_PROJECTS_DIR/<project_id>/assets/{images,video,music,audio,copy,subs,stock}/`。
 6.1 **片段视频路径约定（剪辑闭环）**：试片 / 分段 / 动态片段视频一律落 `assets/video/`（如 `assets/video/seg_<beat>.mp4`）；`edit_decisions.cuts.source` 与各 artifact 的片段路径必须用**项目内相对路径**（`assets/video/<file>`）。Backlot 剪辑标签据此预览单段并生成 `edit_intents`（版本漂移检测依赖 cuts 内容摘要）。
-7. **商品片决策：网页点选只写 intent。** 03 在首个正式选择前初始化 `bootstrap-commercial` 并主动给出 Backlot 项目网址（固定话术：「你可以查看该网址了解详细信息」）；每进入新阶段须提示「已进入第 N 阶段…」。**阶段封板：** 进入下一阶段提示前，须把本阶段全量证据写入 checkpoint/`artifacts/*.json`，并先提示用户刷新核对。`python -m backlot open` **只保证网页服务**（看库）；创建项目或库页确认「继续这个项目」才起唯一 runner，且只 tick 这一个 `project_id`。**浏览器不得改 checkpoint、不得调付费 API**。网页点选由本机 runner 按已锁简报执行；**不要把人从看板赶回聊天走 04**。`04-produce` 是出片引擎规范（聊天主动出片时由 Agent 读同一套 `produce_*`）。聊天是看板不可用或用户打字时的退路。看板失败时退回完整聊天确认卡，不得阻塞出片。项目完成以看板「结束并导出项目」或聊天「结束导出」为准。关聊天 / 新会话：先停 runner、指向库页，不假定续做上次。
+7. **商品片决策：网页点选只写 intent。** 03 在首个正式选择前初始化 `bootstrap-commercial` 并主动给出 Backlot 项目网址（固定话术：「你可以查看该网址了解详细信息」）；每进入新阶段须提示「已进入第 N 阶段…」。**阶段封板：** 进入下一阶段提示前，须把本阶段全量证据写入 checkpoint/`artifacts/*.json`，并先提示用户刷新核对。`python -m backlot open` **只保证网页服务**（看库）；创建项目或库页确认「继续这个项目」才起唯一 runner，且只 tick 这一个 `project_id`。**浏览器不得改 checkpoint、不得调付费 API**。用户在看板点过「开始生成补图 / 开始出片」后，**本机 runner 可调用已锁的付费图生图与生视频**；浏览器仍不得调。网页点选由本机 runner 按已锁简报执行；**不要把人从看板赶回聊天走 04**。`04-produce` 是出片引擎规范（聊天主动出片时由 Agent 读同一套 `produce_*`）。聊天是看板不可用或用户打字时的退路。看板失败时退回完整聊天确认卡，不得阻塞出片。项目完成以看板「结束并导出项目」或聊天「结束导出」为准。关聊天 / 新会话：先停 runner、指向库页，不假定续做上次。
 
 ### When to use upstream pipelines (Rule Zero below)
 

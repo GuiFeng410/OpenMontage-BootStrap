@@ -1,9 +1,9 @@
 """Local Backlot-side consumer for pending interaction intents.
 
 The browser only writes intents. This runner applies panel decisions,
-starts local light compose after minimal assets_gate, and handles
-end-and-export. It does not call paid generate APIs and does not
-silently switch providers.
+runs authorized image-to-image at assets_gate, starts produce after
+the gate is sealed, and handles end-and-export. It never silently
+switches providers. The browser still does not call paid APIs.
 """
 
 from __future__ import annotations
@@ -176,22 +176,49 @@ def _consume_decision(
     elif stage == "assets_gate":
         from lib.board_assets_gate import AssetsGateError, seal_assets_gate
         from lib.board_gap_plan import stop_action_from_intent
+        from lib.board_i2i import BoardI2IError, approve_pending_i2i, run_i2i_generate
 
-        if stop_action_from_intent(raw) != "revise":
+        gate_action = stop_action_from_intent(raw)
+        if gate_action == "revise":
+            lock_result = {"action": "revise", "artifacts": {}}
+        elif gate_action == "generate":
             try:
+                gen_result = run_i2i_generate(
+                    project_id, projects_dir=PROJECTS_DIR
+                )
+            except BoardI2IError as exc:
+                raise approval_bundle.ApprovalBundleError(
+                    str(exc),
+                    code=exc.code,
+                    safe_message=exc.safe_message,
+                ) from exc
+            lock_result = {
+                "action": "generate",
+                "artifacts": gen_result,
+            }
+            board_advance.write_stop_card(
+                project_id, "assets_gate", projects_dir=PROJECTS_DIR
+            )
+        else:
+            try:
+                approve_pending_i2i(project_id, projects_dir=PROJECTS_DIR)
                 seal_result = seal_assets_gate(project_id, projects_dir=PROJECTS_DIR)
                 lock_result = {
                     "action": "continue",
                     "artifacts": seal_result.get("artifacts") or {},
                 }
+            except BoardI2IError as exc:
+                raise approval_bundle.ApprovalBundleError(
+                    str(exc),
+                    code=exc.code,
+                    safe_message=exc.safe_message,
+                ) from exc
             except AssetsGateError as exc:
                 raise approval_bundle.ApprovalBundleError(
                     str(exc),
                     code=exc.code,
                     safe_message=exc.safe_message,
                 ) from exc
-        else:
-            lock_result = {"action": "revise", "artifacts": {}}
     elif stage == "delivery_signoff":
         from lib.board_gap_plan import stop_action_from_intent
 
@@ -244,7 +271,7 @@ def _consume_decision(
     )
     if (
         stage in _PAID_AUTHORIZATION_SCOPES
-        and (lock_result or {}).get("action") != "revise"
+        and (lock_result or {}).get("action") == "continue"
     ):
         try:
             _record_stage_authorization(
@@ -508,7 +535,7 @@ def tick(
     append_decision: Callable[[str, str], Any],
     runner_alive: bool = True,
 ) -> dict[str, Any]:
-    """Consume one round of pending intents for a project. Never calls paid generate."""
+    """Consume one round of pending intents. Paid generate only after panel intent."""
     marker = project_export.read_marker(project_id)
     if project_export.is_completed(marker):
         status = {
@@ -582,7 +609,7 @@ def tick(
                     project_id, projects_dir=PROJECTS_DIR
                 ) or marker
                 stop_action = str(applied.get("stop_action") or "continue")
-                if stop_action != "revise":
+                if stop_action not in {"revise", "generate"}:
                     next_stop = board_advance.advance_after_apply(
                         project_id,
                         applied_stage or "brief_locked",
