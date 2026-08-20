@@ -88,6 +88,9 @@ def to_doctor_error(
     return DoctorError(message, code=code)
 
 
-def to_http_detail(exc: BaseException) -> str:
-    """Plain-string HTTP detail. Server is not switched this round."""
+def to_http_detail(exc: BaseException) -> str | dict[str, Any]:
+    """HTTPException detail: object when the exception has a stable .code."""
+    code = getattr(exc, "code", None)
+    if isinstance(code, str) and code:
+        return {"message": str(exc), "code": code}
     return str(exc)

@@ -27,6 +27,7 @@ from lib.edit_intents import (
     create_intent,
 )
 from lib import interaction_intents as interaction_intents
+from lib.error_codes import to_http_detail
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
 THUMB_CACHE_DIR = REPO_ROOT / ".backlot" / "thumbs"
@@ -481,7 +482,7 @@ def create_app() -> FastAPI:
                     detail="intent_id already exists with different content",
                 )
             except interaction_intents.IntentError as exc:
-                raise HTTPException(status_code=400, detail=str(exc))
+                raise HTTPException(status_code=400, detail=to_http_detail(exc))
             hub.publish(project_id)
             intent = record["intent"]
             return JSONResponse(

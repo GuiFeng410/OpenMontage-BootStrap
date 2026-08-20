@@ -48,6 +48,10 @@ _BROWSER_ONLY_FIELDS = frozenset({"risk_level"})
 class IntentError(Exception):
     """Raised for interaction-intent validation or transition violations."""
 
+    def __init__(self, message: str, *, code: str = "intent_error") -> None:
+        super().__init__(message)
+        self.code = code
+
 
 class UnknownProjectError(IntentError):
     """Raised when the project marker does not exist."""

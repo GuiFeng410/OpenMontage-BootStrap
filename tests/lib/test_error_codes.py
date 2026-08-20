@@ -71,6 +71,14 @@ def test_to_http_detail_is_plain_string() -> None:
     assert isinstance(detail, str)
 
 
+def test_to_http_detail_includes_code_when_present() -> None:
+    detail = to_http_detail(InteractionIntentError("unknown intent_type: 'mystery'"))
+    assert detail == {
+        "message": "unknown intent_type: 'mystery'",
+        "code": "intent_error",
+    }
+
+
 def test_dual_intent_error_types_remain_separate() -> None:
     from lib.edit_intents import IntentError as EditIntentError
 

@@ -154,6 +154,19 @@ def test_unknown_intent_type_returns_400_before_editing_gate(interaction_client)
     assert "unknown intent_type" in response.json()["detail"]
 
 
+def test_interaction_intent_error_returns_stable_code(interaction_client):
+    client, project = interaction_client
+    payload = _interaction(summary_sha256="0" * 64)
+
+    response = client.post("/intents", json=payload)
+
+    assert response.status_code == 400
+    detail = response.json()["detail"]
+    assert detail["code"] == "intent_error"
+    assert "summary_sha256" in detail["message"]
+    assert not (project / "intents" / "interaction-001.json").exists()
+
+
 def test_get_lists_only_interaction_intents(interaction_client):
     client, project = interaction_client
     intents_dir = project / "intents"
