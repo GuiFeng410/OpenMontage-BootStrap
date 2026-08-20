@@ -19,6 +19,36 @@ from openmontage.mcp.common.sandbox import project_dir, projects_root, require_p
 
 REPO_ROOT = get_workspace().repo_root
 
+# Host extraDirs (G5). Do not point extraDirs at skills/ itself.
+_SKILL_EXTRA_DIR_PARTS = (
+    ("skills", "bootstrap"),
+    ("skills", "providers"),
+    ("skills", "production"),
+)
+
+
+def _iter_skill_pack_dirs() -> list[Path]:
+    """Direct children of extraDirs roots; fall back to openmontage/skills if none exist."""
+    packs: list[Path] = []
+    seen: set[str] = set()
+    for parts in _SKILL_EXTRA_DIR_PARTS:
+        root = REPO_ROOT.joinpath(*parts)
+        if not root.is_dir():
+            continue
+        for child in sorted(root.iterdir()):
+            if child.is_dir() and child.name not in seen:
+                packs.append(child)
+                seen.add(child.name)
+    if not seen:
+        legacy = REPO_ROOT / "openmontage" / "skills"
+        if legacy.is_dir():
+            for child in sorted(legacy.iterdir()):
+                if child.is_dir() and child.name not in seen:
+                    packs.append(child)
+                    seen.add(child.name)
+    return packs
+
+
 PRODUCTION_TIERS = frozenset({"light", "medium", "heavy"})
 VISUAL_SOURCES = frozenset({"template", "stock", "paid_gen"})
 TTS_SOURCES = frozenset({"edge_tts", "piper", "paid"})
@@ -287,11 +317,9 @@ def run_doctor(*, deep: bool = False) -> dict[str, Any]:
     )
 
     skill_packs = []
-    skills_root = REPO_ROOT / "openmontage" / "skills"
-    if skills_root.exists():
-        for child in sorted(skills_root.iterdir()):
-            if (child / "SKILL.md").exists() or (child / "skill.md").exists():
-                skill_packs.append(child.name)
+    for child in _iter_skill_pack_dirs():
+        if (child / "SKILL.md").exists() or (child / "skill.md").exists():
+            skill_packs.append(child.name)
 
     media_module = (REPO_ROOT / "openmontage" / "mcp" / "media" / "server.py").exists()
     explainer_skill = "openmontage-animated-explainer" in skill_packs
@@ -367,10 +395,7 @@ def run_list_pipelines() -> dict[str, Any]:
     except Exception:
         names = sorted(p.stem for p in defs.glob("*.yaml")) if defs.exists() else []
 
-    packs = []
-    skills = REPO_ROOT / "openmontage" / "skills"
-    if skills.exists():
-        packs = [p.name for p in skills.iterdir() if p.is_dir()]
+    packs = [p.name for p in _iter_skill_pack_dirs()]
 
     return {
         "pipeline_defs_present": names,

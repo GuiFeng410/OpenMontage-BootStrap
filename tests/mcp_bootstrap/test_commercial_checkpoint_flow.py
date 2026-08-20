@@ -762,19 +762,21 @@ def test_facade_requires_explicit_consent_before_sending_public_image_urls() -> 
 def test_commercial_skills_require_readonly_board_chat_flow() -> None:
     root = Path(__file__).resolve().parents[2]
     usercheck = (
-        root / "openmontage" / "skills" / "openmontage-bootstrap-03-usercheck" / "SKILL.md"
+        root / "skills" / "bootstrap" / "openmontage-bootstrap-03-usercheck" / "SKILL.md"
     ).read_text(encoding="utf-8")
     produce = (
-        root / "openmontage" / "skills" / "openmontage-bootstrap-04-produce" / "SKILL.md"
+        root / "skills" / "bootstrap" / "openmontage-bootstrap-04-produce" / "SKILL.md"
     ).read_text(encoding="utf-8")
     providers = (
-        root / "openmontage" / "skills" / "openmontage-bootstrap-06-providers" / "SKILL.md"
+        root / "skills" / "bootstrap" / "openmontage-bootstrap-06-providers" / "SKILL.md"
     ).read_text(encoding="utf-8")
     for text in (usercheck, produce):
         assert "pipeline_type=bootstrap-commercial" in text
-        assert "python -m backlot open <project_id>" in text
+        assert "python -m backlot open" in text
         assert "produce_append_decision" in text
         assert "网页" in text and "聊天" in text
+    assert "python -m backlot open <project_id>" in usercheck
+    assert "不要 `open <project_id>`" in produce
     assert "produce_scan_user_images" in usercheck
     assert "produce_describe_user_images" in usercheck
     assert 'mode="create_new"' in usercheck

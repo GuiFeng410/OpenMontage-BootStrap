@@ -9,7 +9,7 @@ For day-to-day ops (install / free vs paid / captions) see [`Agent-ReadMe/00-IND
 
 ## BootStrap First — This Fork's Default Path
 
-This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily work is driven by **facade MCP + BootStrap Skills** under `openmontage/skills/`. Upstream pipeline manifests (`pipeline_defs/`) and stage directors (`skills/pipelines/`) remain valid for deep / advanced production — but **typical "做个视频" requests must NOT skip BootStrap**.
+This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily work is driven by **facade MCP + BootStrap Skills** under `skills/bootstrap/` (host extraDirs also include `skills/providers/` and `skills/production/`). Upstream pipeline manifests (`pipeline_defs/`) and stage directors (`skills/pipelines/`) remain valid for deep / advanced production — but **typical "做个视频" requests must NOT skip BootStrap**.
 
 ### Project snapshot (keep current)
 
@@ -28,7 +28,7 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 
 ### Seven BootStrap Skills（01–07）
 
-**Read the matching Skill file before acting.** Paths: `openmontage/skills/openmontage-bootstrap-0N-*/SKILL.md`.
+**Read the matching Skill file before acting.** Paths: `skills/bootstrap/openmontage-bootstrap-0N-*/SKILL.md`.
 
 | # | Skill | Role | Trigger |
 |---|--------|------|---------|
@@ -767,7 +767,7 @@ The `.agents/skills/` directory is large. When you're not coming in through a to
 
 | Question | Where to look |
 |----------|---------------|
-| 做个视频 / 装机缺步走哪？ | 上文 **BootStrap First** + `openmontage/skills/openmontage-bootstrap-0N-*/SKILL.md` |
+| 做个视频 / 装机缺步走哪？ | 上文 **BootStrap First** + `skills/bootstrap/openmontage-bootstrap-0N-*/SKILL.md` |
 | 操作说明（人读）？ | `Agent-ReadMe/00-INDEX.md`（本机主读；仓内镜像 `README/00-INDEX.md`） |
 | 本机会话续作？ | `Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md`（本机，勿默认提交） |
 | What tools exist? | `tools/tool_registry.py` and `registry.support_envelope()` |

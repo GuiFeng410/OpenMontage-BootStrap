@@ -10,11 +10,13 @@ open-montage-boot-strap/
 ├─ 01-agent-entry/               Agent 入口与宿主约定
 │  ├─ AGENT_GUIDE.md
 │  ├─ AGENTS.md
-│  └─ openmontage/skills/        BootStrap 01–07
+│  ├─ skills/bootstrap/          BootStrap 01–07（extraDirs #1）
+│  ├─ skills/providers/          付费 / Stock 执行 Skill（extraDirs #2）
+│  └─ skills/production/         路由、合同、L3、explainer、seedance（extraDirs #3）
 │
 ├─ 02-production-engine/         生产引擎
 │  ├─ pipeline_defs/
-│  ├─ skills/
+│  ├─ skills/                    导演 md：pipelines / core / creative / meta（不进 extraDirs）
 │  ├─ tools/
 │  ├─ lib/
 │  └─ styles/

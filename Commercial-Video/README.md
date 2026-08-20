@@ -10,7 +10,7 @@ Commercial-Video/
 ```
 
 时长 ≥15 秒的商品视频，审查扩展见  
-`openmontage/skills/openmontage-bootstrap-03-usercheck/references/commercial-video-15s-review.md`。  
+`skills/bootstrap/openmontage-bootstrap-03-usercheck/references/commercial-video-15s-review.md`。  
 专业模式大致按：
 
 ```text
