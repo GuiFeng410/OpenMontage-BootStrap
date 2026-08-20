@@ -36,7 +36,7 @@ A `render_runtime_selection` decision with only one option considered when both 
 |-------|----------|---------|
 | Schema | `schemas/artifacts/proposal_packet.schema.json` | Artifact validation |
 | Prior artifact | `research_brief` from Research Director | Raw research findings |
-| Pipeline manifest | `pipeline_defs/animated-explainer.yaml` | Stage and tool definitions |
+| Pipeline manifest | `product/pipelines/animated-explainer.yaml` | Stage and tool definitions |
 | Tool registry | `support_envelope()` output | What's actually available right now |
 | Cost tracker | `tools/cost_tracker.py` | Cost estimation data |
 | Style playbooks | `styles/*.yaml` | Available visual styles |

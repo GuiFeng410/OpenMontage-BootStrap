@@ -9,7 +9,7 @@ For day-to-day ops (install / free vs paid / captions) see [`Agent-ReadMe/00-IND
 
 ## BootStrap First — This Fork's Default Path
 
-This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily work is driven by **facade MCP + BootStrap Skills** under `skills/bootstrap/` (host extraDirs also include `skills/providers/` and `skills/production/`). Upstream pipeline manifests (`pipeline_defs/`) and stage directors (`skills/pipelines/`) remain valid for deep / advanced production — but **typical "做个视频" requests must NOT skip BootStrap**.
+This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily work is driven by **facade MCP + BootStrap Skills** under `skills/bootstrap/` (host extraDirs also include `skills/providers/` and `skills/production/`). Upstream pipeline manifests (`product/pipelines/`) and stage directors (`skills/pipelines/`) remain valid for deep / advanced production — but **typical "做个视频" requests must NOT skip BootStrap**.
 
 ### Project snapshot (keep current)
 
@@ -73,7 +73,7 @@ Installer 默认：**5 MCP 一并注册** + **6 Skill（02–07）一并启用**
 
 ### When to use upstream pipelines (Rule Zero below)
 
-Use full `pipeline_defs/` + stage directors when the user explicitly wants an upstream pipeline (e.g. `animated-explainer`, `cinematic`, `character-animation`), atelier/bespoke composition, or BootStrap produce cannot cover the brief. Even then: run preflight, read stage directors, and obey decision/checkpoint contracts in this guide.
+Use full `product/pipelines/` + stage directors when the user explicitly wants an upstream pipeline (e.g. `animated-explainer`, `cinematic`, `character-animation`), atelier/bespoke composition, or BootStrap produce cannot cover the brief. Even then: run preflight, read stage directors, and obey decision/checkpoint contracts in this guide.
 
 ---
 
@@ -125,8 +125,8 @@ If a model misses this distinction, it will often fall back to plain search + gu
 
 When the user asks to make, create, produce, or generate any video content — a trailer, explainer, clip, animation, or any other video — the agent must:
 
-1. **Identify the pipeline.** Match the request to one of the pipelines in `pipeline_defs/`. If unclear, ask the user.
-2. **Read the pipeline manifest.** `pipeline_defs/<pipeline>.yaml` — know the stages, tools, and quality gates.
+1. **Identify the pipeline.** Match the request to one of the pipelines in `product/pipelines/`. If unclear, ask the user.
+2. **Read the pipeline manifest.** `product/pipelines/<pipeline>.yaml` — know the stages, tools, and quality gates.
 3. **Run preflight.** Discover available tools via the registry. Present the capability menu.
 4. **Execute stage by stage.** For EACH stage, read the stage director skill (`skills/pipelines/<pipeline>/<stage>-director.md`) BEFORE doing any work in that stage.
 5. **Read Layer 3 skills before calling tools.** Before using any tool with an `agent_skills` field, read the referenced skill in `.agents/skills/`. These contain provider-specific prompting guidance, parameter optimization, and quality techniques that dramatically improve output.
@@ -261,7 +261,7 @@ The agent itself orchestrates the production state machine:
 
 The agent:
 
-1. Reads the pipeline manifest (`pipeline_defs/*.yaml`) to know the process
+1. Reads the pipeline manifest (`product/pipelines/*.yaml`) to know the process
 2. Calls `checkpoint.get_next_stage()` to find where to resume
 3. Reads the stage's director skill (`skills/pipelines/<pipeline>/<stage>-director.md`) to know HOW
 4. Uses tools (`tools/`) for concrete capabilities
@@ -367,7 +367,7 @@ python -c "from tools.tool_registry import registry; import json; registry.disco
 
 Then:
 
-1. Read the selected manifest in `pipeline_defs/`.
+1. Read the selected manifest in `product/pipelines/`.
 2. Check every `required_tools` entry against the registry.
 3. Check `fallback_tools` for unavailable tools.
 4. Report one of: `passed`, `degraded`, or `blocked`.
@@ -671,7 +671,7 @@ Primary files:
 - Artifact schemas: `schemas/artifacts/`
 - Checkpoint schema: `schemas/checkpoints/checkpoint.schema.json`
 - Pipeline manifest schema: `schemas/pipelines/pipeline_manifest.schema.json`
-- Pipeline manifests: `pipeline_defs/`
+- Pipeline manifests: `product/pipelines/`
 - Style playbooks: `styles/*.yaml` (validated by `schemas/styles/playbook.schema.json`)
 - Tool contract: `tools/base_tool.py`
 - Tool registry: `tools/tool_registry.py`
@@ -690,7 +690,7 @@ Checkpoint rules:
 
 Pipeline manifest rules:
 
-- Pipelines are declarative YAML manifests in `pipeline_defs/`.
+- Pipelines are declarative YAML manifests in `product/pipelines/`.
 - Stages declare: `skill` (director skill path), `produces`, `tools_available`, `review_focus`, `success_criteria`, `human_approval_default`.
 - Adding a new pipeline requires a manifest + stage director skills.
 
@@ -761,7 +761,7 @@ The `.agents/skills/` directory is large. When you're not coming in through a to
 
 **When in doubt, read the category's meta routing file first:**
 - Picking an animation runtime? → `skills/meta/animation-runtime-selector.md` routes between Remotion primitives, GSAP plugins, framer-motion, Lottie, Manim, D3.
-- Picking a screen-recording mode (real capture vs synthetic terminal)? → `pipeline_defs/screen-demo.yaml` + `skills/pipelines/screen-demo/idea-director.md`.
+- Picking a screen-recording mode (real capture vs synthetic terminal)? → `product/pipelines/screen-demo.yaml` + `skills/pipelines/screen-demo/idea-director.md`.
 
 ## Quick Lookup
 

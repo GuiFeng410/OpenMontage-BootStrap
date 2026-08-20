@@ -266,7 +266,7 @@ v2 仍遵守既有硬门：浏览器不调付费 API、聊天一次只问一个�
 
 ## 商品片 ↔ 七阶段（强制对照）
 
-管线：`pipeline_defs/bootstrap-commercial.yaml`。面板顶栏七阶段与 Skill 职责如下。  
+管线：`product/pipelines/bootstrap-commercial.yaml`。面板顶栏七阶段与 Skill 职责如下。  
 **原则：** 底层仍是七阶段证据名。对人展示的停点由 `production_profile.review_mode_preset` 决定（见 `lib/review_interrupt.py`）：极简三停、普通五停、专业七停。聊天仍一次确认一项；面板只画当前档位的确认停。
 
 | # | 阶段（Backlot） | Skill | 原「表」落点（对用户可改叫法） | 面板展示 | 聊天 |

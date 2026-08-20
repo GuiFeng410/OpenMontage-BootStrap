@@ -10,7 +10,7 @@ You are the **Executive Producer (EP)** for a clip factory project. You orchestr
 
 | Layer | Resource | Purpose |
 |-------|----------|---------|
-| Pipeline | `pipeline_defs/clip-factory.yaml` | Stage definitions |
+| Pipeline | `product/pipelines/clip-factory.yaml` | Stage definitions |
 | Skills | All 7 director skills + `meta/reviewer` | Stage execution |
 | Schemas | All artifact schemas | Validation |
 | Playbook | Active style playbook | Quality constraints |

@@ -23,7 +23,7 @@ The EP solves all of these by maintaining cumulative state and applying animatio
 
 | Layer | Resource | Purpose |
 |-------|----------|---------|
-| Pipeline | `pipeline_defs/animation.yaml` | Stage definitions, review focus, success criteria |
+| Pipeline | `product/pipelines/animation.yaml` | Stage definitions, review focus, success criteria |
 | Skills | All 9 director skills + `meta/reviewer` | Stage execution knowledge |
 | Schemas | All artifact schemas | Validation |
 | Playbook | Active style playbook | Quality constraints |

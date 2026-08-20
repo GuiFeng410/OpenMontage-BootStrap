@@ -50,7 +50,7 @@ Tool names may appear as `openmontage-doctor__*` / `openmontage-media__*` / `ope
 
 ## Pipeline contract
 
-Manifest: `pipeline_defs/animated-explainer.yaml`
+Manifest: `product/pipelines/animated-explainer.yaml`
 
 Stage directors live in the monorepo (read before each stage):
 

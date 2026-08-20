@@ -10,7 +10,7 @@ You are the **Executive Producer (EP)** for a localization/dubbing project. You 
 
 | Layer | Resource | Purpose |
 |-------|----------|---------|
-| Pipeline | `pipeline_defs/localization-dub.yaml` | Stage definitions |
+| Pipeline | `product/pipelines/localization-dub.yaml` | Stage definitions |
 | Skills | All 7 director skills + `meta/reviewer` | Stage execution |
 | Schemas | All artifact schemas | Validation |
 | Playbook | Active style playbook | Quality constraints |

@@ -23,7 +23,7 @@ Agent reads pipeline manifest (YAML) → reads stage director skill (MD)
 - **Agent guide & contract:** `AGENT_GUIDE.md` (tool inventory, pipeline selection, stage agents, protocols)
 - **Skill index:** `skills/INDEX.md`
 - **Tool registry:** `tools/tool_registry.py`
-- **Pipeline manifests:** `pipeline_defs/`
+- **Pipeline manifests:** `product/pipelines/`
 - **Artifact schemas:** `schemas/artifacts/`
 - **Style playbooks:** `styles/*.yaml` (schema: `schemas/styles/playbook.schema.json`)
 - **Stage director skills:** `skills/pipelines/<pipeline>/<stage>-director.md`
@@ -84,22 +84,22 @@ Each tool's `agent_skills[]` field bridges Layer 1 → Layer 3. See `skills/INDE
 
 | Pipeline | Manifest | Type |
 |----------|----------|------|
-| `talking-head` | `pipeline_defs/talking-head.yaml` | Footage-based |
-| `animated-explainer` | `pipeline_defs/animated-explainer.yaml` | AI-generated |
-| `screen-demo` | `pipeline_defs/screen-demo.yaml` | Screen-recording |
-| `clip-factory` | `pipeline_defs/clip-factory.yaml` | Short-form batch extraction |
-| `podcast-repurpose` | `pipeline_defs/podcast-repurpose.yaml` | Podcast repurposing |
-| `cinematic` | `pipeline_defs/cinematic.yaml` | Cinematic edit |
-| `animation` | `pipeline_defs/animation.yaml` | Animation-first |
-| `character-animation` | `pipeline_defs/character-animation.yaml` | Local rigged character animation |
-| `hybrid` | `pipeline_defs/hybrid.yaml` | Source-plus-support hybrid |
-| `avatar-spokesperson` | `pipeline_defs/avatar-spokesperson.yaml` | Avatar presenter |
-| `localization-dub` | `pipeline_defs/localization-dub.yaml` | Localization and dubbing |
-| `framework-smoke` | `pipeline_defs/framework-smoke.yaml` | Test harness |
+| `talking-head` | `product/pipelines/talking-head.yaml` | Footage-based |
+| `animated-explainer` | `product/pipelines/animated-explainer.yaml` | AI-generated |
+| `screen-demo` | `product/pipelines/screen-demo.yaml` | Screen-recording |
+| `clip-factory` | `product/pipelines/clip-factory.yaml` | Short-form batch extraction |
+| `podcast-repurpose` | `product/pipelines/podcast-repurpose.yaml` | Podcast repurposing |
+| `cinematic` | `product/pipelines/cinematic.yaml` | Cinematic edit |
+| `animation` | `product/pipelines/animation.yaml` | Animation-first |
+| `character-animation` | `product/pipelines/character-animation.yaml` | Local rigged character animation |
+| `hybrid` | `product/pipelines/hybrid.yaml` | Source-plus-support hybrid |
+| `avatar-spokesperson` | `product/pipelines/avatar-spokesperson.yaml` | Avatar presenter |
+| `localization-dub` | `product/pipelines/localization-dub.yaml` | Localization and dubbing |
+| `framework-smoke` | `product/pipelines/framework-smoke.yaml` | Test harness |
 
 ## When Building New Pipelines
 
-1. Create a YAML manifest in `pipeline_defs/` (validated by `pipeline_manifest.schema.json`)
+1. Create a YAML manifest in `product/pipelines/` (validated by `pipeline_manifest.schema.json`)
 2. Create stage director skills in `skills/pipelines/<pipeline-name>/` (7 skills: idea through publish)
 3. Reference meta skills (reviewer, checkpoint-protocol) in the manifest
 4. Add compatible playbooks to the manifest

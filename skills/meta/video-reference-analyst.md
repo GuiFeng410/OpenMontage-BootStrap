@@ -368,7 +368,7 @@ Iterate on sample feedback until approved. Store samples at:
 After sample approval, the agent MUST enter the pipeline. This is not optional.
 
 **Mandatory steps:**
-1. Read the pipeline manifest: `pipeline_defs/animation.yaml` (or whichever
+1. Read the pipeline manifest: `product/pipelines/animation.yaml` (or whichever
    pipeline matches the production type)
 2. Execute **stage by stage** in order — research → proposal → script →
    scene_plan → assets → edit → compose → publish

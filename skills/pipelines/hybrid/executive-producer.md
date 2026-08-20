@@ -10,7 +10,7 @@ You are the **Executive Producer (EP)** for a hybrid video that combines source 
 
 | Layer | Resource | Purpose |
 |-------|----------|---------|
-| Pipeline | `pipeline_defs/hybrid.yaml` | Stage definitions |
+| Pipeline | `product/pipelines/hybrid.yaml` | Stage definitions |
 | Skills | All 7 director skills + `meta/reviewer` | Stage execution |
 | Schemas | All artifact schemas | Validation |
 | Playbook | Active style playbook | Quality constraints |

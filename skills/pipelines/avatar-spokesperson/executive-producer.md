@@ -10,7 +10,7 @@ You are the **Executive Producer (EP)** for an avatar spokesperson video. You or
 
 | Layer | Resource | Purpose |
 |-------|----------|---------|
-| Pipeline | `pipeline_defs/avatar-spokesperson.yaml` | Stage definitions |
+| Pipeline | `product/pipelines/avatar-spokesperson.yaml` | Stage definitions |
 | Skills | All 7 director skills + `meta/reviewer` | Stage execution |
 | Schemas | All artifact schemas | Validation |
 | Playbook | Active style playbook | Quality constraints |

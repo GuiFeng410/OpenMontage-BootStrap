@@ -10,7 +10,7 @@ The cinematic pipeline now starts with **research** and **proposal** stages — 
 
 | Layer | Resource | Purpose |
 |-------|----------|---------|
-| Pipeline | `pipeline_defs/cinematic.yaml` | Stage definitions |
+| Pipeline | `product/pipelines/cinematic.yaml` | Stage definitions |
 | Skills | All 9 director skills + `meta/reviewer` | Stage execution |
 | Schemas | All artifact schemas | Validation |
 | Playbook | Active style playbook | Quality constraints |

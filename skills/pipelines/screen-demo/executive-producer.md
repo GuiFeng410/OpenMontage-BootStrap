@@ -23,7 +23,7 @@ The EP catches all of these at the earliest possible stage.
 
 | Layer | Resource | Purpose |
 |-------|----------|---------|
-| Pipeline | `pipeline_defs/screen-demo.yaml` | Stage definitions, review focus, success criteria |
+| Pipeline | `product/pipelines/screen-demo.yaml` | Stage definitions, review focus, success criteria |
 | Skills | All 7 director skills + `meta/reviewer` | Stage execution knowledge |
 | Schemas | All artifact schemas | Validation |
 | Playbook | Active style playbook | Quality constraints |

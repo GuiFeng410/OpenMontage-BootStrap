@@ -22,7 +22,7 @@ The EP solves all of these by maintaining cumulative state and applying judgment
 
 | Layer | Resource | Purpose |
 |-------|----------|---------|
-| Pipeline | `pipeline_defs/talking-head.yaml` | Stage definitions, review focus, success criteria |
+| Pipeline | `product/pipelines/talking-head.yaml` | Stage definitions, review focus, success criteria |
 | Skills | All 7 director skills + `meta/reviewer` | Stage execution knowledge |
 | Schemas | All artifact schemas | Validation |
 | Playbook | user-selected, footage-derived, or safe fallback | Quality constraints |

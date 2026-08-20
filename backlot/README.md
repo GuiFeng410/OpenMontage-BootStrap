@@ -18,7 +18,7 @@ notifications over SSE; the browser refetches board state. State sources:
 
 | Board element | Disk source |
 |---|---|
-| identity / rail order | `project.json` + `pipeline_defs/<type>.yaml` |
+| identity / rail order | `project.json` + `product/pipelines/<type>.yaml` |
 | stage states, gates, versions | `checkpoint_<stage>.json` + `history/` |
 | script card / modal | `artifacts/script.json` |
 | filmstrip cards | `scene_plan × script × asset_manifest` join |
