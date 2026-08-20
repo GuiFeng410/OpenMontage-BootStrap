@@ -31,7 +31,7 @@ def test_parse_lock_reads_json_stamp():
 
 
 def test_runner_stamp_covers_approval_bundle():
-    assert "lib/approval_bundle.py" in _STAMP_FILES
+    assert "src/openmontage/lib/approval_bundle.py" in _STAMP_FILES
     assert "backlot/read_models/commercial.py" in _STAMP_FILES
     assert _STAMP_FILES == RUNNER_STAMP_MODULES
 

@@ -94,7 +94,9 @@ def test_create_project_resume_missing_raises(
 
 
 def test_library_create_source_does_not_import_mcp() -> None:
-    source = (REPO_ROOT / "lib" / "library_create.py").read_text(encoding="utf-8")
+    source = (
+        REPO_ROOT / "src" / "openmontage" / "lib" / "library_create.py"
+    ).read_text(encoding="utf-8")
     assert "openmontage.mcp" not in source
     assert "produce_init_project" not in source
 

@@ -143,6 +143,8 @@ def test_pack_runtime_copies_core_and_omits_forbidden(packed_runtime: tuple[Path
     assert result["files_copied"] > 0
     assert result["version"]
     assert (dest / "lib").is_dir()
+    assert (dest / "lib" / "__init__.py").is_file()
+    assert (dest / "src" / "openmontage" / "lib" / "paths.py").is_file()
     assert (dest / "src" / "openmontage").is_dir()
     assert (dest / "src" / "openmontage" / "__init__.py").is_file()
     assert (dest / "openmontage").is_dir()

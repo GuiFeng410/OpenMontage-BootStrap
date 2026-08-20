@@ -25,8 +25,30 @@ _MISSING_PROJECTS_DIR = (
 )
 
 
+def _find_checkout_root(start: Path) -> Path:
+    """Walk up from ``start`` until this checkout's repo root.
+
+    ``lib/paths.py`` will live under ``src/openmontage/lib/`` after the
+    layout move; a fixed ``parent.parent`` would then point at
+    ``src/openmontage`` instead of the checkout. Prefer the release
+    manifest, then AGENT_GUIDE.md + setup.py. Never fall back to a
+    silent parent count.
+    """
+    resolved = Path(start).resolve()
+    cursor = resolved.parent if resolved.is_file() else resolved
+    for candidate in [cursor, *cursor.parents]:
+        if (candidate / _RELEASE_MANIFEST_REL).is_file():
+            return candidate
+        if (candidate / "AGENT_GUIDE.md").is_file() and (candidate / "setup.py").is_file():
+            return candidate
+    raise RuntimeError(
+        "OpenMontage repo root is unavailable: set OPENMONTAGE_REPO_ROOT "
+        f"or keep {_RELEASE_MANIFEST_REL.as_posix()} next to the checkout"
+    )
+
+
 def _checkout_root() -> Path:
-    return Path(__file__).resolve().parent.parent
+    return _find_checkout_root(Path(__file__))
 
 
 def _discover_repo_root(explicit: Path | None = None) -> Path:
@@ -35,13 +57,7 @@ def _discover_repo_root(explicit: Path | None = None) -> Path:
     env = os.environ.get(_ENV_REPO, "").strip()
     if env:
         return Path(env).expanduser().resolve()
-    here = _checkout_root()
-    if (here / _RELEASE_MANIFEST_REL).is_file():
-        return here
-    raise RuntimeError(
-        "OpenMontage repo root is unavailable: set OPENMONTAGE_REPO_ROOT "
-        f"or keep {_RELEASE_MANIFEST_REL.as_posix()} next to the checkout"
-    )
+    return _checkout_root()
 
 
 def _env_projects_dir() -> Path | None:

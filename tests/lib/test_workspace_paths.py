@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import lib.paths as paths_mod
-from lib.paths import WorkspacePaths, ensure_import_roots, get_workspace
+from lib.paths import WorkspacePaths, _find_checkout_root, ensure_import_roots, get_workspace
 from openmontage.mcp.common.errors import ConfigError, SandboxError
 
 
@@ -67,3 +67,38 @@ def test_ensure_import_roots_puts_src_first_and_keeps_repo(
     ensure_import_roots(tmp_path)
     assert sys.path.count(src) == 1
     assert sys.path[0] == src
+
+
+def test_checkout_root_from_current_paths_module() -> None:
+    root = _find_checkout_root(Path(paths_mod.__file__))
+    assert (root / "distribution" / "manifests" / "release-manifest.json").is_file()
+    assert root == paths_mod.REPO_ROOT
+
+
+def test_checkout_root_walks_up_nested_lib(tmp_path: Path) -> None:
+    nested = tmp_path / "src" / "openmontage" / "lib"
+    nested.mkdir(parents=True)
+    marker = tmp_path / "distribution" / "manifests"
+    marker.mkdir(parents=True)
+    (marker / "release-manifest.json").write_text("{}", encoding="utf-8")
+    fake = nested / "paths.py"
+    fake.write_text("# nested\n", encoding="utf-8")
+    assert _find_checkout_root(fake) == tmp_path.resolve()
+
+
+def test_checkout_root_falls_back_to_guide_and_setup(tmp_path: Path) -> None:
+    nested = tmp_path / "src" / "openmontage" / "lib"
+    nested.mkdir(parents=True)
+    (tmp_path / "AGENT_GUIDE.md").write_text("# guide\n", encoding="utf-8")
+    (tmp_path / "setup.py").write_text("pass\n", encoding="utf-8")
+    fake = nested / "paths.py"
+    fake.write_text("# nested\n", encoding="utf-8")
+    assert _find_checkout_root(fake) == tmp_path.resolve()
+
+
+def test_checkout_root_raises_when_markers_missing(tmp_path: Path) -> None:
+    fake = tmp_path / "orphan" / "paths.py"
+    fake.parent.mkdir()
+    fake.write_text("# no markers\n", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="OPENMONTAGE_REPO_ROOT"):
+        _find_checkout_root(fake)

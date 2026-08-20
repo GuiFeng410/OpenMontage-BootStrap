@@ -11,7 +11,9 @@ import pytest
 from lib.application.read_project_snapshot import ApplicationError, read_project_snapshot
 from lib.error_codes import NOT_FOUND
 
-_APPLICATION_ROOT = Path(__file__).resolve().parents[2] / "lib" / "application"
+_APPLICATION_ROOT = (
+    Path(__file__).resolve().parents[2] / "src" / "openmontage" / "lib" / "application"
+)
 _FORBIDDEN_IMPORT_PREFIXES = ("openmontage.mcp", "backlot.server")
 _SNAPSHOT_KEYS = (
     "project_id",
