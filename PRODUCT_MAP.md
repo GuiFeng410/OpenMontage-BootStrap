@@ -25,7 +25,10 @@ open-montage-boot-strap/
 │
 ├─ 04-interfaces/                用户与 Agent 接口
 │  ├─ src/openmontage/mcp/
-│  └─ backlot/
+│  └─ backlot/                   python -m backlot 不变
+│     ├─ frontend/               React + Vite 源码（工厂构建；不进用户运行包）
+│     ├─ ui-dist/                构建产物；默认 `/` `/p/<id>` 托管此 SPA
+│     └─ ui/                     `/ui/*.css` 仍给 SPA；旧 HTML/JS 入口留一周期，缺 ui-dist 时回退
 │
 ├─ 05-render-runtimes/           合成运行时
 │  ├─ runtimes/remotion/
