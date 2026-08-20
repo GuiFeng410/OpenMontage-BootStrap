@@ -25,7 +25,7 @@ If a brief requires word-level/karaoke captions, lock
 composition would otherwise be a good fit for HyperFrames. Do NOT attempt
 to bolt this tool onto a HyperFrames workspace — the TalkingHead
 composition ID and ``WordCaption`` prop shape it emits are tied to the
-React scene stack in ``remotion-composer/``.
+React scene stack in ``runtimes/remotion/``.
 """
 
 from __future__ import annotations
@@ -61,7 +61,7 @@ class RemotionCaptionBurn(BaseTool):
 
     dependencies = ["cmd:ffmpeg", "cmd:ffprobe"]
     install_instructions = (
-        "Remotion (optional, preferred): npm install in remotion-composer/\n"
+        "Remotion (optional, preferred): npm install in runtimes/remotion/\n"
         "FFmpeg (required for fallback): https://ffmpeg.org/download.html"
     )
     agent_skills = ["remotion-best-practices", "ffmpeg"]
@@ -155,18 +155,29 @@ class RemotionCaptionBurn(BaseTool):
     # ------------------------------------------------------------------ #
 
     def _find_remotion_root(self) -> Path | None:
-        """Find the remotion-composer directory relative to the repo."""
+        """Find the Remotion composer directory (runtimes/remotion, old path fallback)."""
+        from lib.resources import get_resources
+
         candidates = [
+            get_resources().remotion_composer(),
+            Path.cwd() / "runtimes" / "remotion",
             Path.cwd() / "remotion-composer",
-            Path(__file__).resolve().parent.parent.parent / "remotion-composer",
         ]
+        seen: set[Path] = set()
         for p in candidates:
+            try:
+                resolved = p.resolve()
+            except OSError:
+                continue
+            if resolved in seen:
+                continue
+            seen.add(resolved)
             if (
-                p.is_dir()
-                and (p / "package.json").exists()
-                and (p / "node_modules").is_dir()
+                resolved.is_dir()
+                and (resolved / "package.json").exists()
+                and (resolved / "node_modules").is_dir()
             ):
-                return p
+                return resolved
         return None
 
     def _remotion_available(self) -> bool:

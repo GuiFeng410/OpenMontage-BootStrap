@@ -27,7 +27,12 @@ from pathlib import Path
 NPX = shutil.which("npx") or "npx"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-COMPOSER_DIR = REPO_ROOT / "remotion-composer"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+from lib.paths import WorkspacePaths  # noqa: E402
+from lib.resources import get_resources  # noqa: E402
+
+COMPOSER_DIR = get_resources(WorkspacePaths(repo_root=REPO_ROOT)).remotion_composer()
 
 
 def _load(path: Path) -> dict:
@@ -76,7 +81,7 @@ def main(argv: list[str] | None = None) -> int:
         props = _load(props_path)
         fps = int(props.get("fps") or 30)
 
-    # Stage the project into remotion-composer so webpack resolves node_modules.
+    # Stage the project into the Remotion composer so webpack resolves node_modules.
     sys.path.insert(0, str(REPO_ROOT))
     from tools.video.video_compose import VideoCompose  # noqa: E402
     staged_entry = VideoCompose()._stage_atelier_project(entry, COMPOSER_DIR)

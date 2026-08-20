@@ -258,7 +258,7 @@ def plan_install(
 
     steps: list[dict[str, Any]] = [
         {**py, "priority": "required", "label": "Python venv + requirements (includes edge-tts)"},
-        {**node, "priority": "required", "label": "Remotion (remotion-composer npm install)"},
+        {**node, "priority": "required", "label": "Remotion (runtimes/remotion npm install)"},
         {**ffmpeg, "priority": "required", "label": "FFmpeg"},
         {**edge, "priority": "required", "label": "Edge-TTS (primary narration; needs network at use time)"},
         {
@@ -554,7 +554,7 @@ def install_node_deps(
 
     _require_execute(dry_run=False, confirm_execute=confirm_execute, action="install_node_deps")
     if not plan["package_json_exists"]:
-        raise DoctorError("remotion-composer/package.json missing", code="missing_remotion")
+        raise DoctorError("Remotion package.json missing (runtimes/remotion)", code="missing_remotion")
     if not shutil.which("npm"):
         raise DoctorError(
             "npm not found. Install Node.js 18+ first. "

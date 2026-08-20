@@ -173,11 +173,11 @@ def _remotion_ok() -> dict[str, Any]:
     nm = composer / "node_modules"
     pkg = composer / "package.json"
     if not pkg.exists():
-        return {"ok": False, "detail": "remotion-composer/package.json missing"}
+        return {"ok": False, "detail": "Remotion package.json missing (runtimes/remotion)"}
     if not nm.exists():
         return {
             "ok": False,
-            "detail": "remotion-composer/node_modules missing — run npm install in remotion-composer",
+            "detail": "Remotion node_modules missing — run npm install in runtimes/remotion",
         }
     return {"ok": True, "detail": str(composer)}
 
@@ -334,7 +334,7 @@ def run_doctor(*, deep: bool = False) -> dict[str, Any]:
     if not piper.get("ok"):
         next_p1.append("piper-tts + Chinese voice model")
     if not remotion.get("ok"):
-        next_p1.append("remotion-composer npm install")
+        next_p1.append("runtimes/remotion npm install")
     if not ffmpeg_ok:
         next_p1.append("ffmpeg on PATH")
     if not media_module:

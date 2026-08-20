@@ -73,7 +73,7 @@ class CompositionValidator(BaseTool):
                 "enum": ["remotion", "hyperframes", "ffmpeg"],
                 "description": (
                     "Which runtime will consume this composition. Drives the "
-                    "default asset root: remotion→remotion-composer/public, "
+                    "default asset root: remotion→runtimes/remotion/public, "
                     "hyperframes→<workspace>/assets or composition's parent, "
                     "ffmpeg→composition's parent. Explicit assets_root wins."
                 ),
@@ -138,14 +138,24 @@ class CompositionValidator(BaseTool):
                 # the composition's parent for any bare-name references.
                 assets_root = comp_path.parent
             else:
-                # Remotion (default): remotion-composer/public
+                # Remotion (default): runtimes/remotion/public, then remotion-composer/public
                 candidate = comp_path
                 resolved = None
                 for _ in range(5):
                     candidate = candidate.parent
-                    public = candidate / "remotion-composer" / "public"
-                    if public.is_dir():
-                        resolved = public
+                    local_public = candidate / "public"
+                    if local_public.is_dir() and (candidate / "package.json").exists():
+                        resolved = local_public
+                        break
+                    for rel in (
+                        ("runtimes", "remotion", "public"),
+                        ("remotion-composer", "public"),
+                    ):
+                        public = candidate.joinpath(*rel)
+                        if public.is_dir():
+                            resolved = public
+                            break
+                    if resolved is not None:
                         break
                 assets_root = resolved or comp_path.parent
 

@@ -1,7 +1,7 @@
 """Render the curated zero-key Remotion demos.
 
 This script is Remotion-specific by design — the demos live in
-`remotion-composer/public/demo-props/` as JSON props for existing React
+`runtimes/remotion/public/demo-props/` as JSON props for existing React
 scene components. It is NOT a cross-runtime demo harness.
 
 For a HyperFrames demo, run `make hyperframes-doctor` to verify the runtime
@@ -21,7 +21,12 @@ from pathlib import Path
 
 
 ROOT_DIR = Path(__file__).resolve().parent
-COMPOSER_DIR = ROOT_DIR / "remotion-composer"
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+from lib.paths import WorkspacePaths  # noqa: E402
+from lib.resources import get_resources  # noqa: E402
+
+COMPOSER_DIR = get_resources(WorkspacePaths(repo_root=ROOT_DIR)).remotion_composer()
 PROPS_DIR = COMPOSER_DIR / "public" / "demo-props"
 OUTPUT_DIR = ROOT_DIR / "projects" / "demos" / "renders"
 

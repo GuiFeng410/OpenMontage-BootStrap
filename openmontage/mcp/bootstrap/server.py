@@ -108,7 +108,7 @@ def install_python_deps(dry_run: bool = True, confirm_execute: bool = False) -> 
 
 @mcp.tool()
 def install_node_deps(dry_run: bool = True, confirm_execute: bool = False) -> dict[str, Any]:
-    """npm install in remotion-composer (dry_run by default)."""
+    """npm install in runtimes/remotion (dry_run by default)."""
     return _wrap(T.install_node_deps, dry_run, confirm_execute)
 
 

@@ -355,11 +355,11 @@ class VideoCompose(BaseTool):
             if composer_dir.exists() and (composer_dir / "package.json").exists() and not (composer_dir / "node_modules").exists():
                 info["remotion_note"] = (
                     "Remotion project exists but node_modules are NOT installed. "
-                    "Run 'cd remotion-composer && npm install' to enable Remotion rendering."
+                    "Run 'cd runtimes/remotion && npm install' to enable Remotion rendering."
                 )
             else:
                 info["remotion_note"] = (
-                    "Remotion is NOT available (needs Node.js/npx + remotion-composer + node_modules)."
+                    "Remotion is NOT available (needs Node.js/npx + runtimes/remotion + node_modules)."
                 )
 
         if hyperframes_ok:
@@ -830,8 +830,8 @@ class VideoCompose(BaseTool):
             return ToolResult(
                 success=False,
                 error=(
-                    f"remotion-composer or its node_modules is missing at {composer_dir}. "
-                    f"Run `cd remotion-composer && npm install` first."
+                    f"Remotion composer or its node_modules is missing at {composer_dir}. "
+                    f"Run `cd runtimes/remotion && npm install` first."
                 ),
             )
 
@@ -1532,7 +1532,7 @@ class VideoCompose(BaseTool):
                         f"Underlying error: {render_result.error}\n\n"
                         f"This composition requires Remotion (images, text cards, animations). "
                         f"Options:\n"
-                        f"  1. Fix Remotion setup (cd remotion-composer && npm install)\n"
+                        f"  1. Fix Remotion setup (cd runtimes/remotion && npm install)\n"
                         f"  2. Re-run with operation='compose' for FFmpeg-only (video cuts only)\n"
                         f"  3. Approve a degraded FFmpeg render (still images → Ken Burns)\n\n"
                         f"Per governance: renderer downgrade requires user approval."
