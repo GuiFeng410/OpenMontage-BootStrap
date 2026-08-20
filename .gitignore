@@ -93,8 +93,11 @@ pixabay_music_*
 .DS_Store
 Thumbs.db
 
-# Node (for remotion-composer / runtimes/remotion)
+# Node (for remotion-composer / runtimes/remotion / backlot/frontend)
 node_modules/
+
+# Backlot Vite default outDir if config is skipped (committed output is ui-dist/)
+backlot/frontend/dist/
 
 # Remotion build output and copied project assets (regenerable at render time)
 runtimes/remotion/out/
