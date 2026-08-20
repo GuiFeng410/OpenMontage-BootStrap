@@ -32,7 +32,7 @@ metadata:
    | 优先级 | 步骤 | 说明 |
    |--------|------|------|
    | 必做 | `install_python_deps` | venv + `requirements.txt`（含 **edge-tts**） |
-   | 必做 | `install_node_deps` | `remotion-composer` 的 `npm install` |
+   | 必做 | `install_node_deps` | `runtimes/remotion` 的 `npm install` |
    | 必做 | `ensure_ffmpeg` | FFmpeg / ffprobe |
    | 必做验收 | `probe_edge_tts` | 确认 Edge 可 import（合成时需联网） |
    | **建议** | `probe_hyperframes` | Node ≥ 22 + npx + ffmpeg；可跳过，**不挡** `verify_ready` |

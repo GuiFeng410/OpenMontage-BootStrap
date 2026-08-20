@@ -29,7 +29,7 @@ open-montage-boot-strap/
 │  └─ backlot/
 │
 ├─ 05-render-runtimes/           合成运行时
-│  ├─ remotion-composer/
+│  ├─ runtimes/remotion/
 │  └─ ink-theater/
 │
 ├─ 06-quality/

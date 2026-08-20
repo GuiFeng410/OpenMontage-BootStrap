@@ -78,7 +78,7 @@
 | 10 | `progress_bar` | 完成度、采用率 | ✓ |
 | 11 | `terminal_scene` | 合成终端动画（无需真录屏） | ✓ |
 
-**权威字段表**：`remotion-composer/SCENE_TYPES.md`（新增 type 须同步该文件）。
+**权威字段表**：`runtimes/remotion/SCENE_TYPES.md`（新增 type 须同步该文件）。
 
 ### 3.1 Overlays（叠加层）
 
@@ -100,8 +100,8 @@ Overlays 与 cuts 共用全局时间轴；`in_seconds` / `out_seconds` 可落在
 | 分段 1 | `projects/remotion-light-showcase/segment-01-intro-comparison.json` |
 | 分段 2 | `projects/remotion-light-showcase/segment-02-charts.json` |
 | 分段 3 | `projects/remotion-light-showcase/segment-03-terminal-close.json` |
-| Composer 演示副本 | `remotion-composer/public/demo-props/light-showcase-60s.json` |
-| Composer 图表段副本 | `remotion-composer/public/demo-props/light-showcase-segment-02-charts.json` |
+| Composer 演示副本 | `runtimes/remotion/public/demo-props/light-showcase-60s.json` |
+| Composer 图表段副本 | `runtimes/remotion/public/demo-props/light-showcase-segment-02-charts.json` |
 
 **约定**：场景属性写在 cut **顶层**（如 `cut.text`、`cut.chartData`），不要嵌套在 `props` 键下。  
 新项目 props 建议落盘 `<project_id>/composition.json` 或 `public/demo-props/<name>.json`。
@@ -110,20 +110,20 @@ Overlays 与 cuts 共用全局时间轴；`in_seconds` / `out_seconds` 可落在
 
 ## 5. 渲染命令
 
-工作目录：`remotion-composer/`。Composition 名：**`Explainer`**（非 `ExplainerVideo`）。
+工作目录：`runtimes/remotion/`。Composition 名：**`Explainer`**（非 `ExplainerVideo`）。
 
 ```powershell
-cd f:\small_work\vedio_github_project\OpenMontage\remotion-composer
+cd f:\small_work\vedio_github_project\OpenMontage\runtimes\remotion
 
 # 完整 60s
 npx remotion render src/index.tsx Explainer `
-  "..\projects\remotion-light-showcase\renders\showcase-60s.mp4" `
-  --props="..\projects\remotion-light-showcase\explainer-props-60s.json"
+  "..\..\projects\remotion-light-showcase\renders\showcase-60s.mp4" `
+  --props="..\..\projects\remotion-light-showcase\explainer-props-60s.json"
 
 # 分段 2 — 图表（迭代最快）
 npx remotion render src/index.tsx Explainer `
-  "..\projects\remotion-light-showcase\renders\segment-02-charts.mp4" `
-  --props="..\projects\remotion-light-showcase\segment-02-charts.json"
+  "..\..\projects\remotion-light-showcase\renders\segment-02-charts.mp4" `
+  --props="..\..\projects\remotion-light-showcase\segment-02-charts.json"
 ```
 
 其余分段与输出路径见 `projects/remotion-light-showcase/RENDER.md`。  
@@ -174,7 +174,7 @@ npx remotion render src/index.tsx Explainer `
 
 | 资源 | 路径 |
 |------|------|
-| 场景类型权威表 | `remotion-composer/SCENE_TYPES.md` |
+| 场景类型权威表 | `runtimes/remotion/SCENE_TYPES.md` |
 | OpenMontage Remotion 技能 | `skills/core/remotion.md` |
 | 样板渲染记录 | `projects/remotion-light-showcase/RENDER.md` |
 | 样板视频方案 | `projects/remotion-light-showcase/video_plan.md` |
