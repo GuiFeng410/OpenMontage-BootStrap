@@ -22,7 +22,7 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 | **简报主链** | `03-usercheck`：就绪后**先扫 Key**，**默认电商宣传片**（给网址；缺时长/图/预算问一句）→ `04-produce`。轻度 Demo **仅**用户明确要求或无 Key 退路 |
 | **旁白默认** | **Edge-TTS** 男声（主推，可后置）；Piper **仅离线可选**（setup 默认不装）；字幕/BGM 走 05 |
 | **合成引擎** | Remotion 为轻度常用必装路径；**HyperFrames 建议装、可跳过**（Node≥22；不挡 `verify_ready`） |
-| **Python 包** | `src/openmontage/`；命令仍 `python -m openmontage.mcp.*`（仓根 `openmontage/` 仅为加载器 shim） |
+| **Python 包** | `src/openmontage/`；命令仍 `python -m openmontage.mcp.*`（仓根 `openmontage/` 仅为加载器 shim）。内核 `src/openmontage/lib/`（仓根 `lib/` 为 shim；`from lib.…` 不变） |
 | **本机会话** | 新对话先读 `Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md` → 同目录日期最新长篇交接（**Agent-\* 本机区，gitignore，勿主动提交**；遗留镜像仍在 `docs/会话交接/`） |
 
 操作细节以 Skill 正文为准；`README/说明/` 是人读入口。
@@ -272,9 +272,9 @@ The agent:
 
 Infrastructure files:
 
-- `lib/checkpoint.py` — read/write checkpoints, stage validation
+- `src/openmontage/lib/checkpoint.py` — read/write checkpoints, stage validation（`from lib.checkpoint`）
 - `tools/cost_tracker.py` — budget governance
-- `lib/pipeline_loader.py` — manifest loading and helpers
+- `src/openmontage/lib/pipeline_loader.py` — manifest loading and helpers（`from lib.pipeline_loader`）
 
 ## Project Directory Convention
 
@@ -657,7 +657,7 @@ The reviewer is a meta skill (`skills/meta/reviewer.md`) — advisory, never dir
 
 The checkpoint protocol meta skill (`skills/meta/checkpoint-protocol.md`) teaches the agent when to pause:
 
-- Read `human_approval_default` from the pipeline manifest per stage. **The manifest value is binding** — never re-judge it. `lib/checkpoint.py` enforces this: a gated stage cannot be written `completed` without `human_approved=True`.
+- Read `human_approval_default` from the pipeline manifest per stage. **The manifest value is binding** — never re-judge it. `src/openmontage/lib/checkpoint.py` enforces this: a gated stage cannot be written `completed` without `human_approved=True`.
 - Typical gated stages: `idea`/`proposal`, `script`, `scene_plan`, **`assets`** (review the generated assets scene-by-scene — the Backlot board's filmstrip — before compose locks them in), and `publish` where the pipeline has one. Most pipelines auto-proceed on `edit` and `compose`, but not all (documentary-montage gates `edit`) — the manifest you loaded is the only authority.
 - When approval is required: write the checkpoint as `awaiting_human`, present artifact summary, review findings, and cost snapshot — then **END YOUR TURN**. Doing further pipeline work in the same response is a gate violation.
 - **Approval is per-gate.** An early "go ahead" never covers later gates; explicit full-run pre-authorization must be recorded as a `decision_log` entry (`category: "approval_policy"`) to count.

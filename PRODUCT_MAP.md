@@ -1,6 +1,6 @@
 # PRODUCT_MAP — 逻辑分层（不大搬家）
 
-OpenMontage-BootStrap 当前目录仍按历史路径放代码。本文件只做**阅读地图**，不要求把 `tools/`、`lib/` 一次性改名。
+OpenMontage-BootStrap 当前目录仍按历史路径放代码。本文件只做**阅读地图**，不要求把 `tools/` 一次性改名。内核已在 `src/openmontage/lib/`（仓根 `lib/` 是转发 shim；`from lib.…` 不变）。
 
 版本身份见 [`distribution/manifests/release-manifest.json`](distribution/manifests/release-manifest.json)。
 
@@ -18,7 +18,7 @@ open-montage-boot-strap/
 │  ├─ product/pipelines/         YAML 管线清单
 │  ├─ skills/                    导演 md：pipelines / core / creative / meta（不进 extraDirs）
 │  ├─ tools/
-│  └─ lib/
+│  └─ src/openmontage/lib/       内核（仓根 lib/ 为 shim）
 │
 ├─ 03-state-contracts/           数据契约
 │  └─ product/schemas/           JSON Schema
@@ -46,6 +46,6 @@ open-montage-boot-strap/
    └─ projects/                  产品语义上是用户作品，升级不得覆盖
 ```
 
-Python 加载器仍在 `styles/playbook_loader.py` 与 `schemas/artifacts/`（`from styles.playbook_loader` / `from schemas.artifacts` 未改）。仓根 `openmontage/` 是加载器 shim（Skill 旧路径占位）；可导入的包在 `src/openmontage/`。
+Python 加载器仍在 `styles/playbook_loader.py` 与 `schemas/artifacts/`（`from styles.playbook_loader` / `from schemas.artifacts` 未改）。仓根 `openmontage/` 与 `lib/` 是加载器 shim；可导入的包在 `src/openmontage/`，内核在 `src/openmontage/lib/`。
 
 **产品三层（目标，尚未物理拆仓）：** 仓库是工厂；`release-manifest` 是成品版本；`projects/` 是作品仓库。详见 `Agent-ReadMe/other/02.md`（本机）或 Goal/01。

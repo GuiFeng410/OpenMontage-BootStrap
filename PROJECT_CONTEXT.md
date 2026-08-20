@@ -62,10 +62,10 @@ Each tool's `agent_skills[]` field bridges Layer 1 → Layer 3. See `skills/INDE
 | File | Purpose |
 |------|---------|
 | `config.yaml` | Global configuration |
-| `lib/config_model.py` | Runtime config loader (Pydantic) |
-| `lib/checkpoint.py` | Checkpoint writer/reader |
-| `lib/pipeline_loader.py` | Pipeline manifest loader + helpers |
-| `lib/media_profiles.py` | Platform-specific render profiles |
+| `src/openmontage/lib/config_model.py` | Runtime config loader (Pydantic)；仓根 `lib/` 为 shim，`from lib.…` 不变 |
+| `src/openmontage/lib/checkpoint.py` | Checkpoint writer/reader |
+| `src/openmontage/lib/pipeline_loader.py` | Pipeline manifest loader + helpers |
+| `src/openmontage/lib/media_profiles.py` | Platform-specific render profiles |
 | `styles/playbook_loader.py` | Style playbook loader + validator + design intelligence (color/type/a11y) |
 | `tools/base_tool.py` | ToolContract base class |
 | `tools/tool_registry.py` | Tool discovery and reporting |
@@ -75,7 +75,7 @@ Each tool's `agent_skills[]` field bridges Layer 1 → Layer 3. See `skills/INDE
 | `tools/video/hyperframes_compose.py` | HyperFrames runtime — workspace materialization, `hyperframes lint`/`validate`/`render`, FFmpeg floor check |
 | `src/openmontage/mcp/` | BootStrap / doctor / providers / media MCP |
 | `tools/character/character_animation.py` | Local character-animation tools — character specs, SVG rig plans, pose libraries, action timelines, HyperFrames packages, and QA reports |
-| `lib/hyperframes_style_bridge.py` | Playbook → CSS custom properties + `DESIGN.md` bridge for HyperFrames workspaces |
+| `src/openmontage/lib/hyperframes_style_bridge.py` | Playbook → CSS custom properties + `DESIGN.md` bridge for HyperFrames workspaces |
 | `runtimes/remotion/src/components/` | 8 Remotion components (TextCard, StatCard, ProgressBar, CalloutBox, ComparisonCard + charts/) |
 | `.agents/skills/hyperframes*/` | Vendored HyperFrames Layer 3 skills (authoring contract, CLI, registry, website-to-video) |
 | `skills/core/hyperframes.md` | Layer 2 — when OpenMontage should pick HyperFrames vs Remotion, artifact → workspace mapping |
