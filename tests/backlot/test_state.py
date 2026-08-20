@@ -808,6 +808,7 @@ class TestBoardState:
 
         assert beat["assignment_status"] == "user_asset"
         assert beat["candidate_previews"] == []
+        assert "gap_fill" in beat
         assert [item["path"] for item in beat["ledger"]] == [image_path]
 
     def test_commercial_board_uses_longer_root_decision_log_over_stale_artifact(

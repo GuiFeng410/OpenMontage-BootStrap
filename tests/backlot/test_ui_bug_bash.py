@@ -1887,7 +1887,7 @@ def test_commercial_actual_generation_signal_without_source_renders_as_candidate
             browser.close()
 
 
-def test_commercial_asset_lists_are_collapsed_and_thumbnails_stay_compact(
+def test_commercial_asset_inspection_shows_thumbnails_and_stays_compact(
     staged_backlot_server,
 ):
     with sync_playwright() as pw:
@@ -1900,27 +1900,22 @@ def test_commercial_asset_lists_are_collapsed_and_thumbnails_stay_compact(
             )
             page.locator(".stage").filter(has_text="素材检查").click()
 
-            asset_details = page.locator("details.commercial-assets-details")
-            assert asset_details.count() == 1
-            assert asset_details.evaluate("(node) => node.open") is False
             asset_panel = page.locator(".commercial-assets-panel")
-            assert "共 4 张" in asset_panel.inner_text()
-            assert "身份基准" in asset_panel.inner_text()
-            assert "角度图" in asset_panel.inner_text()
+            assert asset_panel.count() == 1
+            copy = asset_panel.inner_text()
+            assert "用户原图" in copy
+            assert "身份基准" in copy
+            assert "角度图" in copy
+            assert page.locator(".commercial-precheck-panel").count() == 0
 
-            precheck_details = page.locator(".commercial-precheck-panel details")
-            assert precheck_details.count() == 1
-            assert precheck_details.evaluate("(node) => node.open") is False
-
-            asset_details.locator("summary").click()
-            height = page.locator(".commercial-assets-details .asset-card img").first.evaluate(
+            height = page.locator(".commercial-assets-panel .asset-card img").first.evaluate(
                 "(img) => img.getBoundingClientRect().height"
             )
             assert 0 < height <= 180
 
             page.set_viewport_size({"width": 390, "height": 844})
             mobile_height = page.locator(
-                ".commercial-assets-details .asset-card img"
+                ".commercial-assets-panel .asset-card img"
             ).first.evaluate("(img) => img.getBoundingClientRect().height")
             assert 0 < mobile_height <= 150
         finally:

@@ -1,5 +1,12 @@
 import { RUNNER_GONE_ZH } from "./model";
 import {
+  ASSET_NOTES_EVENT,
+  PREFER_OPTION_EVENT,
+  composeAssetNotes,
+  loadAssetNotes,
+  mergeIntentNote,
+} from "./assetNotes";
+import {
   clearDraft,
   createDraft,
   gapPlanReady,
@@ -87,13 +94,37 @@ export function DecisionPanel({
   const options = Array.isArray(decision.options) ? decision.options : [];
   const gapPlan = stage === "brief_locked" ? decision.gap_plan : undefined;
   const ready = gapPlanReady(draft, gapPlan);
-  const summary = summarizeDraft(draft);
   const submitLabel = primarySubmitLabel(stage, draft, options);
-
   const applyDraft = (next: IntentDraft) => {
     setDraft(next);
     saveDraft(storage, next);
   };
+  const [noteTick, setNoteTick] = useState(0);
+  useEffect(() => {
+    const onNotes = () => setNoteTick((value) => value + 1);
+    const onPrefer = (event: Event) => {
+      const optionId = String((event as CustomEvent<{ optionId?: string }>).detail?.optionId || "");
+      if (!optionId || submissionLocked) return;
+      const option = options.find((item) => String(item.id ?? item.option_id ?? "") === optionId);
+      if (!option) return;
+      setDraft((current) => {
+        const next = selectOption(current, itemKey, option);
+        saveDraft(storage, next);
+        return next;
+      });
+    };
+    window.addEventListener(ASSET_NOTES_EVENT, onNotes);
+    window.addEventListener(PREFER_OPTION_EVENT, onPrefer);
+    return () => {
+      window.removeEventListener(ASSET_NOTES_EVENT, onNotes);
+      window.removeEventListener(PREFER_OPTION_EVENT, onPrefer);
+    };
+  }, [itemKey, options, submissionLocked, storage]);
+  const assetNoteBlock = composeAssetNotes(loadAssetNotes(storage, projectId, stage));
+  void noteTick;
+  const mergedNote = mergeIntentNote(draft.note, assetNoteBlock);
+  const summaryDraft = mergedNote === draft.note ? draft : { ...draft, note: mergedNote };
+  const summary = summarizeDraft(summaryDraft);
 
   return (
     <div id={`commercial-intent-panel:${projectId}:${stage}`} className="notice commercial-notice">
@@ -211,7 +242,7 @@ export function DecisionPanel({
                     const intent = await buildDecisionIntent({
                       projectId,
                       stage,
-                      draft,
+                      draft: summaryDraft,
                       summary,
                     });
                     const result = await submitDecisionIntent({ intent });

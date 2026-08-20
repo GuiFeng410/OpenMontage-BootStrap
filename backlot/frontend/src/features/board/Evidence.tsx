@@ -1,6 +1,17 @@
+import { useState } from "react";
+import {
+  assetNoteKey,
+  loadAssetNotes,
+  preferDecisionOption,
+  saveAssetNotes,
+  upsertAssetNote,
+  type AssetNoteAction,
+  type AssetNoteItem,
+  type AssetNoteStore,
+} from "./assetNotes";
 import { fmtClock, fmtMoney, fmtMoneyCny, thumbURL } from "./format";
-import { commercialContentView, isCommercial } from "./model";
-import type { BoardEvent, BoardState } from "./types";
+import { commercialAssignmentStatusZh, commercialContentView, isCommercial } from "./model";
+import type { BoardEvent, BoardState, CommercialAsset, CommercialBeat } from "./types";
 
 type Props = { state: BoardState; selectedStage: string | null };
 
@@ -8,8 +19,8 @@ export function EvidencePanels({ state, selectedStage }: Props) {
   const view = commercialContentView(state, selectedStage);
   return (
     <>
-      {view === "plan" || view === "assets" ? <AssetPrecheck state={state} selectedStage={selectedStage} /> : null}
-      {view === "assets" ? <AssetPool state={state} /> : null}
+      {view === "plan" ? <AssetPrecheck state={state} selectedStage={selectedStage} /> : null}
+      {view === "assets" ? <AssetInspection state={state} /> : null}
       {view === "assets" ? <UnusedAssets state={state} /> : null}
     </>
   );
@@ -214,87 +225,404 @@ function closedActivityRows(events: BoardEvent[]) {
   return rows;
 }
 
-function AssetPrecheck({ state, selectedStage }: Props) {
-  const view = commercialContentView(state, selectedStage);
+function precheckProblemRows(state: BoardState) {
+  const precheck = state.commercial?.asset_precheck || {};
+  const summary = precheck.summary || {};
+  const entries = Array.isArray(precheck.entries) ? precheck.entries : [];
+  const svgCount = entries.filter((entry) =>
+    (entry.issues || []).some((issue) => /svg|unsafe/i.test(issue)),
+  ).length;
+  const rows: [string, string][] = [];
+  if (summary.low_resolution_count) {
+    rows.push(["低分辨率", `${summary.low_resolution_count} 张`]);
+  }
+  if (summary.duplicate_group_count) {
+    rows.push(["重复文件", `${summary.duplicate_group_count} 组`]);
+  }
+  if (svgCount) rows.push(["危险 SVG", `${svgCount} 张`]);
+  if (summary.vision_enriched) {
+    rows.push(["识图", summary.vision_model ? `已调用 · ${summary.vision_model}` : "已调用"]);
+  }
+  return { summary, entries, rows };
+}
+
+function AssetPrecheck({ state }: Props) {
   const precheck = state.commercial?.asset_precheck || {};
   const summary = precheck.summary || {};
   const entries = Array.isArray(precheck.entries) ? precheck.entries : [];
   if (!summary.total_images && !summary.needs_user_attention && !entries.length) return null;
-  const rows: [string, string | null | undefined][] = [
-    ["已扫描图片", summary.total_images != null ? `${summary.total_images} 张` : null],
-    ["低分辨率", summary.low_resolution_count ? `${summary.low_resolution_count} 张` : "无"],
-    ["重复文件", summary.duplicate_group_count ? `${summary.duplicate_group_count} 组` : "无"],
-    [
-      "分类方式",
-      summary.vision_enriched
-        ? `识图模型${summary.vision_model ? ` · ${summary.vision_model}` : ""}`
-        : "仅文件扫描（未调用识图模型）",
-    ],
-  ];
+  const { rows } = precheckProblemRows(state);
   return (
     <div className="panel commercial-precheck-panel">
       <div className="panel-head">
-        <h2>{view === "assets" ? "素材检查 · 预检" : "素材预检"}</h2>
-        <span className="meta">{view === "assets" ? "文件扫描 · 分辨率/重复检测" : "方案确认前置"}</span>
+        <h2>素材预检</h2>
+        <span className="meta">方案确认前置</span>
       </div>
       <div className="panel-body commercial-summary">
-        {rows
-          .filter(([, value]) => value != null)
-          .map(([label, value]) => (
-            <div className="kv-row" key={label}>
-              <span className="kv-k">{label}</span>
-              <span className="kv-v">{value}</span>
-            </div>
-          ))}
+        <div className="kv-row">
+          <span className="kv-k">已扫描图片</span>
+          <span className="kv-v">{`${summary.total_images || entries.length} 张`}</span>
+        </div>
+        {rows.map(([label, value]) => (
+          <div className="kv-row" key={label}>
+            <span className="kv-k">{label}</span>
+            <span className="kv-v">{value}</span>
+          </div>
+        ))}
       </div>
     </div>
   );
 }
 
-function AssetPool({ state }: { state: BoardState }) {
+const AI_STATUSES = new Set(["i2i_planned", "generating", "review_pending", "approved", "failed"]);
+const REUSE_FILLS = new Set(["none"]);
+const SKIP_FILLS = new Set(["concept_only"]);
+
+function beatUsesPath(beat: CommercialBeat, path?: string) {
+  if (!path) return false;
+  if (beat.reference_path === path || beat.asset_path === path || beat.ref === path) return true;
+  const bags = [...(beat.ledger || []), ...(beat.planned_entries || [])];
+  return bags.some((item) => item.path === path);
+}
+
+function beatUsageLabel(beat: CommercialBeat) {
+  return [beat.beat, beat.need_detail_zh || beat.asset_plan_zh || commercialAssignmentStatusZh(beat)]
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function isSkipBeat(beat: CommercialBeat) {
+  return SKIP_FILLS.has(String(beat.gap_fill || "")) || /不补/.test(beat.asset_plan_zh || "");
+}
+
+function isReuseBeat(beat: CommercialBeat) {
+  return (
+    beat.assignment_status === "reuse_pending" ||
+    beat.assignment_status === "reuse_approved" ||
+    beat.reuse_status === "reuse_pending" ||
+    beat.reuse_status === "reuse_approved" ||
+    REUSE_FILLS.has(String(beat.gap_fill || ""))
+  );
+}
+
+function isAiBeat(beat: CommercialBeat) {
+  if (isSkipBeat(beat) || isReuseBeat(beat)) return false;
+  return (
+    AI_STATUSES.has(String(beat.assignment_status || "")) ||
+    beat.gap_fill === "i2i" ||
+    Boolean(beat.candidate_previews?.length)
+  );
+}
+
+function AssetInspection({ state }: { state: BoardState }) {
   const assets = state.commercial?.assets || [];
-  if (!assets.length) return null;
-  const roleCounts = new Map<string, number>();
-  for (const img of assets) {
-    const role = img.role_zh || "素材";
-    roleCounts.set(role, (roleCounts.get(role) || 0) + 1);
-  }
+  const beats = state.commercial?.beats || [];
+  const aiBeats = beats.filter(isAiBeat);
+  const reuseBeats = beats.filter((beat) => isReuseBeat(beat) && !isSkipBeat(beat));
+  const skipBeats = beats.filter(isSkipBeat);
+  const otherBeats = reuseBeats.length + skipBeats.length;
+  const { rows: problemRows } = precheckProblemRows(state);
+  const notes = useAssetNotes(state.project_id, "assets_gate");
+
+  if (!assets.length && !aiBeats.length && !otherBeats && !problemRows.length) return null;
+
   return (
     <div className="panel commercial-assets-panel">
       <div className="panel-head">
         <h2>素材检查</h2>
-        <span className="meta">身份与角度</span>
+        <span className="meta">用户原图 / AI / 复用与不补</span>
       </div>
       <div className="panel-body commercial-summary">
         <div className="kv-row">
-          <span className="kv-k">素材总数</span>
-          <span className="kv-v">{`共 ${assets.length} 张`}</span>
-        </div>
-        <div className="kv-row">
-          <span className="kv-k">用途</span>
+          <span className="kv-k">分区</span>
           <span className="kv-v">
-            {[...roleCounts.entries()].map(([role, count]) => `${role}×${count}`).join(" · ")}
+            {`用户原图 ${assets.length} · AI ${aiBeats.length} · 复用/不补 ${otherBeats}`}
           </span>
         </div>
-        <details className="tech-details commercial-assets-details">
-          <summary>展开图片清单</summary>
-          <div className="asset-grid">
-            {assets.map((img) => (
-              <div className={`asset-card${img.exists ? "" : " missing"}`} key={img.path || img.file}>
-                {img.exists && img.path ? (
-                  <img src={thumbURL(state.project_id, img.path, 320)} loading="lazy" alt={img.file || ""} />
-                ) : (
-                  <div className="asset-missing">缺失</div>
-                )}
-                <div className="asset-meta">
-                  <b>{img.role_zh}</b>
-                  <span>{img.file}</span>
-                  {img.hero_only_motion ? <span className="asset-hint">仅运镜，不作 I2V 锚点</span> : null}
-                </div>
-              </div>
-            ))}
+        {problemRows.map(([label, value]) => (
+          <div className="kv-row" key={label}>
+            <span className="kv-k">{label}</span>
+            <span className="kv-v">{value}</span>
           </div>
-        </details>
+        ))}
+        {assets.length ? (
+          <AssetSection title={`用户原图 / 补传（${assets.length}）`} open>
+            <div className="asset-grid commercial-assets-details">
+              {assets.map((img) => (
+                <UserAssetCard
+                  key={img.path || img.file}
+                  state={state}
+                  img={img}
+                  beats={beats.filter((beat) => beatUsesPath(beat, img.path))}
+                  notes={notes}
+                />
+              ))}
+            </div>
+          </AssetSection>
+        ) : null}
+        {aiBeats.length ? (
+          <AssetSection title={`AI 生成（${aiBeats.length}）`} open>
+            <div className="asset-grid commercial-assets-details">
+              {aiBeats.map((beat) => (
+                <AiBeatCard key={beat.beat || beat.time} state={state} beat={beat} notes={notes} />
+              ))}
+            </div>
+          </AssetSection>
+        ) : null}
+        {otherBeats ? (
+          <AssetSection title={`复用与不补（${otherBeats}）`} open>
+            <div className="asset-grid">
+              {reuseBeats.map((beat) => (
+                <ReuseSkipCard
+                  key={`reuse-${beat.beat}`}
+                  state={state}
+                  beat={beat}
+                  kind="reuse"
+                  notes={notes}
+                />
+              ))}
+              {skipBeats.map((beat) => (
+                <ReuseSkipCard
+                  key={`skip-${beat.beat}`}
+                  state={state}
+                  beat={beat}
+                  kind="skip"
+                  notes={notes}
+                />
+              ))}
+            </div>
+          </AssetSection>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function AssetSection({
+  title,
+  open,
+  children,
+}: {
+  title: string;
+  open?: boolean;
+  children: React.ReactNode;
+}) {
+  const [expanded, setExpanded] = useState(Boolean(open));
+  return (
+    <details
+      className="asset-inspect-section"
+      open={expanded}
+      onToggle={(event) => setExpanded((event.currentTarget as HTMLDetailsElement).open)}
+    >
+      <summary>{title}</summary>
+      {children}
+    </details>
+  );
+}
+
+function useAssetNotes(projectId: string, stage: string) {
+  const storage = typeof window === "undefined" ? undefined : window.sessionStorage;
+  const [store, setStore] = useState<AssetNoteStore>(() =>
+    storage
+      ? loadAssetNotes(storage, projectId, stage)
+      : { version: "1.0", project_id: projectId, stage, items: {} },
+  );
+  const apply = (next: AssetNoteStore) => {
+    setStore(next);
+    if (storage) saveAssetNotes(storage, next);
+  };
+  return { store, apply };
+}
+
+function noteFor(store: AssetNoteStore, key: string): AssetNoteItem | undefined {
+  return store.items[key];
+}
+
+function UserAssetCard({
+  state,
+  img,
+  beats,
+  notes,
+}: {
+  state: BoardState;
+  img: CommercialAsset;
+  beats: CommercialBeat[];
+  notes: ReturnType<typeof useAssetNotes>;
+}) {
+  const key = assetNoteKey("user", beats[0]?.beat, img.path);
+  const item = noteFor(notes.store, key);
+  const rejected = item?.action === "reject";
+  const patch = (next: { action?: AssetNoteAction; text?: string }) =>
+    notes.apply(
+      upsertAssetNote(notes.store, key, {
+        kind: "user",
+        beat: beats[0]?.beat,
+        path: img.path,
+        label: img.file || "用户原图",
+        action: next.action ?? item?.action ?? "",
+        text: next.text ?? item?.text ?? "",
+      }),
+    );
+  return (
+    <div className={`asset-card${img.exists ? "" : " missing"}`}>
+      {img.exists && img.path ? (
+        <img src={thumbURL(state.project_id, img.path, 320)} loading="lazy" alt={img.file || ""} />
+      ) : (
+        <div className="asset-missing">缺失</div>
+      )}
+      <div className="asset-meta">
+        <b>{img.role_zh || "用户原图"}</b>
+        <span>{img.file}</span>
+        {beats.length ? (
+          <span className="asset-hint">{beats.map(beatUsageLabel).join("；")}</span>
+        ) : (
+          <span className="asset-hint">未分配到段落</span>
+        )}
+        {img.hero_only_motion ? <span className="asset-hint">仅运镜，不作 I2V 锚点</span> : null}
+        <div className="asset-card-actions">
+          <button
+            type="button"
+            className={`asset-chip${rejected ? " selected" : ""}`}
+            aria-pressed={rejected}
+            onClick={() => patch({ action: rejected ? "" : "reject" })}
+          >
+            这张不好
+          </button>
+        </div>
+        <textarea
+          className="asset-card-note"
+          rows={2}
+          placeholder="选填：这张哪里不好"
+          aria-label="选填：这张哪里不好"
+          value={item?.text || ""}
+          onChange={(event) => patch({ text: event.currentTarget.value })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function AiBeatCard({
+  state,
+  beat,
+  notes,
+}: {
+  state: BoardState;
+  beat: CommercialBeat;
+  notes: ReturnType<typeof useAssetNotes>;
+}) {
+  const preview = (beat.candidate_previews || [])[0];
+  const status = beat.assignment_status || "";
+  const path = preview?.path;
+  const key = assetNoteKey("ai", beat.beat, path);
+  const item = noteFor(notes.store, key);
+  const reviewing = status === "review_pending";
+  const placeholder =
+    status === "generating" ? "生成中" : status === "i2i_planned" || !path ? "待生成" : null;
+  const patch = (next: { action?: AssetNoteAction; text?: string }) =>
+    notes.apply(
+      upsertAssetNote(notes.store, key, {
+        kind: "ai",
+        beat: beat.beat,
+        path,
+        label: `${beat.beat || "补图"} AI生成`,
+        action: next.action ?? item?.action ?? "",
+        text: next.text ?? item?.text ?? "",
+      }),
+    );
+  return (
+    <div className={`asset-card${path ? "" : " missing"}`}>
+      {path ? (
+        <img src={thumbURL(state.project_id, path, 320)} loading="lazy" alt={preview?.file || ""} />
+      ) : (
+        <div className="asset-missing asset-placeholder">{placeholder || "待生成"}</div>
+      )}
+      <div className="asset-meta">
+        <b>
+          {beatUsageLabel(beat)}
+          <span className="asset-badge-ai">AI生成</span>
+        </b>
+        <span>{commercialAssignmentStatusZh(beat)}</span>
+        {reviewing ? (
+          <div className="asset-card-actions">
+            <button
+              type="button"
+              className={`asset-chip${item?.action === "ok" ? " selected" : ""}`}
+              aria-pressed={item?.action === "ok"}
+              onClick={() => patch({ action: item?.action === "ok" ? "" : "ok" })}
+            >
+              通过
+            </button>
+            <button
+              type="button"
+              className={`asset-chip${item?.action === "redo" ? " selected" : ""}`}
+              aria-pressed={item?.action === "redo"}
+              onClick={() => {
+                patch({ action: "redo" });
+                preferDecisionOption("generate");
+              }}
+            >
+              重做
+            </button>
+          </div>
+        ) : null}
+        <textarea
+          className="asset-card-note"
+          rows={2}
+          placeholder={reviewing ? "选填：这张补图的意见" : "选填：这一段的意见"}
+          aria-label="选填补图意见"
+          value={item?.text || ""}
+          onChange={(event) => patch({ text: event.currentTarget.value })}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ReuseSkipCard({
+  state,
+  beat,
+  kind,
+  notes,
+}: {
+  state: BoardState;
+  beat: CommercialBeat;
+  kind: "reuse" | "skip";
+  notes: ReturnType<typeof useAssetNotes>;
+}) {
+  const path = beat.reference_path || beat.asset_path;
+  const key = assetNoteKey(kind, beat.beat, path);
+  const item = noteFor(notes.store, key);
+  const label = kind === "skip" ? `${beat.beat || ""} 明确不补` : `${beat.beat || ""} 复用`;
+  return (
+    <div className={`asset-card${path ? "" : " missing"}`}>
+      {path ? (
+        <img src={thumbURL(state.project_id, path, 320)} loading="lazy" alt={label} />
+      ) : (
+        <div className="asset-missing asset-placeholder">{kind === "skip" ? "不补图" : "复用待确认"}</div>
+      )}
+      <div className="asset-meta">
+        <b>{label}</b>
+        <span>{beat.asset_plan_zh || commercialAssignmentStatusZh(beat)}</span>
+        <textarea
+          className="asset-card-note"
+          rows={2}
+          placeholder="选填：这段的意见"
+          aria-label="选填：这段的意见"
+          value={item?.text || ""}
+          onChange={(event) =>
+            notes.apply(
+              upsertAssetNote(notes.store, key, {
+                kind,
+                beat: beat.beat,
+                path,
+                label,
+                action: "",
+                text: event.currentTarget.value,
+              }),
+            )
+          }
+        />
       </div>
     </div>
   );

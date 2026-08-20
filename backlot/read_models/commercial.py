@@ -971,6 +971,7 @@ def build_commercial_board(
                 and item.get("path") in assigned_paths
             )
         }
+        plan_gap = str(plan.get("gap_fill") or "")
         if has_assignment_conflict:
             assignment_status = "assignment_conflict"
         elif closed_user_paths and group_has_beat(reuse_groups, beat_id):
@@ -988,7 +989,6 @@ def build_commercial_board(
         elif (assignment_matrix.get("assigned") or {}).get(beat_id):
             assignment_status = "user_asset"
         else:
-            plan_gap = str(plan.get("gap_fill") or "")
             plan_status = str(plan.get("assignment_status") or "")
             plan_ref = str(plan.get("ref_image") or plan.get("ref") or "")
             plan_ref_resolved = (
@@ -1086,6 +1086,7 @@ def build_commercial_board(
                 row.get("need_detail_zh"),
                 plan.get("need_detail_zh"),
             ),
+            "gap_fill": plan_gap or None,
             "assignment_status": assignment_status,
             "assignment_status_zh": assignment_status_zh[assignment_status],
             "assignment_reason": assignment_reason,

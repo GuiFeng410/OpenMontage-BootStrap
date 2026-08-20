@@ -49,8 +49,21 @@ export type CommercialBeat = {
   available_count?: number;
   have_count?: number;
   need_detail_zh?: string;
+  gap_fill?: string | null;
+  reuse_status?: string | null;
   ledger?: LedgerItem[];
   planned_entries?: PlannedEntry[];
+  candidate_previews?: CandidatePreview[];
+}
+
+export type CandidatePreview = {
+  path?: string;
+  file?: string;
+  label_zh?: string;
+  status?: string;
+  review_status?: string;
+  provider?: string;
+  model?: string;
 };
 
 export type LedgerItem = {
@@ -195,7 +208,9 @@ export type CommercialState = {
     review_mode_zh?: string;
     review_mode_preset?: string;
     review_mode?: string;
+    motion_mix?: string;
     motion_mix_zh?: string;
+    ai_share_pct?: number | string | null;
     budget_cny?: number;
     candidate_mode_zh?: string;
     style_label_zh?: string;
