@@ -2,21 +2,16 @@
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 from typing import Any
 
-from lib.paths import get_workspace
+from lib.paths import ensure_import_roots, get_workspace
 
 REPO_ROOT = get_workspace().repo_root
 
 
 def ensure_repo_on_path() -> Path:
-    root = get_workspace().repo_root
-    root_str = str(root)
-    if root_str not in sys.path:
-        sys.path.insert(0, root_str)
-    return root
+    return ensure_import_roots(get_workspace().repo_root)
 
 
 def get_registry():

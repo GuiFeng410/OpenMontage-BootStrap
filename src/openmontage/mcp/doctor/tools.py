@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-from lib.paths import get_workspace
+from lib.paths import ensure_import_roots, get_workspace
 from openmontage.mcp.common.errors import ConfigError, DoctorError
 from openmontage.mcp.common.sandbox import project_dir, projects_root, require_projects_root, resolve_under_projects
 
@@ -153,9 +153,7 @@ def _fix_hint(binary: str) -> dict[str, list[str]]:
 
 
 def _ensure_repo_on_path() -> None:
-    root = str(REPO_ROOT)
-    if root not in sys.path:
-        sys.path.insert(0, root)
+    ensure_import_roots(REPO_ROOT)
 
 
 def _registry():

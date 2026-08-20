@@ -13,7 +13,7 @@ from typing import Any
 from openmontage.mcp.bootstrap import install_state as install_state_mod
 from openmontage.mcp.bootstrap.env_file import ensure_env_file as _ensure_env_file
 from lib.error_codes import APPROVAL_BUNDLE_FAILED, to_doctor_error
-from lib.paths import get_workspace
+from lib.paths import ensure_import_roots, get_workspace
 from openmontage.mcp.common.errors import ConfigError, DoctorError
 from openmontage.mcp.common.sandbox import project_dir
 from openmontage.mcp.doctor import tools as doctor_tools
@@ -1299,8 +1299,7 @@ def produce_budget_cny_snapshot(
     next_estimate_usd: float = 0.0,
 ) -> dict[str, Any]:
     """CNY display + gate check over USD CostTracker numbers (no parallel ledger)."""
-    if str(REPO_ROOT) not in sys.path:
-        sys.path.insert(0, str(REPO_ROOT))
+    ensure_import_roots(REPO_ROOT)
     from lib.experiment_budget import (
         DEFAULT_USD_CNY,
         cny_display_snapshot,
@@ -1511,8 +1510,7 @@ def produce_runner_tick(project_id: str = "") -> dict[str, Any]:
 
 def produce_list_intents(project_id: str) -> dict[str, Any]:
     """List pending edit intents (the Agent's inbox from the edit tab)."""
-    if str(REPO_ROOT) not in sys.path:
-        sys.path.insert(0, str(REPO_ROOT))
+    ensure_import_roots(REPO_ROOT)
     from lib.edit_apply import list_pending
 
     return {"project_id": project_id, "intents": list_pending(project_id)}
@@ -1525,8 +1523,7 @@ def produce_apply_intent(project_id: str, intent_id: str) -> dict[str, Any]:
     cuts the affected actions are skipped (friendly hints returned in
     ``friendly_zh``). Agent must present the plan in chat before applying.
     """
-    if str(REPO_ROOT) not in sys.path:
-        sys.path.insert(0, str(REPO_ROOT))
+    ensure_import_roots(REPO_ROOT)
     from lib.edit_apply import apply_intent
     from lib.edit_intents import IntentError, UnknownProjectError
 
@@ -1580,8 +1577,7 @@ def produce_scan_user_images(project_id: str) -> dict[str, Any]:
     does not call vision APIs, and does not generate images. The agent must
     get user confirmation before writing ``asset_ledger``.
     """
-    if str(REPO_ROOT) not in sys.path:
-        sys.path.insert(0, str(REPO_ROOT))
+    ensure_import_roots(REPO_ROOT)
     from lib.asset_precheck import scan_user_images
 
     return scan_user_images(project_dir(project_id))
@@ -1609,8 +1605,7 @@ def produce_describe_user_images(
         if not isinstance(parsed, list):
             raise DoctorError("files_json must be a JSON array of filenames", code="bad_request")
         files = [str(item) for item in parsed]
-    if str(REPO_ROOT) not in sys.path:
-        sys.path.insert(0, str(REPO_ROOT))
+    ensure_import_roots(REPO_ROOT)
     from lib.asset_vision import describe_project_user_images
 
     return describe_project_user_images(
@@ -1636,8 +1631,7 @@ def produce_analyze_public_product_images(
         image_urls = json.loads(image_urls_json)
     except json.JSONDecodeError as exc:
         raise DoctorError(f"image_urls_json invalid: {exc}", code="bad_request") from exc
-    if str(REPO_ROOT) not in sys.path:
-        sys.path.insert(0, str(REPO_ROOT))
+    ensure_import_roots(REPO_ROOT)
     from tools.analysis.agnes_vision import AgnesVision
 
     result = AgnesVision().execute(

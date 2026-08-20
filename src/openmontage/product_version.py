@@ -10,7 +10,8 @@ from typing import Any
 
 
 DIST_NAME = "openmontage"
-REPO_ROOT = Path(__file__).resolve().parent.parent
+# src/openmontage/product_version.py → checkout root
+REPO_ROOT = Path(__file__).resolve().parents[2]
 
 
 def _default_release_manifest() -> Path:

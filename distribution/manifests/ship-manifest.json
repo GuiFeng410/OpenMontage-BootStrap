@@ -25,6 +25,7 @@
     ],
     "dirs": [
       "lib",
+      "src/openmontage",
       "openmontage",
       "backlot",
       "product",

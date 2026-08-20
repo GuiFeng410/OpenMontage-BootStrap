@@ -167,10 +167,10 @@ def test_produce_and_checkpoint_modules_remain_facades() -> None:
     produce_src = (REPO_ROOT / "lib" / "board_produce.py").read_text(encoding="utf-8")
     checkpoint_src = (REPO_ROOT / "lib" / "checkpoint.py").read_text(encoding="utf-8")
     doctor_src = (
-        REPO_ROOT / "openmontage" / "mcp" / "doctor" / "tools.py"
+        REPO_ROOT / "src" / "openmontage" / "mcp" / "doctor" / "tools.py"
     ).read_text(encoding="utf-8")
     bootstrap_src = (
-        REPO_ROOT / "openmontage" / "mcp" / "bootstrap" / "tools.py"
+        REPO_ROOT / "src" / "openmontage" / "mcp" / "bootstrap" / "tools.py"
     ).read_text(encoding="utf-8")
     library_src = (REPO_ROOT / "lib" / "library_create.py").read_text(encoding="utf-8")
 

@@ -23,6 +23,7 @@ PACK = _load_pack_module()
 
 REQUIRED_CORE_DIRS = {
     "lib",
+    "src/openmontage",
     "openmontage",
     "backlot",
     "product",
@@ -142,7 +143,11 @@ def test_pack_runtime_copies_core_and_omits_forbidden(packed_runtime: tuple[Path
     assert result["files_copied"] > 0
     assert result["version"]
     assert (dest / "lib").is_dir()
+    assert (dest / "src" / "openmontage").is_dir()
+    assert (dest / "src" / "openmontage" / "__init__.py").is_file()
     assert (dest / "openmontage").is_dir()
+    assert (dest / "openmontage" / "skills" / "README.md").is_file()
+    assert (dest / "openmontage" / "__init__.py").is_file()
     assert (dest / "backlot").is_dir()
     assert (dest / "product" / "pipelines").is_dir()
     assert (dest / "product" / "schemas").is_dir()
