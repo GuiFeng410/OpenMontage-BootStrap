@@ -29,7 +29,7 @@
 
 ## 七个 BootStrap Skill（路由摘要）
 
-仓内路径：`openmontage/skills/`。安装默认启用 02–07；`01-installer` 常外置拷贝（更新后须再同步）。
+仓内路径：`skills/bootstrap/`（BootStrap 01–07）。安装默认启用 02–07；`01-installer` 常外置拷贝（更新后须再同步）。宿主 extraDirs 三条：`skills/bootstrap`、`skills/providers`、`skills/production`。
 
 | # | Skill | 何时读 / 启用 |
 |---|--------|----------------|

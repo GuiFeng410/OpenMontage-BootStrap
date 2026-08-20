@@ -8,7 +8,7 @@
 
 - 分类标签与缺图话术：`product-prompt-template.md` §2.1–2.3
 - 运镜/布光词库：`commercial-prompt-lexicon.md`
-- 付费 AI 视频镜提示词：`openmontage/skills/openmontage-seedance-prompt/SKILL.md`
+- 付费 AI 视频镜提示词：`skills/production/openmontage-seedance-prompt/SKILL.md`
 - Schema：`schemas/artifacts/asset_ledger.schema.json`、`decision_log.schema.json`
 
 **冲突优先级：** `product-prompt-template.md` 中“默认图生图/按默认即 I2I”及“表 3 每段都必须已有 `ref_image`”的旧话术在本流程失效；缺口必须按本文件四选，I2I 永远不是默认项，且只有当前 image provider 可用时才可推荐。I2I 缺口按“先计划、后生成审图、最后回填真实引用”的顺序执行。

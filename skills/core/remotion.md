@@ -117,7 +117,7 @@ across bar/pie/line scenes for visual unity.
 
 **Reference compositions:** See `remotion-composer/public/demo-props/light-showcase-60s.json`
 (11 cut types + overlays, dark `flat-motion-graphics`) and `light-showcase-segment-02-charts.json`
-for chart-only iteration. Planning guide: `openmontage/skills/openmontage-bootstrap-03-usercheck/references/light-remotion-showcase.md`.
+for chart-only iteration. Planning guide: `skills/bootstrap/openmontage-bootstrap-03-usercheck/references/light-remotion-showcase.md`.
 
 ### Pre-Render Validation (mandatory)
 

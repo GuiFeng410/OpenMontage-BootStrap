@@ -15,7 +15,7 @@ from schemas.artifacts import validate_artifact
 
 ROOT = Path(__file__).resolve().parents[2]
 USERCHECK_DIR = (
-    ROOT / "openmontage" / "skills" / "openmontage-bootstrap-03-usercheck"
+    ROOT / "skills" / "bootstrap" / "openmontage-bootstrap-03-usercheck"
 )
 USERCHECK = USERCHECK_DIR / "SKILL.md"
 ASSET_GATE = USERCHECK_DIR / "references" / "asset-preprocess-gate.md"
@@ -24,8 +24,8 @@ FAST_REFERENCE = (
 )
 PRODUCE = (
     ROOT
-    / "openmontage"
     / "skills"
+    / "bootstrap"
     / "openmontage-bootstrap-04-produce"
     / "SKILL.md"
 )

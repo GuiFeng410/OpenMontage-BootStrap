@@ -35,7 +35,7 @@ metadata:
 
 当当前项目是商品视频且 `duration_seconds >= 15` 时，执行过程中必须遵守：
 
-`openmontage/skills/openmontage-bootstrap-03-usercheck/references/commercial-video-15s-review.md`
+`skills/bootstrap/openmontage-bootstrap-03-usercheck/references/commercial-video-15s-review.md`
 
 - **极简**：方案→素材→交付；素材通过后直接生成正式段，不做独立试片；只拦技术/费用/缺 Key。  
 - **普通**：方案→试片→初稿/问题片段；不强制逐 beat 分批卡。  
@@ -224,7 +224,7 @@ produce_plan_approval_bundle
 
 **写之前必须先读（按序）：**
 
-1. `openmontage/skills/openmontage-seedance-prompt/SKILL.md`（契约 + 镜头结构）
+1. `skills/production/openmontage-seedance-prompt/SKILL.md`（契约 + 镜头结构）
 2. 同目录 `references/seedance-prompt-skill.md`（完整写法）
 3. `03-usercheck/references/commercial-prompt-lexicon.md`
 4. `03-usercheck/references/product-prompt-template.md`（槽位）

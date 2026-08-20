@@ -155,7 +155,7 @@ Pixverse 是**视频 provider**，只提供 T2V/I2V，不承担 T2I/I2I。商品
 
 ### 4. 口述启用执行 Skill
 
-`skills.load.extraDirs` 已含 `<REPO>/openmontage/skills` 时，启用实际用到的：
+`skills.load.extraDirs` 已含 `<REPO>/skills/providers` 时，启用实际用到的：
 
 - `openmontage-providers-tts` / `image` / `video`
 

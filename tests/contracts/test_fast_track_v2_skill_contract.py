@@ -11,14 +11,14 @@ from schemas.artifacts import validate_artifact
 
 ROOT = Path(__file__).resolve().parents[2]
 USERCHECK_DIR = (
-    ROOT / "openmontage" / "skills" / "openmontage-bootstrap-03-usercheck"
+    ROOT / "skills" / "bootstrap" / "openmontage-bootstrap-03-usercheck"
 )
 USERCHECK = USERCHECK_DIR / "SKILL.md"
 FAST_REFERENCE = USERCHECK_DIR / "references" / "commercial-video-15s-review.md"
 PRODUCE = (
     ROOT
-    / "openmontage"
     / "skills"
+    / "bootstrap"
     / "openmontage-bootstrap-04-produce"
     / "SKILL.md"
 )

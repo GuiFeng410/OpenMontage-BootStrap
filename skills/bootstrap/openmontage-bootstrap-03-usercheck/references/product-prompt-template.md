@@ -42,7 +42,7 @@
 
 与 BootStrap 对齐时：表 1 / 表 2 确认之后，填表 3（`video_plan`）前 **必须先读本文**（商品片含重度商品由 `03-usercheck` 强制）。  
 素材预检操作细则见同目录 **`asset-preprocess-gate.md`**（`produce_scan_user_images` + 用户确认 → `asset_ledger`）。  
-写付费 AI 单镜时：**先读** `openmontage/skills/openmontage-seedance-prompt/SKILL.md`，再读 **`commercial-prompt-lexicon.md`**。表 1 仍在 03 用 Grill 补全，不依赖外置 clarifyprompt。
+写付费 AI 单镜时：**先读** `skills/production/openmontage-seedance-prompt/SKILL.md`，再读 **`commercial-prompt-lexicon.md`**。表 1 仍在 03 用 Grill 补全，不依赖外置 clarifyprompt。
 
 ---
 

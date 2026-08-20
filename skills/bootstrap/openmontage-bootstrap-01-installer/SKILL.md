@@ -18,15 +18,23 @@ metadata:
 
 ## 分发方式（重要）
 
-本 Skill **可先单独复制**到当前 AI 工具的用户 Skill 目录（不依赖仓库已存在），也可随仓库 `openmontage/skills` 一起被加载。  
+本 Skill **可先单独复制**到当前 AI 工具的用户 Skill 目录（不依赖仓库已存在），也可随仓库 `skills/bootstrap` 一起被加载。  
 用户说「我想生成视频 / 更新 BootStrap / 安装 OpenMontage」等时启用本 Skill。
 
-仓内路径：`openmontage/skills/openmontage-bootstrap-01-installer/`
+仓内路径：`skills/bootstrap/openmontage-bootstrap-01-installer/`
 
 **外置副本提醒：** 若本 installer 被**单独拷贝**到工具本地 Skill 目录，则**不会**随仓库 `git pull` 自动更新。  
-仓库更新本 Skill 后，须再从 `<TARGET>/openmontage/skills/openmontage-bootstrap-01-installer/` **覆盖拷贝**到该本地目录并确认仍已启用。
+仓库更新本 Skill 后，须再从 `<TARGET>/skills/bootstrap/openmontage-bootstrap-01-installer/` **覆盖拷贝**到该本地目录并确认仍已启用。
 
-其它仓内 Skill（02–07）优先通过「Skills 目录 / extraDirs」指向 `<TARGET>/openmontage/skills`，`git pull` 即新，一般不必再拷。
+其它仓内 Skill（02–07 / providers / production）优先通过 extraDirs **三条**加载，`git pull` 即新，一般不必再拷：
+
+```text
+<TARGET>/skills/bootstrap
+<TARGET>/skills/providers
+<TARGET>/skills/production
+```
+
+不要把 extraDirs 指到 `<TARGET>/skills` 根（会把 `pipelines/` `core/` 混进宿主 Skill 列表）。
 
 ## 硬规则
 
@@ -36,7 +44,7 @@ metadata:
 4. **付费 Key / Stock Key 安装时不必填。** 已注册即可；没 Key 则后续**不调用**对应能力（轻度零 Key 仍可出片）。  
 5. Key 引导：请用户先看 `<TARGET>/.env-example.md` 分类填写，再写入真实配置（仓库 `.env` 和/或各 MCP 的 `env`）。**中度**用 Stock 时再填 Pexels/Pixabay；**重度**出片前再填视频渠 Key；付费 TTS/生图按需。  
 6. 口述与代操作时用真实路径替换 `<TARGET>`、`<PROJECTS_DIR>`；MCP 模板优先从 `<TARGET>/README/配置/templates/` 复制。  
-7. 仓内 Skill 靠「指向 `<TARGET>/openmontage/skills`」加载；**若 installer 使用了外置单独拷贝，更新后须再提醒同步。**
+7. 仓内 Skill 靠 extraDirs 三条（`skills/bootstrap` · `skills/providers` · `skills/production`）加载；**若 installer 使用了外置单独拷贝，更新后须再提醒同步。**
 
 ## 默认配齐清单
 
@@ -63,7 +71,7 @@ Stock / 付费 Key 可空；空 Key **不使用**该通道。
 | 5 | `openmontage-bootstrap-06-providers` | 收费 / Stock Key 引导 |
 | 6 | `openmontage-bootstrap-07-error-handling` | 失败 capture→plan→apply |
 
-另：Skills 根目录 = `<TARGET>/openmontage/skills`（名称因宿主而异：extraDirs / skills path 等）。  
+另：宿主 extraDirs **三条** = `<TARGET>/skills/bootstrap`、`<TARGET>/skills/providers`、`<TARGET>/skills/production`（名称因宿主而异：extraDirs / skills path 等）。不要指到 `skills/` 根。  
 付费执行 Skill（`openmontage-providers-tts` / `image` / `video`）与 `openmontage-providers-stock` **执行 Skill** 在要用对应能力且已填 Key 时再开（见 E.3）。
 
 ## 闭环（新装与更新共用）
@@ -121,7 +129,7 @@ pip install -r requirements.txt
 
 ### U.3 补齐 6 个 Skill + Skills 目录
 
-Skills 目录指向当前 `<TARGET>/openmontage/skills`；六个 Skill 均启用（含 `03-usercheck`）。
+extraDirs 三条指向当前 `<TARGET>/skills/{bootstrap,providers,production}`；六个 Skill 均启用（含 `03-usercheck`）。
 
 **验收口令：**「Skills 目录正确；六个 Skill 已启用」
 
@@ -222,11 +230,17 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 ## E. 启用仓内 Skill（6 个一并）
 
-### E.1 Skills 目录
+### E.1 extraDirs（三条）
 
-`<TARGET>/openmontage/skills`  
+```text
+<TARGET>/skills/bootstrap
+<TARGET>/skills/providers
+<TARGET>/skills/production
+```
 
-**验收口令：**「Skills 目录已指向仓内 skills」
+不要指到 `<TARGET>/skills` 根。
+
+**验收口令：**「Skills 目录已指向仓内 extraDirs 三条」
 
 ### E.2 六个默认 Skill（安装时全部启用）
 
@@ -256,7 +270,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 1. 仓库在 `<TARGET>`，venv 可 `import openmontage`  
 2. **五个 MCP**均能启动（Key 可空）  
-3. Skills 目录 = `<TARGET>/openmontage/skills`  
+3. extraDirs = `<TARGET>/skills/bootstrap` + `providers` + `production`  
 4. **六个 Skill**均已启用（02–07）  
 5. 五个 MCP 的 `OPENMONTAGE_PROJECTS_DIR` 相同  
 6. `.env` 已存在（没有则已从 `.env.example` 复制；Key 可空）  
