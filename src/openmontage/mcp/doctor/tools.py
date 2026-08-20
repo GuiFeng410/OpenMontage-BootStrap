@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import platform
@@ -319,7 +320,7 @@ def run_doctor(*, deep: bool = False) -> dict[str, Any]:
         if (child / "SKILL.md").exists() or (child / "skill.md").exists():
             skill_packs.append(child.name)
 
-    media_module = (REPO_ROOT / "openmontage" / "mcp" / "media" / "server.py").exists()
+    media_module = importlib.util.find_spec("openmontage.mcp.media.server") is not None
     explainer_skill = "openmontage-animated-explainer" in skill_packs
     can_produce = bool(
         media_module

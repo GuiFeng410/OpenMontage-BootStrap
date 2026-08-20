@@ -7,6 +7,7 @@
         "cwd": "<OPENMONTAGE_REPO_ROOT>",
         "env": {
           "OPENMONTAGE_PROJECTS_DIR": "<PROJECTS_DIR>",
+          "PYTHONPATH": "<OPENMONTAGE_REPO_ROOT>/src",
           "PYTHONUTF8": "1",
           "OPENMONTAGE_P1_ALLOW_WRITES": "true"
         }

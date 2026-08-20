@@ -7,6 +7,7 @@
         "cwd": "<OPENMONTAGE_REPO_ROOT>",
         "env": {
           "OPENMONTAGE_PROJECTS_DIR": "<PROJECTS_DIR>",
+          "PYTHONPATH": "<OPENMONTAGE_REPO_ROOT>/src",
           "PYTHONUTF8": "1",
           "OPENMONTAGE_MAX_COST_USD": "2.00",
           "OPENMONTAGE_ALLOWED_PROVIDERS": "openai,elevenlabs,dashscope,doubao,google,kling",

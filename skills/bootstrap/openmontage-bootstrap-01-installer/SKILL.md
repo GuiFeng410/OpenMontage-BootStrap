@@ -204,6 +204,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 | `command` | venv python **绝对路径** | 裸 `python` |
 | `args` | 上表 | 漏 `-m` |
 | `cwd` | `<TARGET>` | 子目录 |
+| `env.PYTHONPATH` | `<TARGET>/src` | 漏（G5-D 包在 `src/openmontage`） |
 | `env.OPENMONTAGE_PROJECTS_DIR` | 同一 `<PROJECTS_DIR>` | 五个不一致 |
 | `env.PYTHONUTF8` | `1` | 漏 |
 | 门面 `OPENMONTAGE_P1_ALLOW_WRITES` | `true` | 漏 |
@@ -222,11 +223,12 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 1. `command` 不是 venv python  
 2. `cwd` 不是仓库根  
-3. 漏 `-m` / 模块名错  
-4. 未重载 MCP  
-5. 门面缺 `P1_ALLOW_WRITES`  
-6. 五个 `OPENMONTAGE_PROJECTS_DIR` 不一致  
-7. Stock 未注册却以为「可选后补」——**现为默认第五个**
+3. 漏 `env.PYTHONPATH=<TARGET>/src`  
+4. 漏 `-m` / 模块名错  
+5. 未重载 MCP  
+6. 门面缺 `P1_ALLOW_WRITES`  
+7. 五个 `OPENMONTAGE_PROJECTS_DIR` 不一致  
+8. Stock 未注册却以为「可选后补」——**现为默认第五个**
 
 ## E. 启用仓内 Skill（6 个一并）
 
@@ -272,7 +274,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 2. **五个 MCP**均能启动（Key 可空）  
 3. extraDirs = `<TARGET>/skills/bootstrap` + `providers` + `production`  
 4. **六个 Skill**均已启用（02–07）  
-5. 五个 MCP 的 `OPENMONTAGE_PROJECTS_DIR` 相同  
+5. 五个 MCP 的 `OPENMONTAGE_PROJECTS_DIR` 相同，且 `PYTHONPATH` 均为 `<TARGET>/src`  
 6. `.env` 已存在（没有则已从 `.env.example` 复制；Key 可空）  
 7. （提醒项）外置单独拷贝的 installer 已与仓内副本同步（若适用）  
 

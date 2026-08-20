@@ -132,3 +132,18 @@ def test_backlot_http_route_paths_remain_stable() -> None:
     paths = {route.path for route in create_app().routes}
 
     assert EXPECTED_BACKLOT_ROUTES <= paths
+
+
+def test_mcp_templates_put_src_on_pythonpath() -> None:
+    template_dir = ROOT / "README" / "配置" / "templates"
+    paths = sorted(template_dir.glob("*.mcp.json"))
+    assert paths, "expected MCP JSON templates"
+    for path in paths:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        for name, server in payload["mcp"]["servers"].items():
+            pythonpath = server["env"]["PYTHONPATH"]
+            assert pythonpath.endswith("/src"), f"{name} PYTHONPATH={pythonpath!r}"
+            assert "<OPENMONTAGE_REPO_ROOT>" in pythonpath
+            assert server["cwd"] == "<OPENMONTAGE_REPO_ROOT>"
+            assert server["args"][0] == "-m"
+            assert server["args"][1].startswith("openmontage.mcp.")
