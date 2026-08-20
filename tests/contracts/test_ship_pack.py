@@ -30,7 +30,7 @@ REQUIRED_CORE_DIRS = {
     "styles",
     "tools",
     "skills",
-    "remotion-composer",
+    "runtimes/remotion",
     "distribution/manifests",
 }
 REQUIRED_CORE_FILES = {
@@ -130,7 +130,7 @@ def test_copy_skip_covers_dependency_and_cache_dirs() -> None:
 
 def test_remotion_excludes_are_recorded() -> None:
     remotion = load_ship_manifest()["remotion"]
-    assert remotion["root"] == "remotion-composer"
+    assert remotion["root"] == "runtimes/remotion"
     exclude_dirs = set(remotion["exclude_dirs"])
     assert {"node_modules", "out", ".cache", "projects"} <= exclude_dirs
     assert "src/Bangle*.tsx" in remotion["exclude_globs"]
@@ -166,9 +166,10 @@ def test_pack_runtime_skips_remotion_projects_and_bangle(
     packed_runtime: tuple[Path, dict],
 ) -> None:
     dest, _result = packed_runtime
-    assert not (dest / "remotion-composer" / "projects").exists()
-    assert not (dest / "remotion-composer" / "node_modules").exists()
-    src = dest / "remotion-composer" / "src"
+    remotion_root = dest / "runtimes" / "remotion"
+    assert not (remotion_root / "projects").exists()
+    assert not (remotion_root / "node_modules").exists()
+    src = remotion_root / "src"
     assert src.is_dir()
     assert list(src.glob("Bangle*.tsx")) == []
     assert not (dest / "openmontage" / "skills" / "openmontage-bootstrap-01-installer.zip").exists()

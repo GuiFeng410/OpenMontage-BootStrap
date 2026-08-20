@@ -56,7 +56,7 @@ setup: ensure-venv
 	$(PIP) install -r requirements.txt
 	@echo ""
 	@echo "==> Installing Remotion composer..."
-	cd remotion-composer && npm install
+	cd runtimes/remotion && npm install
 	@echo ""
 	@echo "==> Installing free offline TTS (Piper)..."
 	$(PIP) install piper-tts || echo "  [skip] piper-tts install failed — TTS will use cloud providers instead"

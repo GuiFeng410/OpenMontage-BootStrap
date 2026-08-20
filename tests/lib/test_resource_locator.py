@@ -22,6 +22,7 @@ def test_locator_points_at_existing_product_paths() -> None:
     assert loc.artifact_schemas().is_dir()
     assert loc.bootstrap_skills().is_dir()
     assert loc.bootstrap_skills() == (loc.repo_root / "skills" / "bootstrap").resolve()
+    assert loc.remotion_composer() == (loc.repo_root / "runtimes" / "remotion").resolve()
 
 
 def test_locator_follows_workspace_repo_root(
@@ -65,3 +66,20 @@ def test_bootstrap_skills_falls_back_to_openmontage_skills(tmp_path: Path) -> No
     loc = get_resources(WorkspacePaths(repo_root=tmp_path))
     assert loc.bootstrap_skills() == old_root.resolve()
     assert not (tmp_path / "skills" / "bootstrap").exists()
+
+
+def test_remotion_prefers_runtimes_layout_when_present(tmp_path: Path) -> None:
+    new_root = tmp_path / "runtimes" / "remotion"
+    old_root = tmp_path / "remotion-composer"
+    new_root.mkdir(parents=True)
+    old_root.mkdir(parents=True)
+    loc = get_resources(WorkspacePaths(repo_root=tmp_path))
+    assert loc.remotion_composer() == new_root.resolve()
+
+
+def test_remotion_falls_back_to_remotion_composer(tmp_path: Path) -> None:
+    old_root = tmp_path / "remotion-composer"
+    old_root.mkdir(parents=True)
+    loc = get_resources(WorkspacePaths(repo_root=tmp_path))
+    assert loc.remotion_composer() == old_root.resolve()
+    assert not (tmp_path / "runtimes" / "remotion").exists()

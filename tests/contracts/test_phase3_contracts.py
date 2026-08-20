@@ -886,7 +886,7 @@ class TestSkillsExist:
 
 
 class TestRemotionScaffold:
-    REMOTION_DIR = PROJECT_ROOT / "remotion-composer"
+    REMOTION_DIR = PROJECT_ROOT / "runtimes" / "remotion"
 
     def test_package_json_exists(self):
         assert (self.REMOTION_DIR / "package.json").exists()
