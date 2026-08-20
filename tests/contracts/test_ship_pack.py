@@ -25,7 +25,7 @@ REQUIRED_CORE_DIRS = {
     "lib",
     "openmontage",
     "backlot",
-    "pipeline_defs",
+    "product",
     "schemas",
     "styles",
     "tools",
@@ -144,8 +144,12 @@ def test_pack_runtime_copies_core_and_omits_forbidden(packed_runtime: tuple[Path
     assert (dest / "lib").is_dir()
     assert (dest / "openmontage").is_dir()
     assert (dest / "backlot").is_dir()
-    assert (dest / "pipeline_defs").is_dir()
+    assert (dest / "product" / "pipelines").is_dir()
+    assert (dest / "product" / "schemas").is_dir()
+    assert (dest / "product" / "styles").is_dir()
     assert (dest / "schemas").is_dir()
+    assert (dest / "schemas" / "artifacts" / "__init__.py").is_file()
+    assert (dest / "styles" / "playbook_loader.py").is_file()
     assert (dest / ".env.example").is_file()
     assert (dest / "distribution" / "manifests" / "release-manifest.json").is_file()
     for name in (".env", "projects", "tests", "Agent-Docs"):
