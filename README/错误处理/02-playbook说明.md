@@ -1,6 +1,6 @@
 # Playbook 说明（阶段 3）
 
-机器可读定义：`openmontage/mcp/common/error_playbooks.yaml`（`version: 3`）。
+机器可读定义：`src/openmontage/mcp/common/error_playbooks.yaml`（`version: 3`）。
 
 ## 流程
 

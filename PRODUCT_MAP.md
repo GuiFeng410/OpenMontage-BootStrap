@@ -24,7 +24,7 @@ open-montage-boot-strap/
 │  └─ product/schemas/           JSON Schema
 │
 ├─ 04-interfaces/                用户与 Agent 接口
-│  ├─ openmontage/mcp/
+│  ├─ src/openmontage/mcp/
 │  └─ backlot/
 │
 ├─ 05-render-runtimes/           合成运行时
@@ -46,6 +46,6 @@ open-montage-boot-strap/
    └─ projects/                  产品语义上是用户作品，升级不得覆盖
 ```
 
-Python 加载器仍在 `styles/playbook_loader.py` 与 `schemas/artifacts/`（`from styles.playbook_loader` / `from schemas.artifacts` 未改）。
+Python 加载器仍在 `styles/playbook_loader.py` 与 `schemas/artifacts/`（`from styles.playbook_loader` / `from schemas.artifacts` 未改）。仓根 `openmontage/` 是加载器 shim（Skill 旧路径占位）；可导入的包在 `src/openmontage/`。
 
 **产品三层（目标，尚未物理拆仓）：** 仓库是工厂；`release-manifest` 是成品版本；`projects/` 是作品仓库。详见 `Agent-ReadMe/other/02.md`（本机）或 Goal/01。

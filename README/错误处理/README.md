@@ -23,4 +23,4 @@ error_capture_context → error_plan_recovery → error_apply_recovery
 - 辅助：`probe_audio_loudness`  
 - 状态：`<project>/artifacts/error_recovery.json`  
 
-Playbook：`openmontage/mcp/common/error_playbooks.yaml`
+Playbook：`src/openmontage/mcp/common/error_playbooks.yaml`

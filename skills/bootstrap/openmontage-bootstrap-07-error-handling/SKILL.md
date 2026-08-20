@@ -34,7 +34,7 @@ metadata:
 
 来源：`README/错误处理/01-错误集合.md`  
 说明：`README/错误处理/02-playbook说明.md`  
-Playbook：`openmontage/mcp/common/error_playbooks.yaml`
+Playbook：`src/openmontage/mcp/common/error_playbooks.yaml`
 
 ## Required MCP
 

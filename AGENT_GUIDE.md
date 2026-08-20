@@ -22,6 +22,7 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 | **简报主链** | `03-usercheck`：就绪后**先扫 Key**，**默认电商宣传片**（给网址；缺时长/图/预算问一句）→ `04-produce`。轻度 Demo **仅**用户明确要求或无 Key 退路 |
 | **旁白默认** | **Edge-TTS** 男声（主推，可后置）；Piper **仅离线可选**（setup 默认不装）；字幕/BGM 走 05 |
 | **合成引擎** | Remotion 为轻度常用必装路径；**HyperFrames 建议装、可跳过**（Node≥22；不挡 `verify_ready`） |
+| **Python 包** | `src/openmontage/`；命令仍 `python -m openmontage.mcp.*`（仓根 `openmontage/` 仅为加载器 shim） |
 | **本机会话** | 新对话先读 `Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md` → 同目录日期最新长篇交接（**Agent-\* 本机区，gitignore，勿主动提交**；遗留镜像仍在 `docs/会话交接/`） |
 
 操作细节以 Skill 正文为准；`README/说明/` 是人读入口。

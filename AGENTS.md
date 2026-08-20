@@ -56,6 +56,7 @@
 ## 版本身份（v0.6.0）
 
 - 逻辑分层（不搬家）：[`PRODUCT_MAP.md`](PRODUCT_MAP.md)
+- Python 包：`src/openmontage/`（`python -m openmontage.mcp.bootstrap` 不变；仓根 `openmontage/` 是加载器 shim）
 - 发布清单：[`distribution/manifests/release-manifest.json`](distribution/manifests/release-manifest.json)
 - **本机状态文件：** 仓根 `.openmontage/install-state.json`（gitignore，**不提交、不写密钥**）
   - 字段：`verify_ready`、`repo_root`、`projects_dir`、`latest_project_id`、`existing_project_count`、`video_key_present`、`stock_key_present`（及非空变量名）

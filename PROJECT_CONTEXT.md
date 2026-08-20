@@ -24,8 +24,9 @@ Agent reads pipeline manifest (YAML) → reads stage director skill (MD)
 - **Skill index:** `skills/INDEX.md`
 - **Tool registry:** `tools/tool_registry.py`
 - **Pipeline manifests:** `product/pipelines/`
-- **Artifact schemas:** `schemas/artifacts/`
-- **Style playbooks:** `styles/*.yaml` (schema: `schemas/styles/playbook.schema.json`)
+- **MCP packages:** `src/openmontage/mcp/`
+- **Artifact schemas:** `product/schemas/artifacts/`
+- **Style playbooks:** `product/styles/*.yaml`（schema: `product/schemas/styles/playbook.schema.json`）
 - **Stage director skills:** `skills/pipelines/<pipeline>/<stage>-director.md`
 - **Meta skills:** `skills/meta/*.md` (reviewer, checkpoint-protocol, skill-creator)
 - **Architecture deep-dive:** `docs/ARCHITECTURE.md`
@@ -54,7 +55,7 @@ Each tool's `agent_skills[]` field bridges Layer 1 → Layer 3. See `skills/INDE
 - **Checkpoint policy** lives in pipeline manifest (`human_approval_default` per stage) + `skills/meta/checkpoint-protocol.md`
 - **Reviewer** is a meta skill (`skills/meta/reviewer.md`), advisory, max 2 rounds
 - **Cost tracker** (`tools/cost_tracker.py`) manages budget: estimate -> reserve -> reconcile
-- **Canonical artifacts** validated against JSON schemas in `schemas/artifacts/`
+- **Canonical artifacts** validated against JSON schemas in `product/schemas/artifacts/`
 
 ## Key Files
 
@@ -72,12 +73,13 @@ Each tool's `agent_skills[]` field bridges Layer 1 → Layer 3. See `skills/INDE
 | `tools/video/video_stitch.py` | Multi-clip assembly (stitch, spatial, validate, preview) |
 | `tools/video/video_compose.py` | Runtime-aware composition orchestrator — routes to Remotion / HyperFrames / FFmpeg based on `edit_decisions.render_runtime` |
 | `tools/video/hyperframes_compose.py` | HyperFrames runtime — workspace materialization, `hyperframes lint`/`validate`/`render`, FFmpeg floor check |
+| `src/openmontage/mcp/` | BootStrap / doctor / providers / media MCP |
 | `tools/character/character_animation.py` | Local character-animation tools — character specs, SVG rig plans, pose libraries, action timelines, HyperFrames packages, and QA reports |
 | `lib/hyperframes_style_bridge.py` | Playbook → CSS custom properties + `DESIGN.md` bridge for HyperFrames workspaces |
-| `remotion-composer/src/components/` | 8 Remotion components (TextCard, StatCard, ProgressBar, CalloutBox, ComparisonCard + charts/) |
+| `runtimes/remotion/src/components/` | 8 Remotion components (TextCard, StatCard, ProgressBar, CalloutBox, ComparisonCard + charts/) |
 | `.agents/skills/hyperframes*/` | Vendored HyperFrames Layer 3 skills (authoring contract, CLI, registry, website-to-video) |
 | `skills/core/hyperframes.md` | Layer 2 — when OpenMontage should pick HyperFrames vs Remotion, artifact → workspace mapping |
-| `schemas/styles/playbook.schema.json` | Playbook schema v2 with design tokens (chart_palette, scale_system, weight_matrix, color_rules) |
+| `product/schemas/styles/playbook.schema.json` | Playbook schema v2 with design tokens (chart_palette, scale_system, weight_matrix, color_rules) |
 | `tests/qa/` | Quality validation test scripts for tool-by-tool output inspection |
 
 ## Available Pipelines
@@ -115,5 +117,5 @@ Each tool's `agent_skills[]` field bridges Layer 1 → Layer 3. See `skills/INDE
 4. Set all contract fields (name, version, tier, capability, provider, supports, fallback_tools, agent_skills, etc.)
 5. Implement `execute()` returning a `ToolResult`
 6. Let discovery happen through `tools/tool_registry.py`; do not depend on ad hoc imports
-7. Add a JSON schema in `schemas/tools/` if the tool has complex I/O
+7. Add a JSON schema in `product/schemas/tools/` if the tool has complex I/O
 8. Add tests only after the runtime path is correct
