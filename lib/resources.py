@@ -19,7 +19,7 @@ _LOGICAL: dict[str, tuple[str, ...]] = {
     "styles": ("styles",),
     "schemas": ("schemas",),
     "skills.bootstrap": ("skills/bootstrap", "openmontage/skills"),
-    "runtimes.remotion": ("remotion-composer",),
+    "runtimes.remotion": ("runtimes/remotion", "remotion-composer"),
     "distribution.manifests": ("distribution/manifests",),
     "config.yaml": ("config.yaml",),
 }
