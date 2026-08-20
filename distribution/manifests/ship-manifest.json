@@ -1,0 +1,77 @@
+{
+  "schema_version": 1,
+  "layout": "tree-a",
+  "copy_skip_dir_names": [
+    "node_modules",
+    "__pycache__",
+    ".pytest_cache",
+    ".git",
+    ".venv"
+  ],
+  "core": {
+    "files": [
+      "AGENTS.md",
+      "AGENT_GUIDE.md",
+      "CLAUDE.md",
+      "PRODUCT_MAP.md",
+      "PROJECT_CONTEXT.md",
+      "LICENSE",
+      "README.md",
+      "README_zh-CN.md",
+      "setup.py",
+      "requirements.txt",
+      "config.yaml",
+      ".env.example"
+    ],
+    "dirs": [
+      "lib",
+      "openmontage",
+      "backlot",
+      "pipeline_defs",
+      "schemas",
+      "styles",
+      "tools",
+      "skills",
+      "remotion-composer",
+      "distribution/manifests"
+    ]
+  },
+  "optional": {
+    "files": ["requirements-gpu.txt"],
+    "dirs": ["ink-theater", "docs", "README"]
+  },
+  "forbidden": [
+    ".env",
+    "projects",
+    "Agent-Docs",
+    "Agent-ReadMe",
+    "Agent-Temp",
+    ".venv",
+    ".openmontage",
+    "tests",
+    ".claude",
+    ".agents",
+    ".cursor",
+    ".github",
+    "reports",
+    "Commercial-Video"
+  ],
+  "forbidden_globs": ["*.egg-info", ".pytest_cache"],
+  "developer_only": [
+    "tests",
+    "requirements-dev.txt",
+    "Makefile",
+    ".github",
+    "agnes_image.png",
+    "diagram.png",
+    "lark_auth_qrcode.png",
+    "lark_auth_qrcode2.png",
+    "render_demo.py",
+    "render-demo.sh"
+  ],
+  "remotion": {
+    "root": "remotion-composer",
+    "exclude_dirs": ["node_modules", "out", ".cache", "projects"],
+    "exclude_globs": ["src/Bangle*.tsx"]
+  }
+}
