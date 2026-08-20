@@ -490,32 +490,11 @@ def resolve_production_profile(
     latest_checkpoint: dict[str, Any] | None = None,
 ) -> dict[str, Any] | None:
     """Prefer project.json profile; fall back to latest checkpoint artifacts."""
-    picked = _pick_profile_fields(marker)
-    experiment = _pick_experiment_fields(marker)
-    if "production_tier" not in picked and isinstance(latest_checkpoint, dict):
-        artifacts = latest_checkpoint.get("artifacts")
-        picked = {**_pick_profile_fields(artifacts), **picked}
-        experiment = {**_pick_experiment_fields(artifacts), **experiment}
-    if "production_tier" not in picked:
-        return None
-    try:
-        profile = _normalize_production_profile(
-            picked.get("production_tier", ""),
-            picked.get("visual_source", ""),
-            picked.get("tts_source", ""),
-        )
-    except DoctorError:
-        # Legacy/partial marker: still surface raw fields for debugging.
-        return {
-            "production_tier": picked.get("production_tier"),
-            "visual_source": picked.get("visual_source"),
-            "tts_source": picked.get("tts_source"),
-            "valid": False,
-            **experiment,
-        }
-    if experiment:
-        profile = {**profile, **experiment}
-    return profile
+    from lib.application.read_project_snapshot import (
+        resolve_production_profile as resolve_profile,
+    )
+
+    return resolve_profile(marker, latest_checkpoint)
 
 
 def _build_production_profile_marker_update(
@@ -667,43 +646,13 @@ def run_set_production_profile(
 
 
 def run_get_project_state(project_id: str) -> dict[str, Any]:
-    _ensure_repo_on_path()
-    from lib.checkpoint import (
-        PROJECT_MARKER_FILENAME,
-        get_completed_stages,
-        get_latest_checkpoint,
-        get_next_stage,
-    )
+    require_projects_root()
+    from lib.application.read_project_snapshot import ApplicationError, read_project_snapshot
 
-    pdir = project_dir(project_id)
-    if not pdir.exists():
-        raise DoctorError(f"Project not found: {project_id}", code="not_found")
-    root = require_projects_root()
-    marker_path = pdir / PROJECT_MARKER_FILENAME
-    marker = {}
-    if marker_path.exists():
-        marker = json.loads(marker_path.read_text(encoding="utf-8"))
-    pipeline_type = marker.get("pipeline_type")
-    latest = get_latest_checkpoint(root, project_id)
-    completed = get_completed_stages(root, project_id, pipeline_type)
-    nxt = get_next_stage(root, project_id, pipeline_type)
-    awaiting = None
-    if latest and latest.get("status") == "awaiting_human":
-        awaiting = {
-            "stage": latest.get("stage"),
-            "human_approval_required": latest.get("human_approval_required"),
-        }
-    return {
-        "project_id": project_id,
-        "project_dir": str(pdir),
-        "marker": marker,
-        "production_profile": resolve_production_profile(marker, latest),
-        "completed_stages": completed,
-        "next_stage": nxt,
-        "awaiting_human": awaiting,
-        "latest_checkpoint_stage": (latest or {}).get("stage"),
-        "latest_checkpoint_status": (latest or {}).get("status"),
-    }
+    try:
+        return read_project_snapshot(project_id)
+    except ApplicationError as exc:
+        raise DoctorError(exc.message, code=exc.code) from exc
 
 
 def run_get_next_stage(project_id: str) -> dict[str, Any]:
@@ -842,23 +791,6 @@ def run_init_project_denied() -> dict[str, Any]:
     )
 
 
-def _allocate_fresh_project_id(requested_project_id: str) -> str:
-    """Return the requested id when free, otherwise a dated unique id."""
-    requested = project_dir(requested_project_id)
-    if not requested.exists():
-        return requested_project_id
-
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%d")
-    for sequence in range(1, 10_000):
-        candidate_id = f"{requested_project_id}-{stamp}-{sequence:02d}"
-        if not project_dir(candidate_id).exists():
-            return candidate_id
-    raise DoctorError(
-        f"Could not allocate a unique project_id for {requested_project_id!r}",
-        code="project_id_exhausted",
-    )
-
-
 def run_init_project(
     project_id: str,
     title: str,
@@ -866,80 +798,19 @@ def run_init_project(
     mode: str = "create_new",
 ) -> dict[str, Any]:
     require_p1_writes()
-    _ensure_repo_on_path()
-    from lib.checkpoint import init_project
+    require_projects_root()
+    from lib.application.create_project import create_project
+    from lib.application.errors import ApplicationError
 
-    root = require_projects_root()
-    if mode not in {"create_new", "resume"}:
-        raise DoctorError(
-            "mode must be create_new or resume",
-            code="bad_request",
+    try:
+        return create_project(
+            title=title,
+            pipeline_type=pipeline_type,
+            mode=mode,
+            requested_project_id=project_id,
         )
-
-    requested_project_id = project_id
-    requested_target = project_dir(requested_project_id)
-    if mode == "resume":
-        marker_path = requested_target / "project.json"
-        if not marker_path.is_file():
-            raise DoctorError(
-                f"Project {requested_project_id!r} does not exist; resume requires an existing project.json",
-                code="not_found",
-            )
-        try:
-            marker = json.loads(marker_path.read_text(encoding="utf-8"))
-        except (json.JSONDecodeError, OSError) as exc:
-            raise DoctorError(
-                f"Project {requested_project_id!r} has an unreadable project.json",
-                code="invalid_project",
-            ) from exc
-        existing_pipeline = marker.get("pipeline_type")
-        if existing_pipeline and existing_pipeline != pipeline_type:
-            raise DoctorError(
-                f"Project {requested_project_id!r} uses pipeline {existing_pipeline!r}, "
-                f"not {pipeline_type!r}",
-                code="pipeline_mismatch",
-            )
-        return {
-            "project_id": requested_project_id,
-            "requested_project_id": requested_project_id,
-            "project_dir": str(requested_target),
-            "title": marker.get("title") or title,
-            "pipeline_type": existing_pipeline or pipeline_type,
-            "sandbox_root": str(root),
-            "resolved": str(requested_target),
-            "mode": "resume",
-            "created": False,
-            "resumed": True,
-            "conflict_avoided": False,
-            "message_zh": "已明确续作现有项目；原检查点和生成物均保留。",
-        }
-
-    project_id = _allocate_fresh_project_id(requested_project_id)
-    target = project_dir(project_id)
-    path = init_project(
-        project_id,
-        title=title,
-        pipeline_type=pipeline_type,
-        pipeline_dir=root,
-    )
-    return {
-        "project_id": project_id,
-        "requested_project_id": requested_project_id,
-        "project_dir": str(path),
-        "title": title,
-        "pipeline_type": pipeline_type,
-        "sandbox_root": str(root),
-        "resolved": str(target),
-        "mode": "create_new",
-        "created": True,
-        "resumed": False,
-        "conflict_avoided": project_id != requested_project_id,
-        "message_zh": (
-            f"检测到同名项目，已新建隔离项目 {project_id}；未继承旧检查点和生成物。"
-            if project_id != requested_project_id
-            else "已新建独立项目；未继承其它项目的检查点和生成物。"
-        ),
-    }
+    except ApplicationError as exc:
+        raise DoctorError(exc.message, code=exc.code) from exc
 
 
 def run_import_project_images(
