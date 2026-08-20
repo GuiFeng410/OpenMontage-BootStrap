@@ -26,8 +26,10 @@ import pytest
 import yaml
 
 
+from lib.resources import get_resources
+
 ROOT = Path(__file__).resolve().parent.parent.parent
-PIPELINE_DIR = ROOT / "pipeline_defs"
+PIPELINE_DIR = get_resources().pipeline_defs()
 SKILLS_DIR = ROOT / "skills"
 
 # Tokens we expect in any compliant planning-stage skill. A skill needs AT

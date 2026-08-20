@@ -10,6 +10,7 @@ import backlot
 import openmontage
 from backlot.server import create_app
 from lib.pipeline_loader import load_pipeline
+from lib.resources import get_resources
 from openmontage import product_version
 from openmontage.mcp import CONTRACT_VERSION
 from openmontage.mcp.bootstrap.server import mcp
@@ -116,7 +117,7 @@ def test_bootstrap_commercial_stage_order_and_schemas() -> None:
     ]
     for stage in manifest["stages"]:
         for artifact in stage.get("produces", []):
-            assert (ROOT / f"schemas/artifacts/{artifact}.schema.json").is_file()
+            assert (get_resources().artifact_schemas() / f"{artifact}.schema.json").is_file()
 
 
 def test_bootstrap_critical_tool_names_remain_available() -> None:

@@ -12,6 +12,8 @@ from pathlib import Path
 import jsonschema
 import yaml
 
+from lib.resources import get_resources
+
 
 ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -41,16 +43,17 @@ def _taste_profile() -> dict:
 
 
 def test_style_playbook_schema_accepts_taste_profile():
-    schema = _load_json(ROOT / "schemas" / "styles" / "playbook.schema.json")
+    loc = get_resources()
+    schema = _load_json(loc.resolve("schemas") / "styles" / "playbook.schema.json")
     assert "taste_profile" in schema["properties"]
-    playbook = yaml.safe_load((ROOT / "styles" / "clean-professional.yaml").read_text(encoding="utf-8"))
+    playbook = yaml.safe_load((loc.styles() / "clean-professional.yaml").read_text(encoding="utf-8"))
     playbook["taste_profile"] = _taste_profile()
 
     jsonschema.validate(instance=playbook, schema=schema)
 
 
 def test_proposal_packet_schema_accepts_taste_profile():
-    schema = _load_json(ROOT / "schemas" / "artifacts" / "proposal_packet.schema.json")
+    schema = _load_json(get_resources().artifact_schemas() / "proposal_packet.schema.json")
     proposal = {
         "version": "1.0",
         "concept_options": [

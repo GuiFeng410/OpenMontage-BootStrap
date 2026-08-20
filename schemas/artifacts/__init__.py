@@ -8,7 +8,11 @@ from typing import Any
 
 import jsonschema
 
-SCHEMA_DIR = Path(__file__).parent
+from lib.resources import get_resources
+
+
+def _schema_dir() -> Path:
+    return get_resources().artifact_schemas()
 
 ARTIFACT_NAMES = [
     "research_brief",
@@ -47,7 +51,7 @@ ARTIFACT_NAMES = [
 
 def load_schema(name: str) -> dict:
     """Load a JSON schema by artifact name."""
-    path = SCHEMA_DIR / f"{name}.schema.json"
+    path = _schema_dir() / f"{name}.schema.json"
     if not path.exists():
         raise FileNotFoundError(f"Schema not found: {path}")
     with open(path, encoding="utf-8") as f:
@@ -62,4 +66,4 @@ def validate_artifact(name: str, data: dict[str, Any]) -> None:
 
 def list_schemas() -> list[str]:
     """List all available artifact schema names."""
-    return [p.stem.replace(".schema", "") for p in SCHEMA_DIR.glob("*.schema.json")]
+    return [p.stem.replace(".schema", "") for p in _schema_dir().glob("*.schema.json")]

@@ -8,6 +8,7 @@ from typing import Any, Optional
 
 from lib.asset_precheck import scan_user_images, validate_beat_assignment_matrix
 from lib.checkpoint_validate import CheckpointValidationError, PROJECT_MARKER_FILENAME
+from schemas.artifacts import validate_artifact
 
 _COMMERCIAL_MEDIA_REQUIREMENTS = {
     "sample_review": ("sample_reel", "path"),

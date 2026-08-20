@@ -13,6 +13,7 @@ from backlot import state as state_mod
 from backlot.state import list_projects, load_board_state, summarize_project
 from lib.asset_precheck import build_asset_ledger
 from lib.edit_apply import cuts_digest
+from lib.resources import get_resources
 
 
 @pytest.fixture
@@ -2248,8 +2249,7 @@ class TestBoardState:
 class TestCommercialArtifactSchemas:
     def test_review_overview_accepts_uppercase_video_extension(self):
         schema_path = (
-            Path(__file__).resolve().parents[2]
-            / "schemas" / "artifacts" / "review_overview.schema.json"
+            get_resources().artifact_schemas() / "review_overview.schema.json"
         )
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
 
@@ -2263,8 +2263,7 @@ class TestCommercialArtifactSchemas:
 
     def test_full_draft_requires_user_visible_review_evidence(self):
         schema_path = (
-            Path(__file__).resolve().parents[2]
-            / "schemas" / "artifacts" / "full_draft_pro.schema.json"
+            get_resources().artifact_schemas() / "full_draft_pro.schema.json"
         )
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
 
@@ -2537,8 +2536,7 @@ class TestEditClosureRevisionSchemas:
     )
     def test_render_artifacts_accept_optional_cuts_revision(self, schema_name, payload):
         schema_path = (
-            Path(__file__).resolve().parents[2]
-            / "schemas" / "artifacts" / f"{schema_name}.schema.json"
+            get_resources().artifact_schemas() / f"{schema_name}.schema.json"
         )
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
 
@@ -2549,10 +2547,7 @@ class TestEditClosureRevisionSchemas:
         validate(payload, schema)
 
     def test_edit_decisions_accepts_dirty_revision_contract(self):
-        schema_path = (
-            Path(__file__).resolve().parents[2]
-            / "schemas" / "artifacts" / "edit_decisions.schema.json"
-        )
+        schema_path = get_resources().artifact_schemas() / "edit_decisions.schema.json"
         schema = json.loads(schema_path.read_text(encoding="utf-8"))
 
         validate({

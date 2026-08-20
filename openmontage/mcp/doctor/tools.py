@@ -387,8 +387,9 @@ def run_provider_menu_summary() -> dict[str, Any]:
 def run_list_pipelines() -> dict[str, Any]:
     _ensure_repo_on_path()
     from lib.pipeline_loader import list_pipelines
+    from lib.resources import get_resources
 
-    defs = REPO_ROOT / "pipeline_defs"
+    defs = get_resources().pipeline_defs()
     names = []
     try:
         names = list_pipelines()
@@ -668,7 +669,9 @@ def run_validate_artifact(path: str, artifact_type: str | None = None) -> dict[s
     if not resolved.exists():
         raise DoctorError(f"Artifact not found: {resolved}", code="not_found")
     data = json.loads(resolved.read_text(encoding="utf-8"))
-    schema_dir = REPO_ROOT / "schemas" / "artifacts"
+    from lib.resources import get_resources
+
+    schema_dir = get_resources().artifact_schemas()
     schema_name = artifact_type or resolved.stem
     # allow research_brief.json → research_brief.schema.json
     candidates = [
