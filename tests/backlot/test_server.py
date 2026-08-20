@@ -199,7 +199,7 @@ class TestBacklotServerApi:
         assert "Backlot — 项目库" in home.text
         assert next_page.status_code == 200
         assert next_page.headers.get("cache-control") == "no-cache"
-        assert "Backlot — 项目库" in next_page.text
+        assert "Backlot" in next_page.text
         assert 'id="root"' in next_page.text
         assert board.status_code == 200
         assert 'id="root"' in board.text

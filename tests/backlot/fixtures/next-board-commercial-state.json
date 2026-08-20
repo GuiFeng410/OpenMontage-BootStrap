@@ -1,0 +1,86 @@
+{
+  "project_id": "demo-commercial",
+  "title": "演示商品片",
+  "live": true,
+  "pipeline": { "pipeline_type": "bootstrap-commercial", "known": true },
+  "stages": [
+    { "name": "brief_locked", "label_zh": "方案确认", "status": "awaiting_human" },
+    { "name": "assets_gate", "label_zh": "素材检查", "status": "pending" },
+    { "name": "sample_review", "label_zh": "试片确认", "status": "pending" },
+    { "name": "segment_build", "label_zh": "分段制作", "status": "pending" },
+    { "name": "draft_review", "label_zh": "初稿审查", "status": "pending" },
+    { "name": "final_compose", "label_zh": "合成终稿", "status": "pending" },
+    { "name": "delivery_signoff", "label_zh": "交付确认", "status": "pending" }
+  ],
+  "artifacts": {},
+  "media": { "renders": [], "snapshots": [], "music": [] },
+  "events": [],
+  "commercial": {
+    "user_stage_zh": "方案确认",
+    "confirm_stop_ids": [
+      "brief_locked",
+      "assets_gate",
+      "sample_review",
+      "segment_build",
+      "draft_review",
+      "final_compose",
+      "delivery_signoff"
+    ],
+    "runner_bind": { "bound": true },
+    "runner_status": {
+      "phase": "paused",
+      "runner_alive": true,
+      "friendly_zh": "等你在本页确认方案。"
+    },
+    "brief_summary": {
+      "theme": "演示水壶",
+      "duration_seconds": 30,
+      "production_tier": "中度",
+      "review_mode_zh": "普通",
+      "video_channel": "TokenHub",
+      "imported_asset_count": 2
+    },
+    "plan_archive": {
+      "sealed_zh": "方案未封板",
+      "has_brief": true,
+      "has_video_plan": true,
+      "has_segment_cards": true,
+      "segment_count": 2,
+      "overall_prompt_zh": "开场展示壶身，再强调保温。"
+    },
+    "decision": {
+      "paused": true,
+      "prompt_zh": "请确认时长与档位后进入下一步。",
+      "title_zh": "方案确认",
+      "options": []
+    },
+    "beats": [
+      {
+        "beat": "beat_1",
+        "time": "0–8s",
+        "copy_plan_zh": "一眼认出这把壶",
+        "shot_plan_zh": "正面特写",
+        "assignment_status": "user_asset",
+        "assignment_status_zh": "用户素材",
+        "asset_plan_zh": "用用户正面图",
+        "required_count": 1,
+        "available_count": 1
+      },
+      {
+        "beat": "beat_2",
+        "time": "8–30s",
+        "copy_plan_zh": "保温十二小时",
+        "shot_plan_zh": "侧面滑动",
+        "assignment_status": "missing",
+        "assignment_reason": "还缺侧面图"
+      }
+    ],
+    "timeline": {
+      "duration_seconds": 30,
+      "beat_marks": [
+        { "seconds": 0, "kind": "beat", "label": "0s", "beat": "beat_1" },
+        { "seconds": 8, "kind": "beat", "label": "8s", "beat": "beat_2" }
+      ]
+    }
+  }
+}

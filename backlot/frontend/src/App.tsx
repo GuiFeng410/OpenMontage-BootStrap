@@ -1,9 +1,9 @@
-import { BoardPlaceholder } from "./features/library/BoardPlaceholder";
+import { BoardPage } from "./features/board/BoardPage";
 import { LibraryPage } from "./features/library/LibraryPage";
 
 export function App() {
   if (window.location.pathname.startsWith("/next/p/")) {
-    return <BoardPlaceholder />;
+    return <BoardPage />;
   }
   return <LibraryPage />;
 }

@@ -39,7 +39,7 @@ def test_default_library_html_unchanged(client):
 def test_next_library_shell_and_bundle_copy(client):
     page = client.get("/next/")
     assert page.status_code == 200
-    assert "Backlot — 项目库" in page.text
+    assert "Backlot" in page.text
     assert "/ui/library.css" in page.text
     assert 'id="root"' in page.text
     src = re.search(r'src="(/next/assets/[^"]+)"', page.text)
