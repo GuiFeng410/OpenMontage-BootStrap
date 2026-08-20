@@ -21,6 +21,7 @@ def test_locator_points_at_existing_product_paths() -> None:
     assert loc.checkpoint_schema().is_file()
     assert loc.artifact_schemas().is_dir()
     assert loc.bootstrap_skills().is_dir()
+    assert loc.bootstrap_skills() == (loc.repo_root / "skills" / "bootstrap").resolve()
 
 
 def test_locator_follows_workspace_repo_root(
@@ -47,3 +48,20 @@ def test_get_resources_accepts_explicit_workspace(tmp_path: Path) -> None:
 def test_unknown_logical_name_raises() -> None:
     with pytest.raises(KeyError, match="unknown resource logical name"):
         get_resources().resolve("runtimes.hyperframes")
+
+
+def test_bootstrap_skills_prefers_new_layout_when_present(tmp_path: Path) -> None:
+    new_root = tmp_path / "skills" / "bootstrap"
+    old_root = tmp_path / "openmontage" / "skills"
+    new_root.mkdir(parents=True)
+    old_root.mkdir(parents=True)
+    loc = get_resources(WorkspacePaths(repo_root=tmp_path))
+    assert loc.bootstrap_skills() == new_root.resolve()
+
+
+def test_bootstrap_skills_falls_back_to_openmontage_skills(tmp_path: Path) -> None:
+    old_root = tmp_path / "openmontage" / "skills"
+    old_root.mkdir(parents=True)
+    loc = get_resources(WorkspacePaths(repo_root=tmp_path))
+    assert loc.bootstrap_skills() == old_root.resolve()
+    assert not (tmp_path / "skills" / "bootstrap").exists()
