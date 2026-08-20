@@ -23,6 +23,9 @@ def test_locator_points_at_existing_product_paths() -> None:
     assert loc.bootstrap_skills().is_dir()
     assert loc.bootstrap_skills() == (loc.repo_root / "skills" / "bootstrap").resolve()
     assert loc.remotion_composer() == (loc.repo_root / "runtimes" / "remotion").resolve()
+    assert loc.pipeline_defs() == (loc.repo_root / "product" / "pipelines").resolve()
+    assert loc.styles() == (loc.repo_root / "product" / "styles").resolve()
+    assert loc.artifact_schemas() == (loc.repo_root / "product" / "schemas" / "artifacts").resolve()
 
 
 def test_locator_follows_workspace_repo_root(
@@ -83,3 +86,54 @@ def test_remotion_falls_back_to_remotion_composer(tmp_path: Path) -> None:
     loc = get_resources(WorkspacePaths(repo_root=tmp_path))
     assert loc.remotion_composer() == old_root.resolve()
     assert not (tmp_path / "runtimes" / "remotion").exists()
+
+
+def test_pipelines_prefers_product_layout_when_present(tmp_path: Path) -> None:
+    new_root = tmp_path / "product" / "pipelines"
+    old_root = tmp_path / "pipeline_defs"
+    new_root.mkdir(parents=True)
+    old_root.mkdir(parents=True)
+    loc = get_resources(WorkspacePaths(repo_root=tmp_path))
+    assert loc.pipeline_defs() == new_root.resolve()
+
+
+def test_pipelines_falls_back_to_pipeline_defs(tmp_path: Path) -> None:
+    old_root = tmp_path / "pipeline_defs"
+    old_root.mkdir(parents=True)
+    loc = get_resources(WorkspacePaths(repo_root=tmp_path))
+    assert loc.pipeline_defs() == old_root.resolve()
+    assert not (tmp_path / "product" / "pipelines").exists()
+
+
+def test_styles_prefers_product_layout_when_present(tmp_path: Path) -> None:
+    new_root = tmp_path / "product" / "styles"
+    old_root = tmp_path / "styles"
+    new_root.mkdir(parents=True)
+    old_root.mkdir(parents=True)
+    loc = get_resources(WorkspacePaths(repo_root=tmp_path))
+    assert loc.styles() == new_root.resolve()
+
+
+def test_styles_falls_back_to_styles(tmp_path: Path) -> None:
+    old_root = tmp_path / "styles"
+    old_root.mkdir(parents=True)
+    loc = get_resources(WorkspacePaths(repo_root=tmp_path))
+    assert loc.styles() == old_root.resolve()
+    assert not (tmp_path / "product" / "styles").exists()
+
+
+def test_schemas_prefers_product_layout_when_present(tmp_path: Path) -> None:
+    new_root = tmp_path / "product" / "schemas"
+    old_root = tmp_path / "schemas"
+    new_root.mkdir(parents=True)
+    old_root.mkdir(parents=True)
+    loc = get_resources(WorkspacePaths(repo_root=tmp_path))
+    assert loc.artifact_schemas() == (new_root / "artifacts").resolve()
+
+
+def test_schemas_falls_back_to_schemas(tmp_path: Path) -> None:
+    old_root = tmp_path / "schemas"
+    old_root.mkdir(parents=True)
+    loc = get_resources(WorkspacePaths(repo_root=tmp_path))
+    assert loc.artifact_schemas() == (old_root / "artifacts").resolve()
+    assert not (tmp_path / "product" / "schemas").exists()

@@ -15,9 +15,9 @@ from lib.paths import WorkspacePaths, get_workspace
 # Logical name → candidate paths relative to repo root, preferred first.
 # G5 layout is tried before the frozen checkout path.
 _LOGICAL: dict[str, tuple[str, ...]] = {
-    "pipelines": ("pipeline_defs",),
-    "styles": ("styles",),
-    "schemas": ("schemas",),
+    "pipelines": ("product/pipelines", "pipeline_defs"),
+    "styles": ("product/styles", "styles"),
+    "schemas": ("product/schemas", "schemas"),
     "skills.bootstrap": ("skills/bootstrap", "openmontage/skills"),
     "runtimes.remotion": ("runtimes/remotion", "remotion-composer"),
     "distribution.manifests": ("distribution/manifests",),
