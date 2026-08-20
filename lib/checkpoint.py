@@ -19,6 +19,7 @@ import jsonschema
 
 from schemas.artifacts import ARTIFACT_NAMES, validate_artifact
 from lib.asset_precheck import scan_user_images, validate_beat_assignment_matrix
+from lib.persistence.json_store import JsonStore
 
 # All known stages across all pipelines (used only for artifact name lookup).
 ALL_KNOWN_STAGES = frozenset([
@@ -830,14 +831,11 @@ def init_project(
         (project_dir / sub).mkdir(parents=True, exist_ok=True)
 
     marker_path = project_dir / PROJECT_MARKER_FILENAME
-    marker: dict[str, Any] = {}
-    if marker_path.exists():
-        try:
-            with open(marker_path) as f:
-                marker = json.load(f)
-        except (json.JSONDecodeError, OSError):
-            marker = {}
-
+    try:
+        loaded = JsonStore.read_object(marker_path, missing="empty")
+    except (json.JSONDecodeError, OSError, ValueError):
+        loaded = {}
+    marker = dict(loaded or {})
     marker.setdefault("version", "1.0")
     marker.setdefault("created_at", datetime.now(timezone.utc).isoformat())
     marker["project_id"] = project_id
@@ -845,9 +843,7 @@ def init_project(
     marker["pipeline_type"] = pipeline_type
     if style_playbook is not None:
         marker["style_playbook"] = style_playbook
-
-    with open(marker_path, "w") as f:
-        json.dump(marker, f, indent=2)
+    JsonStore.write_atomic(marker_path, marker)
 
     return project_dir
 

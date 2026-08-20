@@ -10,15 +10,21 @@ from pathlib import Path
 from typing import Any, Iterable
 from uuid import uuid4
 
+from lib.application.create_project import create_project
+from lib.application.errors import ApplicationError
 from lib.experiment_budget import (
     DEFAULT_AI_SHARE_PCT,
     clamp_ai_share_pct,
     motion_mix_from_ai_share_pct,
 )
+from lib.install_state import (
+    count_existing_projects,
+    read_install_state,
+    scan_stock_keys,
+    scan_video_keys,
+    snapshot_install_state,
+)
 from lib.paths import REPO_ROOT
-from openmontage.mcp.bootstrap import install_state as install_state_mod
-from openmontage.mcp.bootstrap import tools as bootstrap_tools
-from openmontage.mcp.common.errors import ConfigError, DoctorError
 
 REVIEW_MODE_IDS = frozenset({"minimal", "normal", "pro"})
 DEFAULT_REVIEW_MODE = "normal"
@@ -142,10 +148,10 @@ def _empty_image_flags() -> dict[str, Any]:
 
 def public_install_flags(*, repo_root: Path | None = None) -> dict[str, Any]:
     root = Path(repo_root or REPO_ROOT)
-    listed = install_state_mod.read_install_state(repo_root=root)
+    listed = read_install_state(repo_root=root)
     state = listed.get("state") if isinstance(listed.get("state"), dict) else {}
     projects = Path(os.environ.get("OPENMONTAGE_PROJECTS_DIR") or (root / "projects"))
-    counted = install_state_mod.count_existing_projects(projects)
+    counted = count_existing_projects(projects)
     try:
         live = _flags_from_live_scan(repo_root=root)
     except Exception:
@@ -186,7 +192,7 @@ def remember_machine_seen(
 ) -> dict[str, Any]:
     root = Path(repo_root or REPO_ROOT)
     prepare_local_runtime(repo_root=root)
-    return install_state_mod.snapshot_install_state(
+    return snapshot_install_state(
         repo_root=root,
         verify_ready=verify_ready,
         latest_project_id=latest_project_id,
@@ -214,8 +220,8 @@ def _flags_from_live_scan(
     repo_root: Path,
     environ: dict[str, str] | None = None,
 ) -> dict[str, Any]:
-    video = install_state_mod.scan_video_keys(repo_root=repo_root, environ=environ)
-    stock = install_state_mod.scan_stock_keys(repo_root=repo_root, environ=environ)
+    video = scan_video_keys(repo_root=repo_root, environ=environ)
+    stock = scan_stock_keys(repo_root=repo_root, environ=environ)
     names = list(video["video_key_names_present"])
     return {
         "video_key_present": bool(video["video_key_present"]),
@@ -242,7 +248,7 @@ def refresh_key_availability(
             from dotenv import load_dotenv
 
             load_dotenv(env_path, override=True)
-    snap = install_state_mod.snapshot_install_state(
+    snap = snapshot_install_state(
         repo_root=root,
         environ=environ,
     )
@@ -617,13 +623,13 @@ def create_library_project(
     mode = _normalize_review_mode(review_mode)
     requested_id = slug_project_id(theme)
     try:
-        result = bootstrap_tools.produce_init_project(
-            requested_id,
-            theme,
-            "bootstrap-commercial",
-            "create_new",
+        result = create_project(
+            title=theme,
+            pipeline_type="bootstrap-commercial",
+            mode="create_new",
+            requested_project_id=requested_id,
         )
-    except (ConfigError, DoctorError) as exc:
+    except ApplicationError as exc:
         raise LibraryCreateError(
             f"本机创建项目失败：{exc}。请回聊天让 Agent 先读 .openmontage/install-state.json；"
             "已经下载使用过的不要再克隆。",
@@ -655,7 +661,6 @@ def create_library_project(
     try:
         remember_machine_seen(
             repo_root=root,
-            verify_ready=True,
             latest_project_id=project_id,
         )
     except Exception:
