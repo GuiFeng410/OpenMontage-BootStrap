@@ -187,6 +187,42 @@ class TestBacklotServerApi:
         assert "/ui/library.css?v=" in page.text
         assert 'id="runner-occupant"' in page.text
 
+    def test_next_spa_serves_uidist_and_keeps_default_library(self, client):
+        home = client.get("/")
+        next_page = client.get("/next/")
+        board = client.get("/next/p/demo")
+        assets = list((server_mod.UI_NEXT_DIR / "assets").glob("*.js"))
+
+        assert home.status_code == 200
+        assert "/ui/library.css?v=" in home.text
+        assert 'id="runner-occupant"' in home.text
+        assert "Backlot — 项目库" in home.text
+        assert next_page.status_code == 200
+        assert next_page.headers.get("cache-control") == "no-cache"
+        assert "Backlot — 项目库" in next_page.text
+        assert 'id="root"' in next_page.text
+        assert board.status_code == 200
+        assert 'id="root"' in board.text
+        assert assets, "ui-dist assets missing; run npm run build in backlot/frontend"
+        asset = client.get(f"/next/assets/{assets[0].name}")
+        assert asset.status_code == 200
+
+    def test_next_404_when_dist_missing_does_not_take_default(self, projects_root, monkeypatch, tmp_path):
+        async def no_watch():
+            return None
+
+        monkeypatch.setattr(server_mod, "_watch_projects", no_watch)
+        monkeypatch.setattr(server_mod, "schedule_server_exit", lambda: None)
+        monkeypatch.setattr(server_mod, "UI_NEXT_DIR", tmp_path / "missing-ui-dist")
+        with TestClient(server_mod.create_app()) as missing:
+            next_page = missing.get("/next/")
+            home = missing.get("/")
+
+        assert next_page.status_code == 404
+        assert next_page.json()["detail"]["code"] == "next_frontend_missing"
+        assert home.status_code == 200
+        assert 'id="runner-occupant"' in home.text
+
     def test_projects_shape_and_state(self, client, projects_root):
         _make_project(projects_root, "film")
 

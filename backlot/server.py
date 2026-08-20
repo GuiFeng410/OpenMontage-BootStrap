@@ -30,6 +30,7 @@ from lib import interaction_intents as interaction_intents
 from lib.error_codes import to_http_detail
 
 UI_DIR = Path(__file__).resolve().parent / "ui"
+UI_NEXT_DIR = Path(__file__).resolve().parent / "ui-dist"
 THUMB_CACHE_DIR = REPO_ROOT / ".backlot" / "thumbs"
 THUMB_WIDTHS = (320, 640, 960)
 
@@ -47,6 +48,21 @@ def _ui_html(name: str, assets: tuple[str, ...]) -> HTMLResponse:
             version = str(int(path.stat().st_mtime))
             html = html.replace(f"/ui/{asset}", f"/ui/{asset}?v={version}")
     return HTMLResponse(html)
+
+
+def _next_index() -> FileResponse:
+    """Serve the Vite SPA shell. Missing build must not redirect ``/``."""
+
+    index = UI_NEXT_DIR / "index.html"
+    if not index.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail={
+                "code": "next_frontend_missing",
+                "friendly_zh": "并行站尚未构建。默认库页仍是 / 。",
+            },
+        )
+    return FileResponse(index, media_type="text/html; charset=utf-8")
 
 
 class ChangeHub:
@@ -658,8 +674,19 @@ def create_app() -> FastAPI:
     async def library_page() -> HTMLResponse:
         return _ui_html("index.html", ("board.css", "library.css", "library.js"))
 
+    @app.get("/next")
+    @app.get("/next/")
+    async def next_library_page() -> FileResponse:
+        return _next_index()
+
+    @app.get("/next/p/{project_path:path}")
+    async def next_board_page(project_path: str) -> FileResponse:
+        return _next_index()
+
     if UI_DIR.is_dir():
         app.mount("/ui", StaticFiles(directory=UI_DIR), name="ui")
+    if UI_NEXT_DIR.is_dir():
+        app.mount("/next", StaticFiles(directory=UI_NEXT_DIR), name="ui-next")
 
     # The board is a long-lived SPA: a tab keeps running whatever board.js it
     # loaded, and browsers heuristically cache /ui assets. no-cache forces a
@@ -669,7 +696,12 @@ def create_app() -> FastAPI:
     async def ui_no_cache(request, call_next):
         response = await call_next(request)
         path = request.url.path
-        if path == "/" or path.startswith("/ui") or path.startswith("/p/"):
+        if (
+            path == "/"
+            or path.startswith("/ui")
+            or path.startswith("/p/")
+            or path.startswith("/next")
+        ):
             response.headers["Cache-Control"] = "no-cache"
         return response
 
