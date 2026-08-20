@@ -4,9 +4,13 @@ import { fmtAgo, fmtMoney, fmtMoneyCny, vanillaBoardHref } from "./format";
 import { isCommercial } from "./model";
 import type { BoardState } from "./types";
 
-type Props = { state: BoardState };
+type Props = {
+  state: BoardState;
+  editOpen?: boolean;
+  onToggleEdit?: () => void;
+};
 
-export function HeaderSlate({ state }: Props) {
+export function HeaderSlate({ state, editOpen = false, onToggleEdit }: Props) {
   const commercial = isCommercial(state);
   const chips = commercialChips(state);
   return (
@@ -35,13 +39,16 @@ export function HeaderSlate({ state }: Props) {
               href={vanillaBoardHref(state.project_id)}
               style={{ color: "var(--text-3)", fontSize: "calc(10.5px * var(--fs-scale))" }}
             >
-              打开默认站看板（确认 / 剪辑 / 播放）
+              打开默认站看板
             </a>
           </div>
         ) : null}
       </div>
       {chips}
       <div className="spacer" />
+      {onToggleEdit ? (
+        <EditTabButton state={state} editOpen={editOpen} onToggleEdit={onToggleEdit} />
+      ) : null}
       <QuitButton />
       <ThemeToggle />
       <LiveBadge state={state} />
@@ -159,3 +166,27 @@ function CostBlock({ state }: Props) {
     </div>
   );
 }
+
+function EditTabButton({
+  state,
+  editOpen,
+  onToggleEdit,
+}: {
+  state: BoardState;
+  editOpen: boolean;
+  onToggleEdit: () => void;
+}) {
+  const gate = state.editing_gate || state.commercial?.editing_gate;
+  const locked = gate?.enabled === false;
+  return (
+    <button
+      type="button"
+      className={`edit-tab-btn${editOpen ? " on" : ""}${locked ? " locked" : ""}`}
+      title={locked ? gate?.friendly_zh : "剪辑标签：对成片做轻量标记（Agent 确认后出片）"}
+      onClick={onToggleEdit}
+    >
+      ✂ 剪辑
+    </button>
+  );
+}
+

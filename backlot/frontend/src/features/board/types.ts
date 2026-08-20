@@ -125,6 +125,21 @@ export type BoardEvent = {
   cost_usd?: number;
 };
 
+export type EditingGate = {
+  enabled?: boolean;
+  friendly_zh?: string;
+  reason_codes?: string[];
+  cut_count?: number;
+  latest_render?: { path?: string | null; exists?: boolean; artifact?: string };
+};
+
+export type EditCut = {
+  id?: string;
+  source?: string;
+  in_seconds?: number;
+  out_seconds?: number;
+};
+
 export type BoardState = {
   project_id: string;
   title: string;
@@ -139,6 +154,7 @@ export type BoardState = {
   events: BoardEvent[];
   storyboard: unknown;
   cost?: { total_spent_usd?: number; budget_remaining_usd?: number };
+  editing_gate?: EditingGate | null;
   commercial: CommercialState | null;
 };
 
@@ -235,6 +251,7 @@ export type CommercialState = {
   final_video?: { exists?: boolean; path?: string };
   interaction_intents?: InteractionIntent[];
   legacy_checkpoints?: { stage?: string }[];
+  editing_gate?: EditingGate | null;
 };
 
 export type DecisionOption = {

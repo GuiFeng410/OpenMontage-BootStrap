@@ -39,6 +39,13 @@ export function thumbURL(projectId: string, relPath: string, w = 640) {
     .join("/")}?w=${w}`;
 }
 
+export function mediaURL(projectId: string, relPath: string) {
+  return `/media/${encodeURIComponent(projectId)}/${relPath
+    .split("/")
+    .map(encodeURIComponent)
+    .join("/")}`;
+}
+
 export function vanillaBoardHref(projectId: string) {
   const suffix = new URLSearchParams(window.location.search).has("static")
     ? "?static=1"

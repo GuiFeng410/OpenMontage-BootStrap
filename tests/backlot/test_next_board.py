@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import socket
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.request
 from pathlib import Path
@@ -62,10 +64,14 @@ def test_next_board_shell_in_bundle(client):
         "/intents",
         "进入下一步",
         "清空并重选",
+        "提交剪辑要求",
+        "✂ 剪辑",
+        "edit-clip",
+        "render-hero",
+        "cuts_revision",
     ):
         assert needle in text, needle
-    assert "提交剪辑要求" not in text
-    assert "✂ 剪辑" not in text
+    assert "/ui/board-edit.css" in page.text
 
 
 def _available_local_port() -> int:
@@ -154,7 +160,8 @@ def test_next_board_readonly_shell_renders(next_board_server):
             expect(page.locator(".commercial-beat-card[data-beat='beat_1']")).to_be_visible()
             expect(page.locator(".commercial-review-fold")).to_contain_text("回顾")
             expect(page.locator(".commercial-decision-option")).to_have_count(0)
-            expect(page.get_by_role("link", name="打开默认站看板（确认 / 剪辑 / 播放）")).to_be_visible()
+            expect(page.get_by_role("link", name="打开默认站看板")).to_be_visible()
+            expect(page.get_by_role("button", name="✂ 剪辑")).to_be_visible()
         finally:
             browser.close()
 
@@ -247,6 +254,237 @@ def test_next_board_intent_draft_submit_retry_and_stale(next_board_server):
             page.get_by_role("button", name="清空并重选").click()
             expect(page.locator(".intent-basket-stale")).to_have_count(0)
             expect(page.locator(".commercial-intent-summary")).to_have_count(1)
+        finally:
+            browser.close()
+
+
+def _sample_player_payload() -> dict:
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    for stage in payload["stages"]:
+        if stage["name"] == "brief_locked":
+            stage["status"] = "completed"
+        elif stage["name"] == "sample_review":
+            stage["status"] = "awaiting_human"
+        else:
+            stage["status"] = "pending"
+    payload["commercial"]["user_stage_zh"] = "试片确认"
+    payload["commercial"]["stage_evidence"] = {
+        "sample": {
+            "path": "renders/sample.mp4",
+            "exists": True,
+            "status": "review",
+            "duration_seconds": 2,
+        }
+    }
+    payload["commercial"]["decision"] = {"paused": True, "options": []}
+    return payload
+
+
+def _edit_payload(*, enabled: bool = True, two_cuts: bool = True) -> dict:
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    cuts = [
+        {
+            "id": "cut_01",
+            "source": "assets/video/cut_01.mp4",
+            "in_seconds": 0,
+            "out_seconds": 2,
+        }
+    ]
+    if two_cuts:
+        cuts.append(
+            {
+                "id": "cut_02",
+                "source": "assets/video/cut_02.mp4",
+                "in_seconds": 0,
+                "out_seconds": 3,
+            }
+        )
+    payload["artifacts"] = {"edit_decisions": {"cuts": cuts}}
+    gate = {
+        "enabled": enabled,
+        "friendly_zh": (
+            "剪辑输入已就绪，可提交轻量剪辑要求。"
+            if enabled
+            else "当前不可提交剪辑要求：阶段不对"
+        ),
+        "latest_render": {"path": "renders/draft.mp4", "exists": True},
+    }
+    payload["editing_gate"] = gate
+    payload["commercial"]["editing_gate"] = gate
+    return payload
+
+
+def _goto_mocked(page, next_board_server: str, payload: dict) -> None:
+    page.route(
+        "**/api/project/*/state",
+        lambda route: route.fulfill(
+            status=200,
+            content_type="application/json",
+            body=json.dumps(payload),
+        ),
+    )
+    page.goto(
+        next_board_server + "/next/p/demo-commercial?static=1",
+        wait_until="networkidle",
+    )
+
+
+def _tiny_mp4_bytes() -> bytes | None:
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return None
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp) / "tiny.mp4"
+        proc = subprocess.run(
+            [
+                ffmpeg,
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=64x64:d=2",
+                "-pix_fmt",
+                "yuv420p",
+                str(dest),
+            ],
+            check=False,
+        )
+        if proc.returncode != 0 or not dest.exists():
+            return None
+        return dest.read_bytes()
+
+
+def _write_tiny_mp4(rel: str) -> bool:
+    data = _tiny_mp4_bytes()
+    if not data:
+        return False
+    root = Path(os.environ["OPENMONTAGE_PROJECTS_DIR"])
+    dest = root / "demo-commercial" / rel
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_bytes(data)
+    return True
+
+
+def test_next_board_player_keeps_progress_across_edit_toggle(next_board_server):
+    playwright_sync = pytest.importorskip("playwright.sync_api")
+    sync_playwright = playwright_sync.sync_playwright
+    expect = playwright_sync.expect
+    payload = _sample_player_payload()
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            seekable = _write_tiny_mp4("renders/sample.mp4")
+            _goto_mocked(page, next_board_server, payload)
+            hero = page.locator(".render-hero video")
+            expect(hero).to_be_visible()
+            assert "renders/sample.mp4" in (hero.get_attribute("src") or "")
+            if seekable:
+                page.wait_for_function(
+                    "() => (document.querySelector('.render-hero video') || {}).readyState >= 1",
+                    timeout=8000,
+                )
+                page.evaluate(
+                    """() => {
+                        const video = document.querySelector(".render-hero video");
+                        video.pause();
+                        video.currentTime = 0.5;
+                    }"""
+                )
+                page.wait_for_function(
+                    "() => (document.querySelector('.render-hero video') || {}).currentTime >= 0.45",
+                    timeout=8000,
+                )
+            page.get_by_role("button", name="✂ 剪辑").click()
+            expect(page.locator(".edit-tab")).to_be_visible()
+            page.get_by_role("button", name="✂ 剪辑").click()
+            expect(hero).to_be_visible()
+            assert "renders/sample.mp4" in (hero.get_attribute("src") or "")
+            if seekable:
+                page.wait_for_function(
+                    "() => (document.querySelector('.render-hero video') || {}).readyState >= 1",
+                    timeout=8000,
+                )
+                restored = page.evaluate(
+                    """() => document.querySelector(".render-hero video").currentTime"""
+                )
+                assert restored >= 0.45
+        finally:
+            browser.close()
+
+
+def test_next_board_edit_gate_locked_hides_strip(next_board_server):
+    playwright_sync = pytest.importorskip("playwright.sync_api")
+    sync_playwright = playwright_sync.sync_playwright
+    expect = playwright_sync.expect
+    payload = _edit_payload(enabled=False)
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            _goto_mocked(page, next_board_server, payload)
+            page.get_by_role("button", name="✂ 剪辑").click()
+            expect(page.locator(".edit-tab")).to_contain_text("当前不可提交剪辑要求")
+            expect(page.locator(".edit-clip")).to_have_count(0)
+            expect(page.get_by_role("button", name="提交剪辑要求")).to_have_count(0)
+        finally:
+            browser.close()
+
+
+def test_next_board_edit_delete_reorder_and_submit(next_board_server):
+    playwright_sync = pytest.importorskip("playwright.sync_api")
+    sync_playwright = playwright_sync.sync_playwright
+    expect = playwright_sync.expect
+    payload = _edit_payload()
+    posts: list[dict] = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            page.route(
+                "**/api/project/*/state",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps(payload),
+                ),
+            )
+
+            def handle_intent(route):
+                if route.request.method != "POST":
+                    route.fallback()
+                    return
+                posts.append(json.loads(route.request.post_data or "{}"))
+                route.fulfill(status=201, content_type="application/json", body="{}")
+
+            page.route("**/intents", handle_intent)
+            page.goto(
+                next_board_server + "/next/p/demo-commercial?static=1",
+                wait_until="networkidle",
+            )
+            page.get_by_role("button", name="✂ 剪辑").click()
+            expect(page.locator(".edit-clip")).to_have_count(2)
+            expect(page.locator(".edit-clip-del")).to_have_count(2)
+            names = page.locator(".edit-clip-name").all_inner_texts()
+            assert names[0].startswith("cut_01")
+            page.locator(".edit-clip-handle-grip").first.drag_to(
+                page.locator(".edit-clip").nth(1)
+            )
+            names_after = page.locator(".edit-clip-name").all_inner_texts()
+            assert names_after[0].startswith("cut_02") or names_after != names
+            page.locator(".edit-clip-del").first.click()
+            expect(page.locator(".edit-clip")).to_have_count(1)
+            expect(page.locator(".edit-clip-del")).to_have_count(0)
+            page.locator("#edit-note-input").fill("片头缩短")
+            page.get_by_role("button", name="提交剪辑要求").click()
+            expect(page.locator(".edit-feedback")).to_contain_text("已提交")
+            assert posts, "edit intent was not posted"
+            body = posts[0]
+            assert body["base"]["cuts_revision"]
+            assert body["base"]["source_render"] == "renders/draft.mp4"
+            assert any(item.get("type") in {"delete", "reorder"} for item in body["actions"])
         finally:
             browser.close()
 

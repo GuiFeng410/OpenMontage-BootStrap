@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { getJSON } from "../library/api";
 import { BeatFilmstrip } from "./Beats";
+import { CommercialPlayer } from "./CommercialPlayer";
+import { EditTab } from "./EditTab";
 import { EvidencePanels, ReviewFold } from "./Evidence";
 import { HeaderSlate } from "./HeaderSlate";
 import { IntentStatus } from "./IntentStatus";
@@ -24,6 +26,7 @@ export function BoardPage() {
   const [error, setError] = useState("");
   const [selectedStage, setSelectedStage] = useState<string | null>(null);
   const [sseStatus, setSseStatus] = useState<SseStatus>("connecting");
+  const [editOpen, setEditOpen] = useState(false);
 
   const load = useCallback(async () => {
     const raw = await getJSON<unknown>(`/api/project/${encodeURIComponent(projectId)}/state`);
@@ -91,20 +94,29 @@ export function BoardPage() {
   const hideAssetPanels = shouldHideMinimalAssetPanels(state);
   return (
     <div className="wrap" data-backlot-next="board">
-      <HeaderSlate state={state} />
+      <HeaderSlate
+        state={state}
+        editOpen={editOpen}
+        onToggleEdit={() => setEditOpen((open) => !open)}
+      />
       <StageRail state={state} selectedStage={selectedStage} onToggleStage={onToggleStage} />
       <StageDrawer state={state} selectedStage={selectedStage} onToggleStage={onToggleStage} />
       <BoardNotices state={state} sseStatus={sseStatus} onRefresh={() => void load().catch(console.error)} />
-      <div className="board commercial-board">
-        <div className="main-col">
-          <IntentStatus intents={state.commercial?.interaction_intents} />
-          <StageStatusCard state={state} selectedStage={selectedStage} />
-          {hideAssetPanels ? null : <EvidencePanels state={state} selectedStage={selectedStage} />}
-          <BeatFilmstrip state={state} selectedStage={selectedStage} />
-          <StageEvidence state={state} selectedStage={selectedStage} />
-          <ReviewFold state={state} selectedStage={selectedStage} />
+      {editOpen ? (
+        <EditTab state={state} />
+      ) : (
+        <div className="board commercial-board">
+          <div className="main-col">
+            <IntentStatus intents={state.commercial?.interaction_intents} />
+            <StageStatusCard state={state} selectedStage={selectedStage} />
+            {hideAssetPanels ? null : <EvidencePanels state={state} selectedStage={selectedStage} />}
+            <CommercialPlayer state={state} selectedStage={selectedStage} />
+            <BeatFilmstrip state={state} selectedStage={selectedStage} />
+            <StageEvidence state={state} selectedStage={selectedStage} />
+            <ReviewFold state={state} selectedStage={selectedStage} />
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }

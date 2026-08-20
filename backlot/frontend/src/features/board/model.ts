@@ -77,6 +77,7 @@ export function normalizeBoardState(raw: unknown): BoardState {
     events: Array.isArray(state.events) ? state.events : [],
     storyboard: state.storyboard ?? null,
     cost: state.cost,
+    editing_gate: state.editing_gate || null,
     commercial: state.commercial || null,
   };
 }

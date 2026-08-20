@@ -1,4 +1,5 @@
-import { thumbURL } from "./format";
+import { mediaURL, thumbURL } from "./format";
+import { PersistentVideo } from "./PersistentVideo";
 import {
   CONTENT_VIEW_LABEL,
   beatOrdinalZh,
@@ -37,7 +38,7 @@ export function BeatFilmstrip({ state, selectedStage }: Props) {
       </div>
       <div className="content-view-hint">
         证据按阶段递进：方案确认看文案 → 素材检查看用户图与扩展安排 → 试片/分段看入片视频 → 初稿看问题与修改 → 终稿看技术检查 → 交付看签收。
-        <b> 点击顶栏阶段</b> 可切换该阶段视图。本刀不播放视频。
+        <b> 点击顶栏阶段</b> 可切换该阶段视图。
       </div>
       <Timeline state={state} />
       <div className="beat-card-grid">
@@ -240,7 +241,28 @@ function MediaStack({
       </div>
     );
   }
-  const videoPath = beat.asset_path;
+  if (view === "sample" || view === "draft") return null;
+  const selectedVideo = ledger.find((x) => x.kind === "video" && x.selected && x.path);
+  if (view === "segment") {
+    const videoPath = selectedVideo?.path || beat.asset_path;
+    if (!videoPath) {
+      return (
+        <div className="beat-media-stack">
+          <div className="beat-media empty">该 Beat 尚无已挂接分段视频</div>
+        </div>
+      );
+    }
+    return (
+      <div className="beat-media-stack">
+        <BeatVideo
+          projectId={state.project_id}
+          path={videoPath}
+          label={selectedVideo?.label_zh || "分段视频"}
+        />
+      </div>
+    );
+  }
+  const videoPath = selectedVideo?.path || beat.asset_path;
   return (
     <div className="beat-media-stack">
       {images
@@ -254,12 +276,41 @@ function MediaStack({
           </div>
         ))}
       {videoPath ? (
-        <div className="beat-media empty">
-          <span className="media-cap">{`分段视频（本刀不播放）· ${videoPath}`}</span>
-        </div>
-      ) : (
-        <div className="beat-media empty">该 Beat 尚无已挂接分段视频</div>
-      )}
+        <BeatVideo
+          projectId={state.project_id}
+          path={videoPath}
+          label={selectedVideo?.label_zh || "入片视频"}
+        />
+      ) : !images.length ? (
+        <div className="beat-media empty">暂无成片素材</div>
+      ) : null}
+    </div>
+  );
+}
+
+function BeatVideo({
+  projectId,
+  path,
+  label,
+}: {
+  projectId: string;
+  path: string;
+  label: string;
+}) {
+  const src = mediaURL(projectId, path);
+  return (
+    <div
+      className="beat-media video selected"
+      onClick={(e) => {
+        const node = e.currentTarget.querySelector("video");
+        if (!node) return;
+        if (node.paused) node.play().catch(() => {});
+        else node.pause();
+      }}
+    >
+      <PersistentVideo src={src} muted controls={false} />
+      <span className="play">▶</span>
+      <span className="media-cap">{label}</span>
     </div>
   );
 }
