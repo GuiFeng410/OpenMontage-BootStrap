@@ -514,7 +514,14 @@ def _materialize_final_evidence(
 def _wait_copy(project_id: str, marker: dict[str, Any], *, projects_dir: Path | None) -> str:
     from lib.board_advance import producing_wait_copy_zh
 
-    return producing_wait_copy_zh(marker, project_id=project_id, projects_dir=projects_dir)
+    stop = marker.get("board_stop") if isinstance(marker.get("board_stop"), dict) else {}
+    stage = str(stop.get("stage") or "")
+    return producing_wait_copy_zh(
+        marker,
+        project_id=project_id,
+        projects_dir=projects_dir,
+        stage=stage,
+    )
 
 def _promote_sample_to_first_segment(
     project_id: str,
@@ -537,9 +544,12 @@ def _promote_sample_to_first_segment(
     dest.parent.mkdir(parents=True, exist_ok=True)
     if not dest.is_file() or dest.stat().st_size <= 0:
         shutil.copy2(source, dest)
+    # Rebuild from all beats that already have segment files — never wipe
+    # B02+ out of review_overview by writing beats[:1] only (that forced
+    # expensive re-generation and Agnes 429/503 on resume).
     _materialize_review_overview(
         project_id,
-        beats[:1],
+        beats,
         provider=provider,
         model=model,
         artifact_revision=artifact_revision,
@@ -906,7 +916,23 @@ def maybe_start(
             return {"action": "", "status": STATUS_SKIPPED, "skipped": True}
         elif not draft_review_completed(project_id, projects_dir=projects_dir):
             if _segments_ready(project_id, projects_dir=projects_dir):
-                return {"action": "", "status": STATUS_SKIPPED, "skipped": True}
+                # Segments already on disk: only idle-skip when draft review is
+                # already open with real options. A frozen/empty pause card must
+                # fall through so we can materialize the draft stop UI.
+                stop = dict(marker.get("board_stop") or {})
+                draft_path = (
+                    _project_dir(project_id, projects_dir)
+                    / "artifacts"
+                    / "full_draft_pro.json"
+                )
+                if (
+                    str(stop.get("stage") or "") == "draft_review"
+                    and bool(stop.get("needs_user_decision"))
+                    and bool(stop.get("decision_options"))
+                    and not bool(stop.get("paused"))
+                    and draft_path.is_file()
+                ):
+                    return {"action": "", "status": STATUS_SKIPPED, "skipped": True}
             segments_only = True
 
     brief = _read_json(_project_dir(project_id, projects_dir) / "artifacts" / "brief.json")

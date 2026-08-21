@@ -124,13 +124,13 @@ export function BoardPage() {
       ) : (
         <div className="board commercial-board">
           <div className="main-col">
-            <IntentStatus intents={state.commercial?.interaction_intents} />
             <StageStatusCard state={state} selectedStage={selectedStage} />
             {hideAssetPanels ? null : <EvidencePanels state={state} selectedStage={selectedStage} />}
             <CommercialPlayer state={state} selectedStage={selectedStage} />
             <BeatFilmstrip state={state} selectedStage={selectedStage} />
             <StageEvidence state={state} selectedStage={selectedStage} />
             <ReviewFold state={state} selectedStage={selectedStage} />
+            <IntentStatus intents={state.commercial?.interaction_intents} />
           </div>
         </div>
       )}

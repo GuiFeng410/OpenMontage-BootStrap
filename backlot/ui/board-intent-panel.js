@@ -234,11 +234,12 @@ export function renderDecisionIntentPanel({
   let draft = inspection.draft || createDraft(identity);
   const stale = ["stale", "corrupt"].includes(inspection.status);
   const panelId = `commercial-intent-panel:${projectId}:${stage}`;
-  const submissionKey = `${projectId}:${stage}`;
+  // Include revision so「开始生成补图」后的 i2i_review 卡不会被同阶段本地锁死。
+  const submissionKey = `${projectId}:${stage}:${revision}`;
   const activeIntent = (Array.isArray(interactionIntents) ? interactionIntents : [])
     .find((entry) => entry?.stage === stage
       && entry?.revision === revision
-      && ["pending", "planned", "approved", "applied"].includes(entry?.status));
+      && ["pending", "planned", "approved"].includes(entry?.status));
   const submissionLocked = Boolean(activeIntent) || locallySubmitted.has(submissionKey);
   const localSubmissionCopy = locallySubmitted.get(submissionKey) || "";
   const submissionCopy = activeIntent?.status === "planned"

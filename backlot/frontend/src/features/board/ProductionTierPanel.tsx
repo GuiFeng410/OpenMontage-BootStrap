@@ -69,15 +69,56 @@ export function ProductionTierPanel({ state, onRefresh }: Props) {
 
   if (!isCommercial(state)) return null;
 
+  const readOnly = Boolean(lockedLabel);
   const flagsReady = keyFlags !== null;
   const blocked = flagsReady ? blockMessage(selectedTier, keyFlags, selectedModelId) : "";
   const feedback = blocked && !statusText ? blocked : statusText;
   const startDisabled = busy || (selectedTier === "heavy" && !flagsReady) || Boolean(blocked);
+  const modelLabel =
+    videoModels(keyFlags).find((item) => item.id === selectedModelId)?.label_zh ||
+    String(brief.video_model || selectedModelId || "").trim() ||
+    "—";
 
   const applyFlags = (flags: KeyFlags) => {
     setKeyFlags(flags || keyFlags || {});
     setSelectedModelId((curr) => curr || firstAvailableModelId(flags || keyFlags));
   };
+
+  // After 方案确认锁定档位，后续阶段只读回顾，避免误以为还能改档重开烧。
+  if (readOnly) {
+    const lockedTier = TIERS.find((tier) => tier.id === locked) || null;
+    return (
+      <details className="commercial-fold commercial-tier-fold">
+        <summary>{`制作档位（已锁定：${lockedLabel}）`}</summary>
+        <div className="notice commercial-tier-panel commercial-tier-panel-readonly">
+          <div className="tier-panel-head">
+            <b>已锁定，仅供查看</b>
+            <span>方案确认后不可再改；不会在本页重锁或开烧。</span>
+          </div>
+          <div className="tier-readonly-grid">
+            <div>
+              <span className="tier-readonly-label">档位</span>
+              <b>{lockedLabel}</b>
+              {lockedTier?.hint ? <span>{lockedTier.hint}</span> : null}
+            </div>
+            {locked === "heavy" ? (
+              <>
+                <div>
+                  <span className="tier-readonly-label">视频模型</span>
+                  <b>{modelLabel}</b>
+                </div>
+                <div>
+                  <span className="tier-readonly-label">AI 占比</span>
+                  <b>{`${selectedAiPct}%`}</b>
+                  <span>{`运镜约 ${100 - selectedAiPct}%`}</span>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </div>
+      </details>
+    );
+  }
 
   const panel = (
     <div className="notice commercial-tier-panel">
@@ -212,14 +253,6 @@ export function ProductionTierPanel({ state, onRefresh }: Props) {
     </div>
   );
 
-  if (lockedLabel) {
-    return (
-      <details className="commercial-fold commercial-tier-fold">
-        <summary>{`制作档位（已锁定：${lockedLabel}）`}</summary>
-        {panel}
-      </details>
-    );
-  }
   return panel;
 }
 

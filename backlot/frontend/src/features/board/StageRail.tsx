@@ -134,9 +134,14 @@ function stageSubZh(st: StageState, s: BoardState) {
   if (phase === "paused" && st.name === pausedStage) {
     return "已暂停\n看本页原因，未在调模型";
   }
-  if (st.metadata?.producing_wait) return "制作中\n请留在本页等待成片";
+  if (st.metadata?.producing_wait) {
+    if (st.name === "delivery_signoff" || st.name === "final_compose") {
+      return "合成中\n请留在本页等待成片";
+    }
+    return "制作中\n请留在本页等待成片";
+  }
   if (st.name === "delivery_signoff" && st.status !== "completed") {
-    if (s.commercial?.final_video) {
+    if (s.commercial?.final_video?.exists) {
       return "成片已就绪\n本页预览后点结束并导出";
     }
     return st.status === "in_progress" ? "等待成片\n完成后可在本页预览" : "待开始";

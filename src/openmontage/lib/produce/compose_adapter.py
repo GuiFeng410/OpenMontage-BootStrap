@@ -46,7 +46,7 @@ def _matching_segment_rel(project: Path, beat: str, artifact_revision: str) -> s
     try:
         validate_stage_artifact("review_overview", overview)
     except StageArtifactValidationError:
-        return ""
+        overview = {}
     for item in overview.get("overview") or []:
         if not isinstance(item, dict):
             continue
@@ -62,6 +62,12 @@ def _matching_segment_rel(project: Path, beat: str, artifact_revision: str) -> s
         path = project / rel
         if rel and path.is_file() and path.stat().st_size > 0:
             return rel
+    # Disk fallback: resume must not ignore already-generated segments when
+    # review_overview was rewritten to only the sample-promoted first beat.
+    candidate = _seg_rel(beat, artifact_revision)
+    path = project / candidate
+    if path.is_file() and path.stat().st_size > 0:
+        return candidate
     return ""
 
 def _sandbox_rel(project_id: str, rel: str) -> str:

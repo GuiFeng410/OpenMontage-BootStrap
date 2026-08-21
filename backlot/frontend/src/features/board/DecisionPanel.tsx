@@ -87,12 +87,15 @@ export function DecisionPanel({
     }
     setDraft(createDraft(identity));
   }, [projectId, stage, revision, storage]);
-  const submissionKey = `${projectId}:${stage}`;
+  // Include revision: after「开始生成补图」applied, the same stage gets a new card
+  // (i2i_review). Locking only on project:stage freezes「通过这些补图」forever in-session.
+  const submissionKey = `${projectId}:${stage}:${revision}`;
   const activeIntent = interactionIntents.find(
     (entry) =>
       entry?.stage === stage &&
       entry?.revision === revision &&
-      ["pending", "planned", "approved", "applied"].includes(entry?.status || ""),
+      // applied = already consumed; a newer card fingerprint must stay clickable
+      ["pending", "planned", "approved"].includes(entry?.status || ""),
   );
   const submissionLocked = Boolean(activeIntent) || locallySubmitted.has(submissionKey);
   const localCopy = locallySubmitted.get(submissionKey) || "";
@@ -108,6 +111,11 @@ export function DecisionPanel({
   const gapPlan = stage === "brief_locked" ? decision.gap_plan : undefined;
   const ready = gapPlanReady(draft, gapPlan);
   const submitLabel = primarySubmitLabel(stage, draft, options);
+  const chosenOptionId = selectedOptionId(draft, itemKey);
+  const notePlaceholder =
+    stage === "draft_review" && chosenOptionId === "reject"
+      ? "拒绝原因可选。不填也可以提交；提交后会停住并给出建议。"
+      : `选填意见。不填也可以直接${submitLabel}。`;
   const applyDraft = (updater: DraftUpdater) => {
     setDraft((prev) => {
       const next = typeof updater === "function" ? updater(prev) : updater;
@@ -207,7 +215,7 @@ export function DecisionPanel({
           <textarea
             className="commercial-intent-note"
             rows={3}
-            placeholder={`选填意见。不填也可以直接${submitLabel}。`}
+            placeholder={notePlaceholder}
             aria-label="选填意见"
             disabled={submissionLocked}
             value={draft.note}
@@ -288,7 +296,7 @@ export function DecisionPanel({
           </div>
         </div>
         <div className="commercial-chat-only">
-          {`点「${submitLabel}」后请留在本页。意见可不填。选中项会出现绿色边。`}
+          {`先点上方选项（出现绿边），再点本步确认里的「${submitLabel}」。意见可不填。`}
         </div>
       </div>
     </div>

@@ -9,7 +9,8 @@ export function StageEvidence({ state, selectedStage }: Props) {
   if (view === "sample") return <SamplePanel sample={evidence.sample || {}} />;
   if (view === "draft") return <DraftPanel draft={evidence.draft || {}} />;
   if (view === "compose") return <ComposePanel compose={evidence.compose || {}} />;
-  if (view === "delivery") return <DeliveryPanel delivery={evidence.delivery || {}} />;
+  // Delivery: no separate signoff card — preview + top-bar export are enough.
+  if (view === "delivery") return null;
   return null;
 }
 
@@ -132,34 +133,6 @@ function ComposePanel({ compose }: { compose: StageEvidenceItem }) {
         ) : (
           <div className="hint">技术检查未发现问题。</div>
         )}
-      </div>
-    </div>
-  );
-}
-
-function DeliveryPanel({ delivery }: { delivery: StageEvidenceItem }) {
-  return (
-    <div className="panel commercial-stage-evidence">
-      <div className="panel-head">
-        <h2>交付确认</h2>
-        <span className="meta">decision_log</span>
-      </div>
-      <div className="panel-body commercial-summary">
-        <div className="kv-row">
-          <span className="kv-k">质量结论</span>
-          <span className="kv-v">{delivery.quality_status || "待技术检查"}</span>
-        </div>
-        <div className="kv-row">
-          <span className="kv-k">签收状态</span>
-          <span className="kv-v">{delivery.decision_label_zh || delivery.decision || "等待聊天确认"}</span>
-        </div>
-        {delivery.decision_response_zh ? (
-          <div className="commercial-evidence-list">
-            <b>用户回复</b>
-            <div>{delivery.decision_response_zh}</div>
-          </div>
-        ) : null}
-        <MediaWarning item={delivery} />
       </div>
     </div>
   );

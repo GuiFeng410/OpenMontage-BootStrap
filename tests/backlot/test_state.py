@@ -2034,7 +2034,6 @@ class TestBoardState:
         ),
         [
             ("sample_reel", "path", "sample", "segment"),
-            ("full_draft_pro", "path", "segment", "draft"),
             ("final_review", "output_path", "segment", "compose"),
         ],
     )
@@ -2071,8 +2070,6 @@ class TestBoardState:
         payload = {later_field: shared_path}
         if later_artifact == "sample_reel":
             payload["beat_ids"] = ["beat_01"]
-        elif later_artifact == "full_draft_pro":
-            payload.update({"issue_segments": [], "modification_list": []})
         else:
             payload.update({"status": "pass", "checks": {}})
         _write(p / "artifacts" / f"{later_artifact}.json", payload)
@@ -2103,6 +2100,47 @@ class TestBoardState:
             assert "canonical 路径冲突" in (
                 evidence["beats"][0]["asset_conflict_reason_zh"]
             )
+
+    def test_draft_review_keeps_segment_paths_when_draft_points_at_first_clip(
+        self, projects_root
+    ):
+        """Draft evidence is segment-list based; first-clip path may equal draft.path."""
+        p = _make_project(projects_root, "commercial-draft-segment-share")
+        _write(p / "project.json", {
+            "project_id": p.name,
+            "pipeline_type": "bootstrap-commercial",
+        })
+        shared_path = "assets/video/seg_B01.mp4"
+        video = p / shared_path
+        video.parent.mkdir(parents=True, exist_ok=True)
+        video.write_bytes(b"video")
+        _write(p / "artifacts" / "review_overview.json", {
+            "overview": [{
+                "beat": "B01",
+                "time": "0-4",
+                "output_path": shared_path,
+            }],
+        })
+        _write(p / "artifacts" / "segment_cards.json", {
+            "segments": [{"beat": "B01", "time": "0-4"}],
+        })
+        _write(p / "artifacts" / "full_draft_pro.json", {
+            "path": shared_path,
+            "issue_segments": [],
+            "modification_list": [],
+            "status": "pending",
+        })
+
+        evidence = load_board_state(p)["commercial"]
+        segment = evidence["stage_evidence"]["segment"][0]
+        draft = evidence["stage_evidence"]["draft"]
+        assert segment["path"] == shared_path
+        assert segment["exists"] is True
+        assert draft["path"] == shared_path
+        assert draft["exists"] is True
+        assert draft["segments"]
+        assert draft["segments"][0]["beat"] == "B01"
+        assert draft["segments"][0]["path"] == shared_path
 
     def test_final_compose_and_delivery_share_one_valid_final_review_video(
         self, projects_root

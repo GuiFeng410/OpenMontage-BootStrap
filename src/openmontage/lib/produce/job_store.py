@@ -233,11 +233,23 @@ def _refresh_overlay(
     stop = marker.get("board_stop") if isinstance(marker.get("board_stop"), dict) else {}
     if not stop:
         return
+    compose_stage = stage in {"delivery_signoff", "final_compose"}
+    prompt = str(friendly_zh or "").strip()
+    if compose_stage and (
+        not prompt
+        or "段正在生成" in prompt
+        or "分段生成成片" in prompt
+    ):
+        from lib.board_advance import DELIVERY_COMPOSE_WAIT_ZH
+
+        prompt = DELIVERY_COMPOSE_WAIT_ZH
     stop["producing_wait"] = not paused
     stop["paused"] = bool(paused)
     stop["needs_user_decision"] = bool(paused)
-    stop["decision_title_zh"] = "已暂停" if paused else "制作中"
-    stop["decision_prompt_zh"] = friendly_zh
+    stop["decision_title_zh"] = (
+        "已暂停" if paused else ("合成中" if compose_stage else "制作中")
+    )
+    stop["decision_prompt_zh"] = prompt
     stop["decision_options"] = []
     marker["board_stop"] = stop
     _write_json(_project_dir(project_id, projects_dir) / "project.json", marker)

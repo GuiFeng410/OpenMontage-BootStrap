@@ -1358,10 +1358,8 @@ def build_commercial_board(
         and sample_media.get("path") == draft_media["path"]
     ):
         invalidate_reused_evidence(sample_media, "draft")
-    if draft_media.get("path"):
-        for segment_media in segment_evidence:
-            if segment_media.get("path") == draft_media["path"]:
-                invalidate_reused_evidence(segment_media, "draft")
+    # Draft review is segment-list based; do not blank segment evidence when
+    # full_draft_pro.path still points at the first segment file.
     if sample_media.get("path"):
         for segment_media in segment_evidence:
             if segment_media.get("path") == sample_media["path"]:
@@ -1428,6 +1426,24 @@ def build_commercial_board(
             "status": draft_doc.get("status"),
             "issue_segments": draft_doc.get("issue_segments") or [],
             "modification_list": draft_doc.get("modification_list") or [],
+            "suggestions_zh": draft_doc.get("suggestions_zh") or [],
+            "rejection_note": draft_doc.get("rejection_note") or "",
+            "segments": [
+                {
+                    "beat": str(item.get("beat") or "").strip(),
+                    "path": item.get("path"),
+                    "exists": bool(item.get("exists")),
+                    "label_zh": (
+                        f"第 {str(item.get('beat') or '').strip()} 段"
+                        if str(item.get("beat") or "").strip()
+                        else "分段"
+                    ),
+                    "status": str(item.get("status") or ""),
+                    "missing_reason_zh": item.get("missing_reason_zh"),
+                }
+                for item in segment_evidence
+                if str(item.get("beat") or "").strip()
+            ],
         },
         "compose": {
             **final_media,
@@ -1456,7 +1472,20 @@ def build_commercial_board(
             players.append({"label": label, "path": item["path"]})
 
         append_player("试片", sample_media)
-        append_player("完整初稿", draft_media)
+        draft_segments = [
+            item
+            for item in segment_evidence
+            if item.get("path") and item.get("exists") is True
+        ]
+        if draft_segments:
+            for item in draft_segments:
+                beat = str(item.get("beat") or "").strip()
+                append_player(
+                    f"初稿 · 第 {beat} 段" if beat else "初稿分段",
+                    item,
+                )
+        else:
+            append_player("初稿", draft_media)
         append_player("终稿", final_media)
         for render in media.get("renders") or []:
             if render["path"] in seen_player_paths:

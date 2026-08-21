@@ -92,9 +92,10 @@ function stageStatusRows(s: BoardState, view: string): [string, string | null | 
   }
   if (view === "delivery") {
     const delivery = evidence.delivery || {};
+    const ready = Boolean(s.commercial?.final_video?.exists);
     return [
-      ["签收", delivery.decision_label_zh || delivery.decision || "等待签收"],
-      ["质量", delivery.quality_status || "待技术检查"],
+      ["成片", ready ? "已就绪，可预览导出" : "合成中，请留在本页"],
+      ["质量", delivery.quality_status && delivery.quality_status !== "待技术检查" ? delivery.quality_status : null],
     ];
   }
   return [];

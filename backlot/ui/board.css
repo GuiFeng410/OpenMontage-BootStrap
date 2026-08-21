@@ -835,6 +835,36 @@ a.backlink:hover { color: var(--text-2); }
 .render-meta .v { color: var(--text-2); cursor: pointer; }
 .render-meta .v.active { color: var(--amber); }
 
+.draft-segment-list {
+  display: flex; flex-wrap: wrap; gap: 8px;
+  margin: 10px 0 12px;
+}
+.draft-segment-chip {
+  font-family: var(--mono);
+  font-size: calc(11px * var(--fs-scale));
+  letter-spacing: .04em;
+  padding: 6px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--text-2);
+  cursor: pointer;
+}
+.draft-segment-chip:hover:not(:disabled) {
+  border-color: rgba(240,168,60,.45);
+  color: var(--amber);
+}
+.draft-segment-chip.active {
+  border-color: rgba(240,168,60,.65);
+  color: var(--amber);
+  background: rgba(240,168,60,.08);
+}
+.draft-segment-chip.missing,
+.draft-segment-chip:disabled {
+  opacity: .55;
+  cursor: not-allowed;
+}
+
 /* audio playback affordance */
 .narr-audio { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-3); }
 .narr-audio:hover { color: var(--amber); }

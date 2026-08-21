@@ -101,6 +101,18 @@ export type TimelineMark = {
   beat?: string;
 };
 
+export type DraftSegment = {
+  beat?: string;
+  path?: string;
+  exists?: boolean;
+  label_zh?: string;
+  status?: string;
+  missing_reason_zh?: string;
+  missing_path?: string;
+  reason_code?: string;
+  conflict_with?: string;
+};
+
 export type StageEvidenceItem = {
   status?: string;
   duration_seconds?: number;
@@ -113,6 +125,9 @@ export type StageEvidenceItem = {
   candidate?: { path?: string };
   issue_segments?: { beat?: string; time?: string; issue_zh?: string; issue?: string }[];
   modification_list?: string[];
+  suggestions_zh?: string[];
+  rejection_note?: string;
+  segments?: DraftSegment[];
   technical_probe?: {
     duration_seconds?: number;
     resolution?: string;
@@ -261,7 +276,16 @@ export type CommercialState = {
     draft?: StageEvidenceItem;
     compose?: StageEvidenceItem;
     delivery?: StageEvidenceItem;
-    segment?: { exists?: boolean }[];
+    segment?: Array<{
+      beat?: string;
+      path?: string;
+      exists?: boolean;
+      status?: string;
+      missing_path?: string;
+      missing_reason_zh?: string;
+      reason_code?: string;
+      conflict_with?: string;
+    }>;
   };
   produce_job?: { beat_ids?: string[]; friendly_zh?: string; batch_id?: string };
   final_video?: { exists?: boolean; path?: string };

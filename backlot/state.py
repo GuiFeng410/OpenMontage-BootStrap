@@ -237,6 +237,25 @@ def _apply_board_stop_overlay(stages: list[dict], marker: dict[str, Any]) -> Non
     if stop.get("needs_user_decision") is not True and not stop.get("producing_wait"):
         return
     cleaned = strip_recommend(stop)
+    # Refresh decision copy from live helpers so a stale board_stop overlay
+    # (written by an older runner process) cannot pin outdated option labels.
+    project_id = str(marker.get("project_id") or "").strip()
+    if project_id and cleaned.get("needs_user_decision") is True:
+        try:
+            from lib.board_advance import stop_card_metadata
+
+            live = strip_recommend(stop_card_metadata(stage_name, project_id))
+            for key in (
+                "decision_options",
+                "decision_prompt_zh",
+                "decision_title_zh",
+                "needs_user_decision",
+                "producing_wait",
+            ):
+                if key in live:
+                    cleaned[key] = live[key]
+        except Exception:
+            pass
     for stage in stages:
         if stage.get("name") != stage_name:
             continue

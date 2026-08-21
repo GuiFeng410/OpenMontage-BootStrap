@@ -240,7 +240,24 @@ def _consume_decision(
         from lib.board_gap_plan import stop_action_from_intent
 
         review_action = stop_action_from_intent(raw)
-        if review_action != "revise":
+        if stage == "draft_review" and review_action in {"reject", "revise"}:
+            from lib.board_draft_review import DraftReviewError, apply_draft_reject
+
+            try:
+                apply_draft_reject(
+                    project_id, raw, projects_dir=PROJECTS_DIR
+                )
+            except DraftReviewError as exc:
+                raise approval_bundle.ApprovalBundleError(
+                    str(exc),
+                    code=exc.code,
+                    safe_message=exc.safe_message,
+                ) from exc
+            board_advance.write_stop_card(
+                project_id, "draft_review", projects_dir=PROJECTS_DIR
+            )
+            lock_result = {"action": "reject", "artifacts": {}}
+        elif stage == "draft_review":
             evidence = board_advance.review_stage_evidence(
                 project_id, stage, projects_dir=PROJECTS_DIR
             )
@@ -251,12 +268,41 @@ def _consume_decision(
                 raise approval_bundle.ApprovalBundleError(
                     "review evidence missing",
                     code="review_evidence_missing",
-                    safe_message=str(evidence.get("friendly_zh") or "当前阶段还没有可评审视频。"),
+                    safe_message=str(
+                        evidence.get("friendly_zh") or "当前阶段还没有可评审视频。"
+                    ),
                 )
-        lock_result = {
-            "action": "revise" if review_action == "revise" else "continue",
-            "artifacts": {},
-        }
+            from lib.board_draft_review import DraftReviewError, apply_draft_approve
+
+            try:
+                apply_draft_approve(project_id, projects_dir=PROJECTS_DIR)
+            except DraftReviewError as exc:
+                raise approval_bundle.ApprovalBundleError(
+                    str(exc),
+                    code=exc.code,
+                    safe_message=exc.safe_message,
+                ) from exc
+            lock_result = {"action": "continue", "artifacts": {}}
+        else:
+            if review_action != "revise":
+                evidence = board_advance.review_stage_evidence(
+                    project_id, stage, projects_dir=PROJECTS_DIR
+                )
+                if not evidence.get("ready"):
+                    board_advance.write_stop_card(
+                        project_id, stage, projects_dir=PROJECTS_DIR
+                    )
+                    raise approval_bundle.ApprovalBundleError(
+                        "review evidence missing",
+                        code="review_evidence_missing",
+                        safe_message=str(
+                            evidence.get("friendly_zh") or "当前阶段还没有可评审视频。"
+                        ),
+                    )
+            lock_result = {
+                "action": "revise" if review_action == "revise" else "continue",
+                "artifacts": {},
+            }
     planned = approval_bundle.plan_approval_bundle(
         project_id,
         intent_id,
@@ -291,7 +337,7 @@ def _consume_decision(
             ) from exc
     if (
         stage in {"sample_review", "segment_build", "draft_review", "final_compose"}
-        and (lock_result or {}).get("action") != "revise"
+        and (lock_result or {}).get("action") not in {"revise", "reject"}
     ):
         _complete_review_stage(project_id, stage)
     return {
@@ -609,12 +655,17 @@ def tick(
                     project_id, projects_dir=PROJECTS_DIR
                 ) or marker
                 stop_action = str(applied.get("stop_action") or "continue")
-                if stop_action not in {"revise", "generate"}:
+                if stop_action not in {"revise", "generate", "reject"}:
                     next_stop = board_advance.advance_after_apply(
                         project_id,
                         applied_stage or "brief_locked",
                         marker,
                         projects_dir=PROJECTS_DIR,
+                    )
+                elif stop_action == "reject" and applied_stage == "draft_review":
+                    # Stay on draft_review with refreshed suggestions card.
+                    board_advance.write_stop_card(
+                        project_id, "draft_review", projects_dir=PROJECTS_DIR
                     )
             except Exception:
                 next_stop = None

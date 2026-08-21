@@ -16,6 +16,7 @@ RUNNER_STAMP_MODULES: tuple[str, ...] = (
     "src/openmontage/lib/produce/video_adapter.py",
     "src/openmontage/lib/produce/orchestrator.py",
     "src/openmontage/lib/board_advance.py",
+    "src/openmontage/lib/board_draft_review.py",
     "src/openmontage/lib/board_gap_plan.py",
     "src/openmontage/lib/board_assets_gate.py",
     "backlot/read_models/__init__.py",

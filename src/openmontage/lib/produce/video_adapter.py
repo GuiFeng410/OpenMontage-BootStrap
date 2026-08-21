@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from typing import Any, Callable
 
@@ -12,10 +13,23 @@ from lib.produce.job_store import (
 )
 
 GENERATE_RETRY_LIMIT = 5
+GENERATE_RETRY_BASE_SECONDS = 20
 
 RETRY_EXHAUSTED_ZH = (
     "同一渠道同一模型已重试 5 次仍失败。项目已冻结。"
     "可回库页继续这个项目，或换模型另开。不会自动换渠道。"
+)
+
+_RATE_LIMIT_MARKERS = (
+    "503",
+    "502",
+    "429",
+    "Unavailable",
+    "10053",
+    "10054",
+    "Connection aborted",
+    "ConnectionReset",
+    "ConnectionError",
 )
 
 _PAID_PROVIDERS = (
@@ -79,6 +93,15 @@ def _video_extras(
             payload["duration"] = 5
     return payload
 
+def _retry_backoff_seconds(attempt: int, error: str) -> float:
+    """Backoff before next attempt; longer when Agnes rate-limits / drops the socket."""
+    base = float(GENERATE_RETRY_BASE_SECONDS)
+    text = error or ""
+    if any(marker in text for marker in _RATE_LIMIT_MARKERS):
+        return base * (2 ** max(0, attempt - 1))
+    return max(3.0, base / 2)
+
+
 def call_video_generate_with_retries(
     generate: Callable[..., Any],
     *args: Any,
@@ -101,6 +124,7 @@ def call_video_generate_with_retries(
                         "generate_attempts": attempt,
                     },
                 ) from exc
+            time.sleep(_retry_backoff_seconds(attempt, last_error))
             continue
         failed = isinstance(last_result, dict) and last_result.get("success") is False
         missing = dest is not None and (
@@ -120,6 +144,7 @@ def call_video_generate_with_retries(
                         "generate_attempts": attempt,
                     },
                 )
+            time.sleep(_retry_backoff_seconds(attempt, last_error))
             continue
         return last_result
     raise ProduceJobError(

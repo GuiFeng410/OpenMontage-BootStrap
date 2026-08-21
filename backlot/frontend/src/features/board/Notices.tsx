@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DecisionPanel } from "./DecisionPanel";
 import {
   RUNNER_GONE_ZH,
+  commercialFocusStage,
   isCommercial,
   isProducePaused,
   runnerBoundToProject,
@@ -26,6 +27,48 @@ const RUNNER_LABEL: Record<string, string> = {
   idle: "本机空闲",
 };
 
+const DELIVERY_COMPOSE_WAIT_ZH =
+  "正在合成终稿，请留在本页。成片出现后即可预览，确认后点顶栏「结束并导出项目」。";
+
+function focusStage(state: BoardState) {
+  return (
+    state.commercial?.decision?.stage ||
+    state.commercial?.board_stop?.stage ||
+    commercialFocusStage(state, null)
+  );
+}
+
+function isComposeWaitStage(stage: string) {
+  return stage === "delivery_signoff" || stage === "final_compose";
+}
+
+function waitTitle(stage: string, phase: string) {
+  if (isComposeWaitStage(stage)) return "合成中";
+  if (stage === "segment_build") return "制作中";
+  if (phase === "queued") return "排队";
+  if (phase === "applying") return "进行中";
+  if (phase === "producing") return "制作中";
+  return "进行中";
+}
+
+function waitCopy(stage: string, raw: string | undefined, fallback: string) {
+  const text = String(raw || "").trim();
+  if (isComposeWaitStage(stage)) {
+    if (!text) return DELIVERY_COMPOSE_WAIT_ZH;
+    if (/段正在生成|分段生成成片|第\s*\d+\s*\/\s*\d+/.test(text)) {
+      return DELIVERY_COMPOSE_WAIT_ZH;
+    }
+    if (/等待制作|尚未就绪/.test(text) && !/合成/.test(text)) {
+      return DELIVERY_COMPOSE_WAIT_ZH;
+    }
+  }
+  return text || fallback;
+}
+
+function isProducingPhase(phase: string) {
+  return phase === "producing" || phase === "applying" || phase === "queued";
+}
+
 export function BoardNotices({ state, sseStatus, onRefresh }: Props) {
   if (!isCommercial(state)) return null;
   return (
@@ -47,13 +90,24 @@ function RunnerStatus({ state }: { state: BoardState }) {
   if (!status || typeof status !== "object") return null;
   const bound = runnerBoundToProject(state);
   const phase = status.phase || "idle";
+  const stage = String(focusStage(state) || "");
   const canRetry =
     Boolean(status.retry_exhausted) ||
     (phase === "paused" && /重试 5 次|已冻结|ConnectionReset|Connection aborted/i.test(status.friendly_zh || ""));
+  const title = bound
+    ? isProducingPhase(phase)
+      ? waitTitle(stage, phase)
+      : RUNNER_LABEL[phase] || phase
+    : "已冻结";
+  const copy = waitCopy(
+    stage,
+    status.friendly_zh,
+    isComposeWaitStage(stage) ? DELIVERY_COMPOSE_WAIT_ZH : "请留在本页。",
+  );
   return (
     <div className="notice commercial-runner-status">
-      <div className="commercial-runner-phase">{bound ? RUNNER_LABEL[phase] || phase : "已冻结"}</div>
-      {status.friendly_zh ? <div className="commercial-runner-copy">{status.friendly_zh}</div> : null}
+      <div className="commercial-runner-phase">{title}</div>
+      {copy ? <div className="commercial-runner-copy">{copy}</div> : null}
       {bound ? null : <div className="commercial-runner-copy">{RUNNER_GONE_ZH}</div>}
       {status.current_question ? (
         <div className="commercial-pause-question">{status.current_question}</div>
@@ -165,19 +219,41 @@ function DoneNotice({ state }: { state: BoardState }) {
 }
 
 function AwaitingNotice({ state }: { state: BoardState }) {
+  const stage = String(focusStage(state) || "");
+  const runner = state.commercial?.runner_status;
+  const runnerPhase = String(runner?.phase || "");
+  const runnerShowsWait =
+    Boolean(runner && typeof runner === "object") &&
+    (isProducingPhase(runnerPhase) || Boolean(runner?.friendly_zh));
+
   if (!state.commercial?.completed && !runnerBoundToProject(state)) {
+    // RunnerStatus already shows 已冻结 + RUNNER_GONE; avoid a second identical box.
+    if (runner && typeof runner === "object") return null;
     return pausedOrWait("已冻结", RUNNER_GONE_ZH);
   }
+
   const awaiting =
     state.stages.find((x) => x.status === "awaiting_human") ||
     state.stages.find(stageNeedsDecision);
   const dec = state.commercial?.decision;
-  if (dec?.producing_wait) {
+  const producingWait =
+    Boolean(dec?.producing_wait) || Boolean(state.commercial?.board_stop?.producing_wait);
+
+  if (producingWait) {
+    // One wait card only: prefer RunnerStatus when it already covers producing.
+    if (runnerShowsWait) return null;
     return pausedOrWait(
-      "制作中",
-      dec.prompt_zh || "成片尚未就绪，请留在本页等待制作。大约需要几分钟。",
+      waitTitle(stage, "producing"),
+      waitCopy(
+        stage,
+        dec?.prompt_zh,
+        isComposeWaitStage(stage)
+          ? DELIVERY_COMPOSE_WAIT_ZH
+          : "成片尚未就绪，请留在本页等待。大约需要几分钟。",
+      ),
     );
   }
+
   const options = Array.isArray(dec?.options) ? dec.options : [];
   if (options.length && dec) {
     return (
@@ -192,39 +268,32 @@ function AwaitingNotice({ state }: { state: BoardState }) {
     );
   }
   if (isProducePaused(state)) {
-    const runner = state.commercial?.runner_status || {};
     return pausedOrWait(
       "已暂停",
-      runner.friendly_zh ||
+      runner?.friendly_zh ||
         dec?.prompt_zh ||
         "制作已暂停。请看本页原因；当前没有在调用视频模型。",
     );
   }
-  if (!awaiting) {
-    const producing =
-      state.commercial?.decision?.producing_wait || state.commercial?.board_stop?.producing_wait;
-    if (producing) {
-      return pausedOrWait(
-        "制作中",
-        dec?.prompt_zh || "成片尚未就绪，请留在本页等待制作。大约需要几分钟。",
-      );
-    }
-    return null;
-  }
-  const prompt = dec?.prompt_zh || "请在本页确认后进入下一步。";
-  if (state.commercial?.final_video?.exists) {
-    return (
-      <div className="notice commercial-notice">
-        <span style={{ fontSize: "calc(16px * var(--fs-scale))" }}>✓</span>
-        <div className="commercial-decision-body">
-          <b>交付确认</b>
-          <div className="commercial-decision-prompt" style={{ whiteSpace: "pre-line" }}>
-            {prompt || "成片已就绪，请在本页预览。确认后点顶栏「结束并导出项目」。"}
+  if (!awaiting) return null;
+
+  if (state.commercial?.final_video?.exists || isComposeWaitStage(stage)) {
+    if (state.commercial?.final_video?.exists) {
+      return (
+        <div className="notice commercial-notice">
+          <span style={{ fontSize: "calc(16px * var(--fs-scale))" }}>✓</span>
+          <div className="commercial-decision-body">
+            <b>终稿已就绪</b>
+            <div className="commercial-decision-prompt" style={{ whiteSpace: "pre-line" }}>
+              请预览下方成片，确认后点顶栏「结束并导出项目」。
+            </div>
           </div>
         </div>
-      </div>
-    );
+      );
+    }
   }
+
+  const prompt = dec?.prompt_zh || "请在本页确认后进入下一步。";
   return (
     <div className="notice commercial-notice">
       <span style={{ fontSize: "calc(16px * var(--fs-scale))" }}>◈</span>

@@ -50,6 +50,10 @@ LIGHT_COMPOSE_WAIT_ZH = (
     "素材已确认。本机正在合成成片，大约 1–3 分钟。"
     "请留在本页。成片出现后即可在本页预览并导出。"
 )
+DELIVERY_COMPOSE_WAIT_ZH = (
+    "正在合成终稿，请留在本页。"
+    "成片出现后即可预览，确认后点顶栏「结束并导出项目」。"
+)
 DELIVERY_READY_ZH = (
     "成片已就绪，请在本页预览播放。确认后点顶栏「结束并导出项目」。不必回聊天。"
 )
@@ -130,7 +134,11 @@ def producing_wait_copy_zh(
     *,
     project_id: str = "",
     projects_dir: Path | None = None,
+    stage: str = "",
 ) -> str:
+    stage_name = str(stage or "").strip()
+    if stage_name in {"delivery_signoff", "final_compose"}:
+        return DELIVERY_COMPOSE_WAIT_ZH
     profile = marker.get("production_profile") if isinstance(marker, dict) else {}
     if not isinstance(profile, dict):
         profile = {}
@@ -192,6 +200,37 @@ def stop_options(
 ) -> list[dict[str, str]]:
     label = STAGE_LABEL_ZH.get(stage, stage)
     continue_label = primary_submit_label_zh(stage)
+    if stage == "draft_review":
+        rejected = False
+        if project_id:
+            from lib.board_draft_review import draft_is_rejected
+
+            rejected = draft_is_rejected(project_id, projects_dir=projects_dir)
+        if rejected:
+            return [
+                {
+                    "id": "continue",
+                    "label_zh": "按建议继续，进入终稿合成",
+                    "description_zh": "已看过拒绝建议。确认后进入终稿合成，不会静默换渠道。",
+                },
+                {
+                    "id": "reject",
+                    "label_zh": "补充拒绝说明（可选）",
+                    "description_zh": "可再填意见并更新建议；填完后仍须点「按建议继续」才会往下走。",
+                },
+            ]
+        return [
+            {
+                "id": "continue",
+                "label_zh": "通过初稿，进入终稿合成",
+                "description_zh": "确认分段初稿可接受，进入终稿合成。",
+            },
+            {
+                "id": "reject",
+                "label_zh": "拒绝初稿（原因可选）",
+                "description_zh": "记录意见并停在初稿；系统会给出建议，确认后才能继续。",
+            },
+        ]
     if stage == "assets_gate":
         continue_desc = "确认素材无误后，按已锁定档位开始生成成片。"
         mode = ""
@@ -248,7 +287,6 @@ def stop_options(
         },
     ]
 
-
 def stop_card_metadata(
     stage: str,
     project_id: str = "",
@@ -271,6 +309,26 @@ def stop_card_metadata(
                 "decision_options": [],
             }
     prompt = f"请确认「{label}」后进入下一步。"
+    if stage == "draft_review":
+        prompt = (
+            "请用下方分段列表逐段预览初稿。"
+            "可通过进入终稿合成，或拒绝（原因可选）；拒绝后须按建议确认才能继续。"
+        )
+        if project_id:
+            from lib.board_draft_review import draft_is_rejected, read_draft
+
+            draft = read_draft(project_id, projects_dir=projects_dir)
+            if draft_is_rejected(project_id, projects_dir=projects_dir):
+                tips = [
+                    str(item).strip()
+                    for item in (draft.get("suggestions_zh") or draft.get("modification_list") or [])
+                    if str(item).strip()
+                ]
+                tip_block = "\n".join(f"· {tip}" for tip in tips[:6]) or "· 请逐段预览后再决定。"
+                prompt = (
+                    "初稿已拒绝并停住。请先看建议，再点「按建议继续」才会进入终稿合成。\n"
+                    f"{tip_block}"
+                )
     if stage == "assets_gate":
         prompt = "请确认素材后开始出片。成片将出现在交付确认页。"
         if project_id:
@@ -306,7 +364,7 @@ def stop_card_metadata(
                 "producing_wait": True,
                 "decision_title_zh": "制作中",
                 "decision_prompt_zh": producing_wait_copy_zh(
-                    marker, project_id=project_id, projects_dir=projects_dir
+                    marker, project_id=project_id, projects_dir=projects_dir, stage=stage
                 ),
                 "decision_options": [],
             }
