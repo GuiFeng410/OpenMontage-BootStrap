@@ -60,6 +60,7 @@
   background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 8px;
+  -webkit-user-select: none;
   user-select: none;
 }
 .edit-clip.active { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue); }

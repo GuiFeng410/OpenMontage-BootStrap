@@ -8,6 +8,7 @@ import { GenericBoard } from "./GenericBoard";
 import { HeaderSlate } from "./HeaderSlate";
 import { IntentStatus } from "./IntentStatus";
 import { BoardNotices } from "./Notices";
+import { ProductionTierPanel } from "./ProductionTierPanel";
 import { maybeRedirectAfterExport } from "./ExportButton";
 import {
   isCommercial,
@@ -56,6 +57,10 @@ export function BoardPage() {
     );
     return () => sub.close();
   }, [load, projectId]);
+
+  const refresh = useCallback(() => {
+    void load().catch(console.error);
+  }, [load]);
 
   const onToggleStage = (name: string) => {
     setSelectedStage((curr) => (curr === name ? null : name));
@@ -112,7 +117,8 @@ export function BoardPage() {
       />
       <StageRail state={state} selectedStage={selectedStage} onToggleStage={onToggleStage} />
       <StageDrawer state={state} selectedStage={selectedStage} onToggleStage={onToggleStage} />
-      <BoardNotices state={state} sseStatus={sseStatus} onRefresh={() => void load().catch(console.error)} />
+      <ProductionTierPanel state={state} onRefresh={refresh} />
+      <BoardNotices state={state} sseStatus={sseStatus} onRefresh={refresh} />
       {editOpen ? (
         <EditTab state={state} />
       ) : (

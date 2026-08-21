@@ -72,6 +72,10 @@ def test_board_shell_in_bundle(client):
         "export-tab-btn",
         "interrupt-tab-btn",
         "project_export",
+        "commercial-tier-panel",
+        "tier-start-btn",
+        "确认开始出片",
+        "start-production",
     ):
         assert needle in text, needle
     assert "/ui/board-edit.css" in page.text
@@ -170,8 +174,72 @@ def test_next_board_readonly_shell_renders(next_board_server):
             expect(page.get_by_role("button", name="结束并导出项目")).to_be_visible()
             expect(page.get_by_role("button", name="中断")).to_be_visible()
             expect(page.get_by_role("button", name="✂ 剪辑")).to_be_visible()
+            expect(page.locator(".commercial-tier-fold")).to_contain_text("制作档位（已锁定：中度）")
+            expect(page.locator(".commercial-tier-panel")).to_have_count(1)
         finally:
             browser.close()
+
+
+def test_next_board_tier_panel_unlocked_can_start(next_board_server):
+    playwright_sync = pytest.importorskip("playwright.sync_api")
+    sync_playwright = playwright_sync.sync_playwright
+    expect = playwright_sync.expect
+    payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    payload["commercial"]["brief_summary"]["production_tier"] = None
+    starts: list[dict] = []
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(channel="chrome", headless=True)
+        page = browser.new_page(viewport={"width": 1440, "height": 900})
+        try:
+            page.route(
+                "**/api/project/*/state",
+                lambda route: route.fulfill(
+                    status=200,
+                    content_type="application/json",
+                    body=json.dumps(payload),
+                ),
+            )
+            page.route(
+                "**/api/project/*/start-production",
+                lambda route: _record_start(route, starts),
+            )
+            page.goto(
+                next_board_server + "/p/demo-commercial?static=1",
+                wait_until="commit",
+            )
+            expect(page.locator(".commercial-tier-panel")).to_be_visible()
+            expect(page.locator(".tier-picker-option")).to_have_count(3)
+            expect(page.locator(".tier-start-btn")).to_contain_text("确认开始出片")
+            page.locator(".tier-picker-option[data-tier='light']").click()
+            page.locator(".tier-start-btn").click()
+            expect(page.locator(".tier-panel-feedback")).to_contain_text("已锁定制作档")
+            assert starts and starts[0].get("production_tier") == "light"
+        finally:
+            browser.close()
+
+
+def _record_start(route, starts: list[dict]) -> None:
+    raw = route.request.post_data or "{}"
+    try:
+        body = json.loads(raw)
+    except json.JSONDecodeError:
+        body = {}
+    if not isinstance(body, dict):
+        body = {}
+    starts.append(body)
+    route.fulfill(
+        status=200,
+        content_type="application/json",
+        body=json.dumps(
+            {
+                "ok": True,
+                "production_tier": body.get("production_tier") or "light",
+                "friendly_zh": "已锁定制作档。",
+            },
+            ensure_ascii=False,
+        ),
+    )
+
 
 
 def _intent_payload(timestamp: str = "2026-08-13T08:00:00Z") -> dict:
