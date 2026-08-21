@@ -1,5 +1,5 @@
-# BootStrap Error-Handling playbooks
-# Source: README/错误处理/01-错误集合.md
+﻿# BootStrap Error-Handling playbooks
+# Source: README/human/错误处理/01-错误集合.md
 # Phase 3: + zero-key synth BGM (replace_bgm / synthesize_replacement_bgm with confirm).
 
 version: 3

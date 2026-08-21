@@ -1,4 +1,4 @@
----
+﻿---
 name: openmontage-bootstrap-05-captions-music
 description: >-
   BootStrap captions+BGM helper: copy→subs, import/register BGM, build compose
@@ -31,7 +31,7 @@ metadata:
 
 **不做：** 自定义字幕时间/位置；静默付费配乐；替代 Skill02 档位与旁白 TTS。
 
-边界：`README/说明/03-字幕与配乐.md`
+边界：`README/human/说明/03-字幕与配乐.md`
 
 ## 旁白与字幕对齐（BootStrap 默认）
 

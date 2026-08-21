@@ -1,6 +1,6 @@
 # 03 — 并行耗时与 Agnes 限流分析（llm-explainer-30s）
 
-> 归属：[README/错误处理](./README.md)  
+> 归属：[README/human/错误处理](./README.md)  
 > 关联条目：[01-错误集合.md](./01-错误集合.md) 编号 **7、8**  
 > 案例项目：`projects/llm-explainer-30s/`  
 > 日期：2026-07-22

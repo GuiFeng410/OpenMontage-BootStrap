@@ -1,4 +1,4 @@
-# README/archive
+﻿# README/human/archive
 
 完整旧版仓库首页说明（上游长文），已从根目录移入此处，避免根目录过长。
 

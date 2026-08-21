@@ -1,4 +1,4 @@
----
+﻿---
 name: openmontage-bootstrap-01-installer
 description: >-
   BootStrap installer/updater: after user confirms each step, the agent may
@@ -43,7 +43,7 @@ metadata:
 3. 安装/更新默认目标：**5 个 MCP 一并注册可启动** + **6 个 Skill 一并启用** + 闭环检查通过。  
 4. **付费 Key / Stock Key 安装时不必填。** 已注册即可；没 Key 则后续**不调用**对应能力（轻度零 Key 仍可出片）。  
 5. Key 引导：请用户先看 `<TARGET>/.env-example.md` 分类填写，再写入真实配置（仓库 `.env` 和/或各 MCP 的 `env`）。**中度**用 Stock 时再填 Pexels/Pixabay；**重度**出片前再填视频渠 Key；付费 TTS/生图按需。  
-6. 口述与代操作时用真实路径替换 `<TARGET>`、`<PROJECTS_DIR>`；MCP 模板优先从 `<TARGET>/README/配置/templates/` 复制。  
+6. 口述与代操作时用真实路径替换 `<TARGET>`、`<PROJECTS_DIR>`；MCP 模板优先从 `<TARGET>/README/human/配置/templates/` 复制。  
 7. 仓内 Skill 靠 extraDirs 三条（`skills/bootstrap` · `skills/providers` · `skills/production`）加载；**若 installer 使用了外置单独拷贝，更新后须再提醒同步。**
 
 ## 默认配齐清单
@@ -187,7 +187,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 ### D.2 五个默认 server
 
-模板目录：`<TARGET>/README/配置/templates/`
+模板目录：`<TARGET>/README/human/配置/templates/`
 
 | # | Server | 模板 | args |
 |---|--------|------|------|
@@ -296,5 +296,5 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 4. **未填 Key：禁止调用** Stock 下载与付费 generate。
 
 操作索引：`<TARGET>/README/00-INDEX.md`  
-模板：`<TARGET>/README/配置/templates/`  
+模板：`<TARGET>/README/human/配置/templates/`  
 Key 白话说明：`<TARGET>/.env-example.md`

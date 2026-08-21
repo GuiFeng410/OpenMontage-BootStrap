@@ -32,8 +32,8 @@ metadata:
 **做：** 捕获 stderr → 分类 playbook → 计划 → **自动执行安全修复**（≤3 次）→ 用户确认后零 Key 合成 BGM → 提示重试原工具。  
 **不做：** 静默付费 API；静默覆盖 `final.mp4`；未知错误乱修。
 
-来源：`README/错误处理/01-错误集合.md`  
-说明：`README/错误处理/02-playbook说明.md`  
+来源：`README/human/错误处理/01-错误集合.md`  
+说明：`README/human/错误处理/02-playbook说明.md`  
 Playbook：`src/openmontage/mcp/common/error_playbooks.yaml`
 
 ## Required MCP

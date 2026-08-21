@@ -1,4 +1,4 @@
-# OpenMontage - Agent Guide
+﻿# OpenMontage - Agent Guide
 
 Start here. This is the complete operating guide and agent contract for **OpenMontage-BootStrap** (this fork) and the underlying OpenMontage pipeline system.
 
@@ -25,7 +25,7 @@ This repository is **OpenMontage-BootStrap**, not a bare upstream clone. Daily w
 | **Python 包** | `src/openmontage/`；命令仍 `python -m openmontage.mcp.*`（仓根 `openmontage/` 仅为加载器 shim）。内核 `src/openmontage/lib/`（仓根 `lib/` 为 shim；`from lib.…` 不变） |
 | **本机会话** | 新对话先读 `Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md` → 同目录日期最新长篇交接（**Agent-\* 本机区，gitignore，勿主动提交**；遗留镜像仍在 `docs/会话交接/`） |
 
-操作细节以 Skill 正文为准；`README/说明/` 是人读入口。
+操作细节以 Skill 正文为准；`README/human/说明/` 是人读入口。
 
 ### Seven BootStrap Skills（01–07）
 

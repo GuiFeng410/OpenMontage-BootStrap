@@ -1,4 +1,4 @@
----
+﻿---
 name: openmontage-bootstrap-04-produce
 description: >-
   BootStrap produce (04): after 03-usercheck locks theme/tier/table-2/video_plan,
@@ -315,7 +315,7 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 | **中度** | Stock 或自带（看 `medium_source`） | **可选后置**；不挡出片 |
 | **重度** | 付费 AI 视频（锁定渠模）+ `video_plan` 分段 | **可选后置**；付费 TTS **非**出片前置条件 |
 
-用户可读能力说明：`README/说明/02-免费与收费能力.md`（若与本 Skill「旁白后置」冲突，**以本 Skill 为准**）。
+用户可读能力说明：`README/human/说明/02-免费与收费能力.md`（若与本 Skill「旁白后置」冲突，**以本 Skill 为准**）。
 
 ### 开场锁定复查（替代旧「选档关卡」）
 
@@ -515,7 +515,7 @@ assets_gate=completed + unified matrix 复核 → 开烧确认 → 试片关(B1)
 
 **字幕 / BGM：** Skill `openmontage-bootstrap-05-captions-music` — **可后置**。  
 用户只要画面成片时：可先 `produce_compose_*` 出片，再回头补字幕/BGM。  
-需要文稿→字幕、BGM 登记、混音时再走 05。详见 `README/说明/03-字幕与配乐.md`。
+需要文稿→字幕、BGM 登记、混音时再走 05。详见 `README/human/说明/03-字幕与配乐.md`。
 
 也可直接：
 
@@ -577,5 +577,5 @@ assets_gate=completed → unified matrix 复查 → 开烧确认
 
 ## Related
 
-- `README/说明/02-免费与收费能力.md`  
+- `README/human/说明/02-免费与收费能力.md`  
 - `openmontage-animated-explainer` / `openmontage-production-contract`（若已加载）

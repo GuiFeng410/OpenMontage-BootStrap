@@ -1,4 +1,4 @@
----
+﻿---
 name: openmontage-providers-stock
 description: >-
   Drive free Pexels/Pixabay stock search and download via openmontage-providers-stock
@@ -41,7 +41,7 @@ metadata:
 ## Required MCP
 
 `openmontage-providers-stock` — `python -m openmontage.mcp.providers_stock`  
-模板：`README/配置/templates/providers-stock.mcp.json`
+模板：`README/human/配置/templates/providers-stock.mcp.json`
 
 ## Hard protocol
 
