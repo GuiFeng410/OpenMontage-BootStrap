@@ -6,16 +6,14 @@ alwaysApply: true
 
 # OpenMontage
 
-MANDATORY: Read `AGENT_GUIDE.md` before responding to ANY user message.
+MANDATORY 读序：`AGENTS.md` → 短版 `AGENT_GUIDE.md` → 当前步 BootStrap Skill。  
+上游 YAML / atelier 见 `AGENT_GUIDE-upstream.md`（默认不读）。
 
-Do not act on the user's request until you have read AGENT_GUIDE.md.
-It contains routing rules that determine your first action based on what the user asked.
-Skipping it WILL cause you to take the wrong action.
-
-There are no instructions in this file. All instructions are in AGENT_GUIDE.md.
+Do not act until you have read the doorway (`AGENTS.md`) and the short contract relevant to the request.
+Skipping the read order WILL cause the wrong channel (board vs chat) or install path.
 
 ## Git push（Agent）
 
 - **双推** = `gitee` + `bootstrap` only.
 - **Never** `git push origin` (`origin` is upstream read-only).
-- Default `git push` → `gitee`. See **Git 推送** in `AGENT_GUIDE.md`.
+- Default `git push` → `gitee`. See **Git 推送** in `AGENT_GUIDE.md` §9.

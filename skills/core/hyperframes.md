@@ -67,7 +67,7 @@ are available on the machine, the proposal stage MUST:
 4. Log both in `options_considered` of a `render_runtime_selection`
    decision.
 
-See `AGENT_GUIDE.md` → "Present Both Composition Runtimes (HARD RULE)" for
+See `AGENT_GUIDE-upstream.md` → "Present Both Composition Runtimes (HARD RULE)" for
 the full contract and `skills/meta/reviewer.md` for the CRITICAL-finding
 enforcement.
 
@@ -78,7 +78,7 @@ cinematic teaser, hype edit, any brief whose promise depends on real motion),
 then the runtime chosen at proposal is a **commitment**, not a hint. Compose
 MUST NOT downgrade to FFmpeg Ken Burns. If the chosen runtime fails (Remotion
 not installed, `npx hyperframes doctor` reports a blocker), surface the blocker
-per `AGENT_GUIDE.md` > "Escalate Blockers Explicitly" and wait for user
+per `AGENT_GUIDE-upstream.md` > "Escalate Blockers Explicitly" and wait for user
 approval before switching runtime.
 
 ---
@@ -226,7 +226,7 @@ Floor requirements (all must hold for `runtime_available: true`):
 `bun` is NOT required — HyperFrames is consumable via `npx hyperframes` (published npm package name is `hyperframes`; the monorepo-internal `@hyperframes/cli` name is NOT on the public npm registry and returns 404).
 
 When `runtime_available: false`, preflight must surface the reason and the
-install instructions. Per `AGENT_GUIDE.md` Setup Offer Protocol, group the
+install instructions. Per `AGENT_GUIDE-upstream.md` Setup Offer Protocol, group the
 fix by effort:
 
 - Missing Node 22 → 5-minute install, explain what it unlocks

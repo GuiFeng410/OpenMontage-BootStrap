@@ -70,7 +70,7 @@ composition.
 **Do NOT pick a runtime during onboarding.** Runtime selection happens at
 the proposal stage, after the agent understands the brief. During
 onboarding you're reporting capabilities, not making production decisions.
-See `AGENT_GUIDE.md` → "Present Both Composition Runtimes (HARD RULE)".
+See `AGENT_GUIDE-upstream.md` → "Present Both Composition Runtimes (HARD RULE)".
 
 ### Step 3: Greet and Orient
 
@@ -155,7 +155,7 @@ After prompts, give a 2-3 sentence summary of what happens when they start:
 
 "When you give me a prompt, I'll first research the topic with live web searches, then present you with concept options and cost estimates. You pick your favorite, and I'll produce the video stage by stage — asking for your approval at each creative decision. The final video lands in `projects/<name>/renders/`."
 
-Do NOT explain the full architecture, three-layer knowledge system, or pipeline internals here. That's for the curious — point them to `AGENT_GUIDE.md` if they want to go deeper.
+Do NOT explain the full architecture, three-layer knowledge system, or pipeline internals here. That's for the curious — point them to `AGENTS.md` / `AGENT_GUIDE.md`, and `AGENT_GUIDE-upstream.md` for pipeline depth.
 
 ### Step 6: Handle Follow-Up Questions
 

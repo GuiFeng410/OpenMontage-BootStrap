@@ -20,7 +20,8 @@ Agent reads pipeline manifest (YAML) → reads stage director skill (MD)
 
 ## Source of Truth
 
-- **Agent guide & contract:** `AGENT_GUIDE.md` (tool inventory, pipeline selection, stage agents, protocols)
+- **Agent doorway / short contract:** `AGENTS.md` → `AGENT_GUIDE.md`（日常双通道）
+- **Upstream pipeline contract:** `AGENT_GUIDE-upstream.md`（tool inventory, pipeline selection, stage agents, protocols；默认不读）
 - **Skill index:** `skills/INDEX.md`
 - **Tool registry:** `tools/tool_registry.py`
 - **Pipeline manifests:** `product/pipelines/`

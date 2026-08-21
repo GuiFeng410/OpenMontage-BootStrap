@@ -1,6 +1,6 @@
 ﻿# OpenMontage â€" Skill Index
 
-> For the full agent onboarding guide, see [`AGENT_GUIDE.md`](../AGENT_GUIDE.md) in the project root.
+> For BootStrap doorway see [`AGENTS.md`](../AGENTS.md); short contract [`AGENT_GUIDE.md`](../AGENT_GUIDE.md); upstream [`AGENT_GUIDE-upstream.md`](../AGENT_GUIDE-upstream.md).
 
 This file lists all available Layer 2 skills and documents the 3-layer knowledge architecture.
 

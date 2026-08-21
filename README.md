@@ -7,7 +7,7 @@
 **主路径：`git clone` 本仓 + Agent 宿主**（Cursor / Claude 等）。注册门面 MCP 与 BootStrap Skill 后出片。
 
 - 人读操作说明：[`README/00-INDEX.md`](README/00-INDEX.md)（随仓库跟踪，clone 即有）
-- Agent 入口：[`AGENTS.md`](AGENTS.md) → 完整合同 [`AGENT_GUIDE.md`](AGENT_GUIDE.md)
+- Agent 入口：[`AGENTS.md`](AGENTS.md) → 短契约 [`AGENT_GUIDE.md`](AGENT_GUIDE.md) → 上游附录 [`AGENT_GUIDE-upstream.md`](AGENT_GUIDE-upstream.md)（按需）
 - 下载运行包 / 空目录装机验收：**样品与远期**，不是当前主交付
 
 ## 仓库镜像
@@ -33,7 +33,8 @@
 ## Agent / 架构文档（在 README/agent）
 
 - [`AGENTS.md`](AGENTS.md) — 机器短门（仓根）
-- [`AGENT_GUIDE.md`](AGENT_GUIDE.md) — 长合同（仓根）
+- [`AGENT_GUIDE.md`](AGENT_GUIDE.md) — 短版日常契约（仓根）
+- [`AGENT_GUIDE-upstream.md`](AGENT_GUIDE-upstream.md) — 上游 pipeline / atelier（按需）
 - [`README/agent/PROJECT_CONTEXT.md`](README/agent/PROJECT_CONTEXT.md) — 架构与约定
 - [`README/agent/PRODUCT_MAP.md`](README/agent/PRODUCT_MAP.md) — 目录阅读地图
 

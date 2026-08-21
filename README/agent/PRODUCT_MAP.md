@@ -8,8 +8,9 @@ OpenMontage-BootStrap 当前目录仍按历史路径放代码。本文件只做*
 open-montage-boot-strap/
 │
 ├─ 01-agent-entry/               Agent 入口与宿主约定
-│  ├─ AGENT_GUIDE.md
-│  ├─ AGENTS.md
+│  ├─ AGENTS.md                  门口读序 / 缺步 / 双通道一句
+│  ├─ AGENT_GUIDE.md             短版日常契约（中文）
+│  ├─ AGENT_GUIDE-upstream.md    上游 pipeline / atelier（按需）
 │  ├─ skills/bootstrap/          BootStrap 01–07（extraDirs #1）
 │  ├─ skills/providers/          付费 / Stock 执行 Skill（extraDirs #2）
 │  └─ skills/production/         路由、合同、L3、explainer、seedance（extraDirs #3）

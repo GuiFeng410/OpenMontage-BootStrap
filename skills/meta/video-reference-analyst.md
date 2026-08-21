@@ -133,7 +133,7 @@ Composition engine       Remotion: available        READY
 
 **Composition engine selection:** Remotion and HyperFrames are parallel, non-ranked
 composition runtimes — do NOT pre-lock either one here. When both are available, the
-"Present Both Composition Runtimes (HARD RULE)" gate in `AGENT_GUIDE.md` governs the
+"Present Both Composition Runtimes (HARD RULE)" gate in `AGENT_GUIDE-upstream.md` governs the
 choice: present both options to the user with tradeoffs at the proposal stage and wait
 for explicit approval before locking `render_runtime`. Silently picking a default is
 forbidden. FFmpeg is not a composition runtime in this flow — it is reserved for

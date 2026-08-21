@@ -10,7 +10,7 @@ Think of yourself as a creative agency pitching to a client: you present concept
 
 ## Runtime Selection (required field — `render_runtime`)
 
-Explainer proposals must lock **both** a `renderer_family` (creative grammar) and a `render_runtime` (technical engine). Read `skills/meta/animation-runtime-selector.md` for the decision matrix and `AGENT_GUIDE.md` → "Present Both Composition Runtimes (HARD RULE)" for the governance contract.
+Explainer proposals must lock **both** a `renderer_family` (creative grammar) and a `render_runtime` (technical engine). Read `skills/meta/animation-runtime-selector.md` for the decision matrix and `AGENT_GUIDE-upstream.md` → "Present Both Composition Runtimes (HARD RULE)" for the governance contract.
 
 **MANDATORY workflow — present both runtimes, don't silently default:**
 
@@ -109,7 +109,7 @@ Record:
 
 This directly affects what you can promise in the production plan. **Do not propose a concept that requires tools you don't have.**
 
-**Setup offers:** If critical tools are UNAVAILABLE but fixable with a simple configuration, read each tool's `install_instructions` from the registry and offer the user setup help before designing around the limitation. See AGENT_GUIDE.md "Provider Menu" protocol for the approach. Group related tools that share the same env var dependency.
+**Setup offers:** If critical tools are UNAVAILABLE but fixable with a simple configuration, read each tool's `install_instructions` from the registry and offer the user setup help before designing around the limitation. See AGENT_GUIDE-upstream.md "Provider Menu" protocol for the approach. Group related tools that share the same env var dependency.
 
 ### Step 2c: Mood Board (Before Concepts)
 
