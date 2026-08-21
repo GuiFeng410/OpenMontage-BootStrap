@@ -7,9 +7,9 @@ Tested prompts that produce impressive videos. Copy any prompt into your AI codi
 These render pre-built compositions using only Remotion components — animated charts, typography, data visualization. No external services, no cost, no waiting.
 
 ```bash
-make demo                         # Render all three demos
-./render-demo.sh world-in-numbers # Render one specific demo
-./render-demo.sh --list           # See all available demos
+make demo                                # Render all three demos
+./archive/render-demo.sh world-in-numbers # Render one specific demo
+./archive/render-demo.sh --list           # See all available demos
 ```
 
 | Demo | Duration | What It Shows |

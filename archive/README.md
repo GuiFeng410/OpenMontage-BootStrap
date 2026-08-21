@@ -7,5 +7,8 @@
 | `Commercial-Video/` | 仓根 | 商品片目录约定样例（多为占位） |
 | `reports/` | 仓根 | 早期电商执行/可行性报告 |
 | `错误收集.md` | 仓根 | 旧错误笔记；现行真源为 `Agent-Docs/Mistake_Collect/`（本机） |
+| `diagram.png` | 仓根 | 样例图（非生产依赖） |
+| `render_demo.py` | 仓根 | 零 Key Remotion 演示启动器；`make demo` 已改指向本路径 |
+| `render-demo.sh` | 仓根 | 同上 shell 入口 |
 
-需要时从本目录查阅；不要在生产代码里硬编码 `archive/` 路径。
+需要时从本目录查阅；不要在生产代码里硬编码 `archive/` 路径（演示入口除外）。

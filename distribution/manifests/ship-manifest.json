@@ -65,11 +65,11 @@
     "Makefile",
     ".github",
     "agnes_image.png",
-    "diagram.png",
+    "archive/diagram.png",
     "lark_auth_qrcode.png",
     "lark_auth_qrcode2.png",
-    "render_demo.py",
-    "render-demo.sh"
+    "archive/render_demo.py",
+    "archive/render-demo.sh"
   ],
   "remotion": {
     "root": "runtimes/remotion",
