@@ -1,10 +1,10 @@
 ﻿---
 name: openmontage-bootstrap-04-produce
 description: >-
-  BootStrap produce (04): after 03-usercheck locks theme/tier/table-2/video_plan,
-  run facade produce_* by locked tier. Does not re-present tier picker; tier
-  changes return to 03. Narration/BGM optional and deferred — must not block
-  picture/video deliverable.
+  BootStrap produce (04): after 03 locks brief + channel (board default /
+  chat-only), run facade produce_* by locked tier. Board: URL + intent/runner.
+  Chat-only: no board URL unless user later asks. Does not re-present tier
+  picker. Narration/BGM optional and deferred.
 metadata:
   openclaw:
     requires:
@@ -47,6 +47,17 @@ metadata:
 
 # OpenMontage BootStrap Produce（04）
 
+## 双通道（强制 · 与短 `AGENT_GUIDE` §2 / 03 一致）
+
+沿用 03 已锁通道（`board` / `chat`）。未记录时默认 **网站**。中途改口须用户确认。
+
+| 通道 | Agent 做什么 |
+|------|----------------|
+| **网站（默认）** | 给库页/项目 URL；面板 intent + runner；阶段句可提「请打开看板」；**不要把人赶回聊天走 04** |
+| **纯聊天** | **一律不要求、不提**看板 URL；不跑 `backlot open`（除非用户后来要开）；用 Grill / 检查点 + 同一套 `produce_*` 推进 |
+
+冲突裁决：本节优先于下文仍写「必须发 URL / 只读网页」的旧句。
+
 ## Scope
 
 统一入口出片：门面 `produce_*` + 按 **03 已锁定** 的档位执行 Stock / 付费视频等。  
@@ -64,28 +75,32 @@ metadata:
 
 **不做：** 代用户**首次**选档（选型在 03）；伪造 `approval_text`；静默调付费 API；静默换 provider / 视频渠道；无 03 简报时在本 Skill 内编造 `video_plan`。
 
-### 商品片只读看板交接（强制）
+### 商品片交接（按通道）
 
-商品片从 03 接收 `bootstrap-commercial` 的 `project_id` 和固定 Backlot 网址。进入 04 后：
+商品片从 03 接收 `bootstrap-commercial` 的 `project_id` 与通道。进入 04 后：
 
-1. 必须接收 03 初始化工具返回的实际 `project_id`。先调用 `produce_read_state` 核对管线。新会话先 `python -m backlot open` 打开**库页**（不起 runner），让用户点选「继续这个项目」再绑唯一 runner；不要假定续做上次、不要 `open <project_id>` 抢先开工。主动把**库页或该项目网址**发给用户，不创建第二个看板项目。聊天须含：`你可以查看该网址了解详细信息：{URL}`。进入 04 后**禁止重新调用 produce_init_project**；缺少项目 ID、状态或完整简报时退回 03，不得猜测新建或续作。已 `lifecycle_status=completed` 的项目不得续做。
-2. 每进入试片 / 分段 / 初稿 / 合成 / 交付阶段并写完对应 checkpoint 后，聊天固定一句：`已进入第 N 阶段：{中文名}。请打开看板查看最新证据（若未自动更新请刷新页面）。`
+1. 必须接收 03 初始化工具返回的实际 `project_id`。先调用 `produce_read_state` 核对管线。  
+   - **网站通道：** 新会话先 `python -m backlot open` 打开**库页**（不起 runner），让用户点选「继续这个项目」再绑唯一 runner；不要假定续做上次、不要 `open <project_id>` 抢先开工。主动把**库页或该项目网址**发给用户，不创建第二个看板项目。聊天须含：`你可以查看该网址了解详细信息：{URL}`。  
+   - **纯聊天：** 不跑 `backlot open`、**不提** URL；直接按 checkpoint / Grill 续作。  
+   进入 04 后**禁止重新调用 produce_init_project**；缺少项目 ID、状态或完整简报时退回 03，不得猜测新建或续作。已 `lifecycle_status=completed` 的项目不得续做。
+2. 每进入试片 / 分段 / 初稿 / 合成 / 交付阶段并写完对应 checkpoint 后：  
+   - **网站：** `已进入第 N 阶段：{中文名}。请打开看板查看最新证据（若未自动更新请刷新页面）。`  
+   - **纯聊天：** `已进入第 N 阶段：{中文名}。`（不提看板）
 3. 试片、专业批次、初稿和交付需要用户裁定时，先用 `produce_write_checkpoint` 写入当前阶段证据：`artifacts_json` 带阶段产物，`metadata_json` 带当前唯一决策、选项、推荐、回复示例和 `partial_progress`，`cost_snapshot_json` 带累计费用。
-4. 网页可用时，完整审查卡、候选、抽帧、费用明细放网页；聊天只发“网址或阶段句 + 当前一个问题 + 推荐 + 回复示例”。网页打不开时仍须先发出同一完整 URL，再退回完整 Grill 卡，流程继续。禁止用「看板暂不可用」代替发链接。
-5. 用户在聊天回复后，先 `produce_append_decision` 保存用户原话，再 `produce_approve_checkpoint`；审批调用默认合并当前 checkpoint，禁止以空 artifacts 覆盖证据。
-6. 网页点选只写 intent；浏览器不 apply、不读 `.env`、不调付费 API。本机 runner 按已锁简报执行（含开烧）。**主路径不要求用户回聊天走 04。** 极简：素材检查通过后生成正式段；交付页能看成片后再「结束并导出」。聊天出片时 Agent 读本 Skill、调同一套 `produce_*`。
+4. **网站且网页可用：** 完整审查卡、候选、抽帧、费用明细放网页；聊天只发“网址或阶段句 + 当前一个问题 + 推荐 + 回复示例”。网页打不开时仍须先发出同一完整 URL，再退回完整 Grill 卡，流程继续。禁止用「看板暂不可用」代替发链接。**纯聊天：** 直接完整 Grill，禁止发/提 URL。
+5. 用户在聊天回复后（纯聊天主路径，或网站退路），先 `produce_append_decision` 保存用户原话，再 `produce_approve_checkpoint`；审批调用默认合并当前 checkpoint，禁止以空 artifacts 覆盖证据。网站主路径以 runner 消费 intent 为准。
+6. 网页点选只写 intent；浏览器不 apply、不读 `.env`、不调付费 API。本机 runner 按已锁简报执行（含开烧）。**网站主路径不要求用户回聊天走 04。** 极简：素材检查通过后生成正式段；交付页能看成片后再「结束并导出」。纯聊天由 Agent 读本 Skill、调同一套 `produce_*`。
 
 ### 阶段封板（强制 · 与 03 同协议）
 
 进入下一阶段的聊天提示之前：
 
 1. 本阶段产物写入 checkpoint（合并，勿残缺覆盖）并落盘 `artifacts/*.json`
-2. 用户裁定类决定已 `produce_append_decision`
-3. 聊天先发：「{阶段中文名}证据已写入看板，请刷新核对后再继续。」
-4. 再发：「已进入第 N 阶段：…」
+2. 用户裁定类决定已 `produce_append_decision`（或网站通道 intent 已 apply 并记入 decision_log）
+3. **网站**聊天先发：「{阶段中文名}证据已写入看板，请刷新核对后再继续。」**纯聊天**：「{阶段中文名}证据已落盘，确认后再继续。」
+4. 再发阶段句（网站可含「请打开看板…」；纯聊天不含）
 
-试片/分段/初稿/交付同理；禁止只聊天宣布进入下阶段而面板仍空或缺上阶段已确认内容。
-
+试片/分段/初稿/交付同理；禁止只聊天宣布进入下阶段而证据未落盘。网站通道另禁止面板仍空或缺上阶段已确认内容。
 ### 七阶段证据写入契约（强制）
 
 `bootstrap-commercial` 的 Backlot 只读取项目内 checkpoint 与 `artifacts/*.json`。每阶段封板前，必须写入下表对应的**完整对象**；不得仅写最终 `final.mp4` 代替中间证据。
@@ -192,7 +207,7 @@ produce_list_intents
 
 ### 快速模式 v2（执行）
 
-`fast_track_v1` 项目继续走上一节冻结流程；只有最新合法 `approval_policy.selected="fast_track_v2"` 的项目走本循环。禁止把「直接出片」当审批证据；面板提交也只产生待确认 intent，网页只写 intent，不在浏览器 apply。本机 runner（随 `backlot open`）可 `produce_runner_tick` 代 plan/apply 并写下一网页停点或开始制作。成功后请用户留在本页：方案确认点「进入下一步」，素材检查点「开始出片」。不要说「回聊天继续出片」。聊天口令「确认面板选择」仍是退路。
+`fast_track_v1` 项目继续走上一节冻结流程；只有最新合法 `approval_policy.selected="fast_track_v2"` 的项目走本循环。禁止把「直接出片」当审批证据；**网站通道**面板提交也只产生待确认 intent，网页只写 intent，不在浏览器 apply。本机 runner（随 `backlot open`）可 `produce_runner_tick` 代 plan/apply 并写下一网页停点或开始制作。成功后请用户留在本页：方案确认点「进入下一步」，素材检查点「开始出片」。不要说「回聊天继续出片」。聊天口令「确认面板选择」仍是退路。**纯聊天**无面板；用 Grill / 口令路径推进同一套 evaluate，且不提看板。
 
 ```text
 produce_plan_approval_bundle
@@ -201,12 +216,12 @@ produce_plan_approval_bundle
 → loop:
     produce_fast_track_evaluate
     continue → 现有 produce_* 下一阶段
-    pause → 看板展示问题；聊天也可答
-    signoff_ready → 提示刷新看板签收（不算项目结束）
-结束导出：看板「结束并导出项目」或聊天「结束导出」→ produce_apply_project_export
+    pause → 网站：看板展示问题；纯聊天：Grill 一问；聊天也可答
+    signoff_ready → 网站：提示刷新看板签收；纯聊天：聊天签收（不算项目结束）
+结束导出：网站看板「结束并导出项目」或两通道聊天「结束导出」→ produce_apply_project_export
 ```
 
-口令/plan/apply 只用于尚无合法授权的入口。若 03 已完成 list→plan→apply、intent 已 apply，或 `approval_policy` 已是 `selected=fast_track_v2`，04 跳过 plan/apply，从 produce_fast_track_evaluate 开始；此时待确认列表为空是正常状态，不得退回 Grill。
+口令/plan/apply 只用于尚无合法授权的入口（网站面板 / 聊天退路）。若 03 已完成 list→plan→apply、intent 已 apply，或 `approval_policy` 已是 `selected=fast_track_v2`，04 跳过 plan/apply，从 produce_fast_track_evaluate 开始；此时待确认列表为空是正常状态，不得退回 Grill。
 
 执行硬规则：
 
@@ -214,9 +229,9 @@ produce_plan_approval_bundle
 2. evaluate 返回 `pause` 时禁止继续付费调用、禁止付费 generate。必须先调用 `produce_write_checkpoint`，用 `metadata_json` **只 patch** `fast_track_pause`（含 `reason_code`、`friendly_zh`、`current_question`）；禁止传入空 artifacts 覆盖已有产物。然后再聊天一次只问一个问题，优先直接使用 evaluate 返回的 `friendly_zh` + `current_question`。
 3. 生成图即使处于 v2 也必须经过 `generated_image_review` 用户批量审图；不得把 approval bundle 当成审图批准。
 4. `sample_review` 对 `fast_track_v2` 按 evaluate 决定，QA 通过且无暂停理由时可以 `continue`；v1 的“试片必须停”只属于 `fast_track_v1`。
-5. `delivery_signoff` 只能进入 `signoff_ready`，提示用户刷新看板签收，禁止自动完成。终稿尚未就绪时返回的 `missing_field` 是暂停证据；不得把它理解成「schema 缺字段」以外的放行理由。
-6. 自动重试最多 1 次，且沿用已冻结渠道/模型；禁止静默换渠道、换模型。禁止在聊天循环里偷偷起 daemon。只允许随 `python -m backlot open` 一起启动的本机 runner（看得见、可停），且不静默付费、不静默换渠。
-7. 仅口令/plan/apply 入口：无合法待确认 interaction intent / bundle（列表为空、plan 失败、revision drift、intent expired）时不得 apply，退回 03 的完整 Grill 确认卡。若已是 `selected=fast_track_v2` 或 intent 已 apply，跳过 plan/apply，从 produce_fast_track_evaluate 开始。历史 v1 决定不改写、不迁移。
+5. `delivery_signoff` 只能进入 `signoff_ready`：**网站**提示刷新看板签收；**纯聊天**在聊天做签收；禁止自动完成。终稿尚未就绪时返回的 `missing_field` 是暂停证据；不得把它理解成「schema 缺字段」以外的放行理由。
+6. 自动重试最多 1 次，且沿用已冻结渠道/模型；禁止静默换渠道、换模型。禁止在聊天循环里偷偷起 daemon。**网站通道**只允许随 `python -m backlot open` 一起启动的本机 runner（看得见、可停）。**纯聊天**由 Agent 显式调用 `produce_*`，同样不静默付费、不静默换渠。
+7. 仅口令/plan/apply 入口：无合法待确认 interaction intent / bundle（列表为空、plan 失败、revision drift、intent expired）时不得 apply，退回 03 的完整 Grill 确认卡。若已是 `selected=fast_track_v2` 或 intent 已 apply，跳过 plan/apply，从 produce_fast_track_evaluate 开始。历史 v1 决定不改写、不迁移。**纯聊天**无 intent 时走 Grill，不因此要求开看板。
 
 ### 付费 AI 镜提示词：Skill 引用与面板递进（强制）
 
@@ -415,7 +430,7 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 附：动态秒数摘要 + **§0.3 费用卡**（USD 账本 + CNY 展示分项合计）。
 未通过 → **不得**宣称达标。
 
-试片/初稿请用户裁定时，使用 03 Skill 的 **Grill 确认卡**信息结构。商品片只读网页可用时，完整结构放网页，聊天只保留网址、当前问题、推荐和示例回复；网页不可用时才在聊天展开完整卡。
+试片/初稿请用户裁定时，使用 03 Skill 的 **Grill 确认卡**信息结构。**网站通道且**商品片网页可用时，完整结构放网页，聊天只保留网址、当前问题、推荐和示例回复；网页不可用或**纯聊天**时在聊天展开完整卡（纯聊天不提网址）。
 
 ## Hard protocol（主流程）
 
@@ -423,7 +438,7 @@ Pixverse 每次调用须显式传 `quality` 与 `generate_audio_switch`（从简
 
 0. 无已确认简报，或商品片 `assets_gate` 不为 `completed` → **先交接 03**（默认电商入口 → 素材闭环）。
 1. 重算 unified matrix 后做锁定复查（见上）；`approval_text` 用用户原话。
-2. 复用 03 返回的项目与网址，禁止重新初始化。商品片固定 `pipeline_type=bootstrap-commercial`。若简报阶段未建项目，先交回 03 以 `mode=create_new` 或经用户明确确认后的 `mode=resume` 初始化。
+2. 复用 03 返回的项目与通道；**网站通道**复用网址，**纯聊天**不提网址。禁止重新初始化。商品片固定 `pipeline_type=bootstrap-commercial`。若简报阶段未建项目，先交回 03 以 `mode=create_new` 或经用户明确确认后的 `mode=resume` 初始化。
 3. 核对 / 写入 `production_profile`（简报已写则可跳过或核对）：
 
 ```text
@@ -555,7 +570,7 @@ assets_gate=completed + unified matrix 复核 → 开烧确认 → 试片关(B1)
 
 若缺少已确认的 `asset_precheck`、覆盖矩阵、用户分类/复用/审图决定或 `assets_gate=completed`，**退回** `03-usercheck` 走 `references/asset-preprocess-gate.md`。禁止在本 Skill 内猜类、静默补图、静默复用、静默降级或用未批准图开烧。
 
-写付费 AI 动态段提示词时，**必须先读** `openmontage-seedance-prompt`，全文写入面板证据，聊天只摘要确认（见 04「付费 AI 镜提示词」节）。再读：
+写付费 AI 动态段提示词时，**必须先读** `openmontage-seedance-prompt`；**网站通道**全文写入面板证据、聊天只摘要确认；**纯聊天**用 Grill 摘要确认（可附全文或可折叠长文，不提看板）。见 04「付费 AI 镜提示词」节。再读：
 
 - `commercial-prompt-lexicon.md`
 - `product-prompt-template.md`

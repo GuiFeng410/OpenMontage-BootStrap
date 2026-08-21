@@ -2,9 +2,10 @@
 name: openmontage-bootstrap-03-usercheck
 description: >-
   BootStrap brief before produce: default ecommerce commercial after key scan;
-  light Demo only if the user explicitly asks (or chooses the no-key fallback).
-  Theme clear → init + Backlot URL; ask one missing field. Tables 1–3 remain
-  internal field packs. Writes production_profile + artifacts, hands off to produce.
+  lock board (default) vs chat-only channel; light Demo only if user asks.
+  Theme clear → init; board channel gives Backlot URL, chat-only never
+  mentions board unless user later asks. Tables 1–3 remain internal field packs.
+  Writes production_profile + artifacts, hands off to produce.
 metadata:
   openclaw:
     requires:
@@ -37,9 +38,20 @@ metadata:
 
 # openmontage-bootstrap-03-usercheck（成片简报 · 用户确认）
 
+## 双通道（强制 · 与短 `AGENT_GUIDE` §2 一致）
+
+通道在 03 开口时锁定，写入简报 / `decision_log`（建议 `category=channel_selection`，`selected=board|chat`）；中途改口须用户确认后再改。
+
+| 通道 | 何时 | Agent 做什么 |
+|------|------|----------------|
+| **网站（默认）** | 电商 / 模糊「做个视频」、用户未声明只要聊天 | init 后 `backlot open`；**必须**发完整 URL；面板 intent + runner；聊天一次一项作退路 |
+| **纯聊天** | 用户明确「只要聊天 / 不要看板 / 纯对话出片」等 | **一律不要求、不提**看板 URL；不跑 `backlot open`（除非用户后来主动要开）；用完整 Grill / 检查点推进；证据仍落盘 `projects/<id>/` |
+
+**冲突裁决：** 本节通道规则优先于下文仍带「强制发 URL / 网页只读、决定必须回聊天」的旧句。下文「商品片看板…」**仅网站通道**适用；纯聊天跳过开板与 URL 话术，改走 Grill。用户后来在纯聊天说「打开看板 / 给我网址」→ 再 `backlot open` 并发 URL，并记通道切换。
+
 ## Scope
 
-**做：** 环境就绪后先扫视频 Key，默认电商宣传片。主题说清则 init 项目并立刻给 Backlot 网址；缺时长/图/预算再问一句。需求不清时再对齐主题与档位，再按档细化，再确认分段规划（商品片落在 Backlot「方案确认 / 素材检查」，见「商品片 ↔ 七阶段」；对用户不必死叫表 1/2/3）。表 3 前先输出 `beat × 所需画面 × 候选图片` 覆盖矩阵，表 3 确认后在 `assets_gate` 关闭补传/I2I/复用/降级与审图子闸。完整分析与选项放网页，聊天一次只问当前一项。网页主路径：素材检查通过后由本机 runner 按已锁简报开烧，**不要把人从看板赶回聊天走 04**。用户主动在聊天出片时，才在 `assets_gate=completed` 后读 `04-produce`。
+**做：** 环境就绪后先扫视频 Key，默认电商宣传片，并定通道（默认网站）。主题说清则 init 项目；**网站通道**立刻给 Backlot 网址，**纯聊天不提网址**。缺时长/图/预算再问一句。需求不清时再对齐主题与档位，再按档细化，再确认分段规划（商品片网站通道落在 Backlot「方案确认 / 素材检查」，见「商品片 ↔ 七阶段」；对用户不必死叫表 1/2/3）。表 3 前先输出 `beat × 所需画面 × 候选图片` 覆盖矩阵，表 3 确认后在 `assets_gate` 关闭补传/I2I/复用/降级与审图子闸。网站通道：完整分析放网页，聊天一次只问当前一项；素材检查通过后由本机 runner 按已锁简报开烧，**不要把人从看板赶回聊天走 04**。纯聊天：全程 Grill，`assets_gate=completed` 后交接 `04-produce`（聊天路径）。
 
 **不做：** 未明确要求时先推荐轻度 Demo；跳过确认直接 compose；三张表堆在同一条消息；静默填 Key / 调 Stock / 付费 API；伪造用户原话；有视频 Key 就自动开烧；静默换视频渠道；轻度/中度出示付费视频渠模表；表 3 强塞全文旁白；商品片（含重度商品）跳过 `references/product-prompt-template.md` 或 `references/asset-preprocess-gate.md`；以“总张数够”代替 Beat 覆盖；缺图时静默图生图、静默复用或静默硬烧佩戴支；把 Pixverse/video provider 当生图 provider；把未 approved 候选交给 04。
 
@@ -63,7 +75,7 @@ metadata:
 
 ```text
 【装机层】① installer + ② setup     → 仓 / MCP / 依赖 / verify_ready
-【出片主链】③ usercheck + ④ produce  → 默认电商（扫 Key → 给网址 → 缺啥问一句）→ 项目里出片
+【出片主链】③ usercheck + ④ produce  → 默认电商（扫 Key → 定通道 → 网站给网址 / 纯聊天不提板 → 缺啥问一句）→ 项目里出片
 【补充层】⑤ 字幕配乐  ⑥ Key 引导  ⑦ 出错修复（按需）
 ```
 
@@ -71,7 +83,7 @@ metadata:
 
 ### 缺步路由（Agent 内部 · 按序检查）
 
-**开口前先 `read_install_state`。** 文件在仓根 `.openmontage/install-state.json`（见 `AGENTS.md`）。以 `verify_ready` 判断是否第一次/环境是否已过；再 `scan_video_keys` 并以当场扫描为准。禁止：已就绪还走安装话术；未就绪就进表 1 或假装网页能创建；就绪了却不给看板网址。
+**开口前先 `read_install_state`。** 文件在仓根 `.openmontage/install-state.json`（见 `AGENTS.md`）。以 `verify_ready` 判断是否第一次/环境是否已过；再 `scan_video_keys` 并以当场扫描为准。禁止：已就绪还走安装话术；未就绪就进表 1 或假装网页能创建；**网站通道**就绪却不给看板网址；**纯聊天通道**却强推/提及看板。
 
 | 检查 | 未满足时 | 交接 Skill | 对用户一句话 |
 |------|----------|------------|--------------|
@@ -92,7 +104,7 @@ metadata:
 当安装闭环已通过且 `verify_ready` 为真（或等价 ready），用户说「生成视频」类话术时：
 
 **0. 开口前先读状态文件再扫 Key（强制）**  
-先 `read_install_state`。若 `verify_ready` 已为真：**禁止**再走 01 安装话术，**必须**继续给看板网址（用户也可在库页点「开始创建项目」）。若文件不存在：先看 `projects/` 或返回里的 `existing_project_count`——有项目就视为已下载使用过，禁止再 `clone_repo`，刷新快照后若 `verify_ready` 仍假则走 02。无文件且无项目才交接 01。
+先 `read_install_state`。若 `verify_ready` 已为真：**禁止**再走 01 安装话术。**网站通道**必须继续给看板网址（用户也可在库页点「开始创建项目」）；**纯聊天**继续扫 Key / 锁简报，**不提**看板。若文件不存在：先看 `projects/` 或返回里的 `existing_project_count`——有项目就视为已下载使用过，禁止再 `clone_repo`，刷新快照后若 `verify_ready` 仍假则走 02。无文件且无项目才交接 01。
 
 然后调用 `scan_video_keys`（只读，**不返回 Key 值**），再 `snapshot_install_state`。以返回的 `video_key_present` 为准。可对照 `read_install_state`，仍以当场扫描为准。只认 `README/human/配置/.env-example.md`「视频生成专项」里的 KEY/TOKEN/SECRET 变量名，检查仓根 `.env` 与当前 MCP 进程环境。空 Key 禁止付费 generate。
 
@@ -102,17 +114,22 @@ metadata:
 **A. 尚无锁定简报（首次 / 新会话）→ 默认电商宣传片**  
 禁止先推荐轻度 Demo。仅当用户明确说「讲解 / Demo / 轻度短片 / 先试流程」，或无 Key 且选了免费轻度，才走「首次 Demo 引导」。
 
-主题已说清（商品 + 用途，或图文件夹等）→ 直接 `bootstrap-commercial`：`produce_init_project(create_new)`、立刻 `backlot open`、聊天必须出现 `你可以查看该网址了解详细信息：{URL}`；缺时长 / 图 / 预算再问**一句**；不推轻度、不把表 1–3 一次丢进聊天。整片时长上限 **75s**（不是单段；单段仍按渠道切，如 Pixverse ~5s）。字幕/BGM 开头不单独问，看板上标可选可后补。
+主题已说清（商品 + 用途，或图文件夹等）→ 直接 `bootstrap-commercial`：`produce_init_project(create_new)`；**网站通道**立刻 `backlot open`、聊天必须出现 `你可以查看该网址了解详细信息：{URL}`；**纯聊天**跳过 `backlot open` 与 URL 句。缺时长 / 图 / 预算再问**一句**；不推轻度、不把表 1–3 一次丢进聊天。整片时长上限 **75s**（不是单段；单段仍按渠道切，如 Pixverse ~5s）。字幕/BGM 开头不单独问；网站通道可在看板上标可选可后补，纯聊天不提看板。
 
-**结束导出：** 看板按钮「结束并导出项目」只写 `project_export` intent；聊天备选口令精确为 `结束导出`。本机（runner 或 `produce_apply_project_export`）把 `renders/final.mp4` 拷到该项目 `exports/`，`project.json` 写 `lifecycle_status=completed`。没有成片则提示，不静默标完成。画面签收、补字幕、再出片都不算结束。已结束后不要自动对该项目 `resume`；换商品/换主题用 `create_new`。
+**结束导出：** 网站通道看板按钮「结束并导出项目」只写 `project_export` intent；两通道聊天备选口令精确为 `结束导出`。本机（runner 或 `produce_apply_project_export`）把 `renders/final.mp4` 拷到该项目 `exports/`，`project.json` 写 `lifecycle_status=completed`。没有成片则提示，不静默标完成。画面签收、补字幕、再出片都不算结束。已结束后不要自动对该项目 `resume`；换商品/换主题用 `create_new`。
 
-示例接话（有主题、有 Key）：
+示例接话（有主题、有 Key · **网站通道**）：
 
 > **可以开始出电商宣传片了。** 环境已就绪；已检测到可用视频 Key。  
 > 你可以查看该网址了解详细信息：{URL}  
 > （若缺一项）还差：时长 / 图片位置 / 实验预算，请回这一项。
 
-**B. 用户明确要求轻度 / Demo，或无 Key 选了免费轻度** → 读 `references/first-run-demo.md`，出 Demo 确认卡；确认后同样必须开板并发完整 URL。
+示例接话（有主题、有 Key · **纯聊天**）：
+
+> **可以开始出电商宣传片了。** 环境已就绪；已检测到可用视频 Key。按你的要求只在聊天推进，不打开看板。  
+> （若缺一项）还差：时长 / 图片位置 / 实验预算，请回这一项。
+
+**B. 用户明确要求轻度 / Demo，或无 Key 选了免费轻度** → 读 `references/first-run-demo.md`，出 Demo 确认卡；确认后：**网站通道**必须开板并发完整 URL；**纯聊天**不提看板。
 
 **C. 已有部分简报** → 说明卡在哪一步，只补未确认项，勿三张重头来（除非用户说改档或重来）。
 
@@ -131,7 +148,7 @@ metadata:
 | 主题 | 预设（见 reference）或 AI 现拟同结构 |
 | 旁白/BGM | 可后置 |
 
-3. 用户确认「按推荐开始 / 用 10s / …」后：按 reference 写入 `production_tier=light`、`light_presentation`、`duration_seconds`、`video_plan` 等；立刻 `backlot open` 并发完整 URL → 交接 **04-produce**。  
+3. 用户确认「按推荐开始 / 用 10s / …」后：按 reference 写入 `production_tier=light`、`light_presentation`、`duration_seconds`、`video_plan` 等；**网站通道**立刻 `backlot open` 并发完整 URL；**纯聊天**不提看板 → 交接 **04-produce**。  
 4. Remotion 样板反推：`projects/remotion-light-showcase/`（成片 `renders/showcase-60s.mp4`）。  
 5. HyperFrames 样板反推：`projects/hyperframes-jewelry-demo/`（成片 `renders/hyperframes_jewelry_20s.mp4`）。
 
@@ -139,17 +156,19 @@ metadata:
 
 | 步骤 | 何时出示 | 同一条消息？ |
 |------|----------|--------------|
-| **消息 0 · 扫 Key + 网址** | 首次且无锁定简报、默认电商 | 告知 Key 有/无；init 后必须发完整 URL；缺时长/图/预算只问一句 |
+| **消息 0 · 扫 Key + 通道** | 首次且无锁定简报、默认电商 | 告知 Key 有/无；定通道；**网站** init 后必须发完整 URL，**纯聊天**不提板；缺时长/图/预算只问一句 |
 | **消息 0b · Demo 确认卡** | **仅**用户明确要轻度/Demo，或无 Key 且选了免费轻度 | 仅确认卡（+ 短脚注）；**不要**同时堆表 1–3 |
-| **消息 1 · 表 1** | 电商路径上，仅当主题/档位仍缺且无法从原话锁定；完整字段写入网页 | 聊天不甩整张表 1 |
-| **消息 2 · 表 2** | 表 1 字段已确认档位后 | 仅表 2（按档分支 2.1 / 2.2 / 2.3）；网页可用时聊天只问当前一项 |
+| **消息 1 · 表 1** | 电商路径上，仅当主题/档位仍缺且无法从原话锁定；完整字段写入网页（网站）或 Grill（纯聊天） | 聊天不甩整张表 1 |
+| **消息 2 · 表 2** | 表 1 字段已确认档位后 | 仅表 2（按档分支 2.1 / 2.2 / 2.3）；网站网页可用时聊天只问当前一项 |
 | **消息 3 · 表 3** | 表 2 已确认后；**三档都出** | 仅表 3；「确认规划」后才可交接 produce |
 
 禁止把表 1 + 表 2 + 表 3 堆在同一条回复里。Demo 确认卡确认后**不必**再走完整三表（已写入等价锁定字段）。
 
-## 商品片：看板点选 + 聊天退路（强制）
+## 商品片：网站通道看板 + 纯聊天 Grill（强制）
 
 适用：商品宣传、种草、详情展示、产品佩戴演示等进入 `bootstrap-commercial` 的任务。非商品片继续使用下文完整 Grill 卡。
+
+**先定通道：** 未声明 → 网站；明确只要聊天 → 纯聊天（本节步骤 2–5 的 URL / 开板话术全部跳过，改用完整 Grill；步骤 1 的 init / 落盘仍要做）。
 
 1. 环境已 `verify_ready`，且已获得最基本的商品主题后，在**表 1 前**先判定项目模式：
    - **默认新建独立项目**。只要用户没有明确说“继续 / 修改某个旧项目”，都按新项目处理；引用旧图片不等于续作。
@@ -173,13 +192,13 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 ```
 
    该工具只复制 `assets/images/` 中列出的图片，不复制 checkpoint、旧视频、旧渲染或其它 artifact。禁止用目录整体复制代替。
-2. 立即运行 `python -m backlot open <project_id>`，其中 `<project_id>` 必须是初始化工具返回的实际 ID。把命令输出的完整项目网址主动发给用户；03→04 全程复用同一网址。**无论 open 成功或超时，聊天都必须发出完整 URL**（见下条固定话术）。禁止用「看板暂不可用」「网址打不开」代替发链接。开板失败不得判为出片失败，简报与 produce 继续；看板不可用时后续决策改用完整 Grill 卡。
-3. **网址强制话术（首次决策前必发，禁止等用户追问）：** 在三点卡 / 表 1 等任何确认问题之前，聊天必须先出现固定句式：  
+2. **（仅网站通道）** 立即运行 `python -m backlot open <project_id>`，其中 `<project_id>` 必须是初始化工具返回的实际 ID。把命令输出的完整项目网址主动发给用户；03→04 全程复用同一网址。**无论 open 成功或超时，聊天都必须发出完整 URL**（见下条固定话术）。禁止用「看板暂不可用」「网址打不开」代替发链接。开板失败不得判为出片失败，简报与 produce 继续；看板不可用时后续决策改用完整 Grill 卡。**纯聊天：跳过本步，禁止提及看板或 URL。**
+3. **网址强制话术（仅网站通道 · 首次决策前必发，禁止等用户追问）：** 在三点卡 / 表 1 等任何确认问题之前，聊天必须先出现固定句式：  
    `你可以查看该网址了解详细信息：{Backlot完整URL}`  
    之后每进入新阶段（写完该阶段 `in_progress` / `awaiting_human` checkpoint 后），再发：  
    `已进入第 N 阶段：{中文阶段名}。请打开看板查看最新证据（若未自动更新请刷新页面）。`  
-   不得假设用户已记住网址；不得只写 project_id 让用户自己拼链接。
-4. 网页可用时，每个中间决策先写 `brief_locked/in_progress`（素材缺口写 `assets_gate/in_progress`），并用 `metadata_json` 提供：
+   不得假设用户已记住网址；不得只写 project_id 让用户自己拼链接。**纯聊天：阶段推进用 Grill /「已进入第 N 阶段：…」但不提看板、不发 URL。**
+4. 网页可用时（网站通道），每个中间决策先写 `brief_locked/in_progress`（素材缺口写 `assets_gate/in_progress`），并用 `metadata_json` 提供：
 
 ```json
 {
@@ -201,9 +220,9 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
 }
 ```
 
-5. 此时聊天正文只保留：**项目网址（或「已进入第 N 阶段」句）+ 当前一个问题 + 推荐项 + 一条回复示例**。表 1/2/3 的完整分析仍须生成，但放入网页证据，不在聊天重复大表。若网页不可用，才使用下文完整 Grill 卡。
-6. 用户回复后，用 `produce_append_decision` 追加决定；`user_response_text` 必须是用户原话，修改既有选择时沿用相同 `category + subject`。随后刷新 checkpoint，清除旧的 `needs_user_decision`，再展示下一项。
-7. 表 3 完整产物就绪后，写 `brief_locked/awaiting_human`，其中必须带 `brief`、`asset_precheck`、`video_plan` 与 `segment_cards`（内联对象或项目内 JSON 路径）。`segment_cards` 必须含 `version`、正数 `duration_seconds`、非空 `overall_prompt_zh`，且每段都有 `beat`、`time`、`copy_plan_zh`、`shot_plan_zh`、`asset_plan_zh`。用户回复“确认规划”后用 `produce_approve_checkpoint` 完成阶段；审批必须保留原 artifacts、metadata 与费用。
+5. **网站通道**聊天正文只保留：**项目网址（或「已进入第 N 阶段」句）+ 当前一个问题 + 推荐项 + 一条回复示例**。表 1/2/3 的完整分析仍须生成，但放入网页证据，不在聊天重复大表。若网页不可用，才使用下文完整 Grill 卡。**纯聊天**直接用完整 Grill，不提网址。
+6. 用户回复后（或网站通道 runner 已消费面板 intent 后），用 `produce_append_decision` 追加决定；`user_response_text` 必须是用户原话（面板路径可用 intent 摘要等价记录），修改既有选择时沿用相同 `category + subject`。随后刷新 checkpoint，清除旧的 `needs_user_decision`，再展示下一项。
+7. 表 3 完整产物就绪后，写 `brief_locked/awaiting_human`，其中必须带 `brief`、`asset_precheck`、`video_plan` 与 `segment_cards`（内联对象或项目内 JSON 路径）。`segment_cards` 必须含 `version`、正数 `duration_seconds`、非空 `overall_prompt_zh`，且每段都有 `beat`、`time`、`copy_plan_zh`、`shot_plan_zh`、`asset_plan_zh`。用户回复“确认规划”（或网站通道面板等价确认）后用 `produce_approve_checkpoint` 完成阶段；审批必须保留原 artifacts、metadata 与费用。
 
 ### 阶段封板（强制 · 进入下一阶段提示之前）
 
@@ -220,18 +239,20 @@ produce_import_project_images(source_project_id, target_project_id, filenames_js
    - 另尽量带 asset_precheck；有识图则 asset_vision
 4) canonical artifact 与媒体路径均可读取后，才可 produce_approve_checkpoint / produce_write_checkpoint(status=completed 或 awaiting_human)
    → 工具会合并同阶段旧 artifacts，并落盘 artifacts/*.json
-5) 聊天先发封板句（禁止跳过）：
+5) **网站通道**聊天先发封板句（禁止跳过）：
    「方案确认阶段证据已写入看板（已确认决定 + 整体方案 + 分段规划）。请刷新面板核对；确认无误后再继续。」
-6) 用户有机会刷新后，再写下一阶段 in_progress 并发：
-   「已进入第 N 阶段：{中文名}。…」
-```
+   **纯聊天**改为：「方案确认阶段证据已落盘（已确认决定 + 整体方案 + 分段规划）。确认无误后继续。」
+6) 用户有机会核对后，再写下一阶段 in_progress；**网站通道**再发「已进入第 N 阶段：…请打开看板…」；**纯聊天**只发「已进入第 N 阶段：{中文名}。」（不提看板）```
 
 禁止：只在聊天复述方案却不写 `segment_cards` / `decision_log`；禁止用空或半截 `artifacts_json` 覆盖已有 brief/video_plan。  
 面板侧：后续阶段不常驻「方案摘要 / 已确认方案档案 / 已确认决定」；主栏只看本阶段短卡，历史在底栏折叠「回顾」。点顶栏「方案确认」可回看当时文案规划。
 
 商品片决定使用固定分类，禁止临时发明 category：主题/时长/渠道用 `brief_selection`，评审方式用 `review_mode_selection`，轻/中/重档用 `production_tier_selection`，候选策略用 `candidate_mode_selection`，运镜/AI 比例用 `motion_mix_selection`，素材取舍用 `asset_decision`，试片/初稿等阶段裁定用 `stage_review_decision`，最终交付确认用 `delivery_signoff`，全程审批策略用 `approval_policy`。
 
-**只读边界：** 网页不放审批按钮、不直接写 JSON、不唤醒 Agent。用户始终在聊天中作出决定，Agent 是唯一写入者。
+**写入边界（取代旧「网页只读、决定必须回聊天」）：**  
+- 浏览器仍不调付费 API、不读 `.env`、不直接 apply、不直接写 JSON。  
+- **网站通道：** 面板点选写 pending intent；本机 runner apply；聊天口令「确认面板选择」仅退路。Agent / runner 是唯一写入者。  
+- **纯聊天：** 用户在聊天作决定；Agent 写入；**不提**看板。
 
 ### 直接出片 / 快速模式 v1.0（冻结）
 
@@ -329,7 +350,7 @@ v2 仍遵守既有硬门：浏览器不调付费 API、聊天一次只问一个�
 
 ## Grill 确认卡（用户决策消息强制）
 
-凡需要用户**选择或确认**的节点（表 1、表 2.x、比例卡、表 3、试片/初稿裁定），默认对用户可见正文必须用下列结构，**禁止**只甩内部表格或「请确认表 N」而不列选项。唯一例外：商品片只读网页已正常打开时，完整结构写入网页，聊天按上节压缩为“网址 + 当前问题 + 推荐 + 回复示例”。
+凡需要用户**选择或确认**的节点（表 1、表 2.x、比例卡、表 3、试片/初稿裁定），默认对用户可见正文必须用下列结构，**禁止**只甩内部表格或「请确认表 N」而不列选项。唯一例外：**网站通道**且商品片网页已正常打开时，完整结构写入网页，聊天按上节压缩为“网址 + 当前问题 + 推荐 + 回复示例”。**纯聊天**始终用完整 Grill，不提网址。
 
 ```text
 请确认选择以下点
@@ -665,7 +686,7 @@ produce_set_production_profile(
 8. 按 `references/asset-preprocess-gate.md` 写 canonical `asset_ledger`，执行已批准的补传/I2I/显式复用/降级。I2I 必须先探测并锁定 provider/model，完整记录 `planned→generating→ready/review_pending→approved|rejected|failed`、`candidate_paths`、`retry_count`、`decision_id` 与真实 `output_path`；审图 decision 由工具写入当前文件 `asset_sha256`，同路径内容变化须重新审图。
 9. 对生成图执行用户审查：普通可批量确认，专业逐张确认，快速模式仍须确认。复用决定绑定当前 `project_id`、`stage=assets_gate`、精确 `asset_path + beat_ids` 与用户原话；未批准保持 `reuse_pending`。
 10. 重新计算 unified matrix。存在 `missing` / `orphan` / `reuse_pending` / `review_pending` / provider/model 缺失 / 文件缺失时，保持当前阶段并继续处理；全部关闭后才写 `assets_gate=completed`。
-11. 商品片调用 `python -m backlot open <project_id>` 复用原网址；向 04 交接 `project_id`、网址、已完成 checkpoint 与 canonical artifacts，不要求用户另开页面。
+11. **网站通道**调用 `python -m backlot open <project_id>` 复用原网址；向 04 交接 `project_id`、网址、通道=`board`、已完成 checkpoint 与 canonical artifacts。**纯聊天**向 04 交接 `project_id`、通道=`chat`、checkpoint 与 artifacts；**不提**网址、不要求开板。
 12. 仅在第 10 步成功后交接 **`openmontage-bootstrap-04-produce`**。字幕/BGM → `05-captions-music`（后置，不挡画面）；失败 → `07-error-handling`。
 
 **闸门：** 表 2 / 表 3 未确认或 `assets_gate` 未 `completed` 时，**禁止**交接 produce、禁止开始 sample 或任何视频生成。
@@ -720,7 +741,7 @@ produce_set_production_profile(
 - 方案确认页展示预检与 provisional matrix；表 3 仍不展示未生成媒体。
 - 素材检查页按 Beat 展示用户图、planned entries、候选与审图状态；只显示图片，不显示视频。
 - 生成文件真实落盘后才显示缩略图；`planned_output_path` 不能伪装实际文件。
-- 完整证据写入 `asset_precheck`、`asset_ledger`、`video_plan`、`segment_cards`、`decision_log`；用户在聊天决定，网页只读。
+- 完整证据写入 `asset_precheck`、`asset_ledger`、`video_plan`、`segment_cards`、`decision_log`。**网站通道：** 面板写 intent、runner apply；**纯聊天：** 用户在聊天决定。浏览器均不直接写盘 / 不调付费 API。
 
 ## 与其它 Skill
 
@@ -735,10 +756,10 @@ produce_set_production_profile(
 
 ## 成功标准
 
-- 用户说「生成视频」且环境已就绪、无锁定简报时：已调用 `scan_video_keys`（未打印 Key 值），**默认电商宣传片**；已发完整 Backlot URL；未明确要求时**未**先推轻度 Demo；评审默认普通，未推销专业  
+- 用户说「生成视频」且环境已就绪、无锁定简报时：已调用 `scan_video_keys`（未打印 Key 值），**默认电商宣传片**；已定通道（默认网站）；**网站通道**已发完整 Backlot URL，**纯聊天未提看板**；未明确要求时**未**先推轻度 Demo；评审默认普通，未推销专业  
 - 无 Key 时已告知有/无，并给出二选一（填 Key 或这次免费轻度）  
 - 主题已清时未把表 1–3 一次丢进聊天；缺时长/图/预算只问了一句；整片未超 75s  
-- 用户明确要求 Demo / 无 Key 选轻度后：已读 `references/first-run-demo.md`，确认卡后已开板给网址并交接 04，**未**静默开烧  
+- 用户明确要求 Demo / 无 Key 选轻度后：已读 `references/first-run-demo.md`，确认卡后**网站通道**已开板给网址并交接 04（纯聊天不提板），**未**静默开烧  
 - 缺步时已按「缺步路由」交接 01/02，未越级开烧  
 - 完整简报路径：用户确认过 **表 1**（主题 + 档位 + 时长；商品/重度含实验 API 预算默认 ¥8 且 ¥8+ 已主动询问；评审默认普通，未把专业当推荐）  
 - 按档确认过 **表 2**；轻度互斥单选（含 Remotion/HyperFrames，按可用性推荐）；中度遵守 Stock Key 闸门；重度遵守视频 Key 闸门与推荐规则  
