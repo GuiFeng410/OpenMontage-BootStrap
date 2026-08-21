@@ -4,6 +4,14 @@
 
 未读完不要动手。其中有路由规则：先走哪条 Skill、何时进 pipeline、Git 推送约定。跳过会导致装错环境或越级出片。
 
+## 交付方式（G6.1）
+
+**主路径：git 克隆本仓 + Agent 宿主协同**（Cursor / Claude 等读本文件与 `AGENT_GUIDE.md`，配 MCP + BootStrap Skill）。
+
+- 人读操作长文：[`README/00-INDEX.md`](README/00-INDEX.md)（仓内跟踪，随 clone 带走）
+- 本机草稿/私货：`Agent-ReadMe/`（gitignore，**不是**公开真源）
+- G4 `pack` / 下载运行包装机验收：**样品与远期**，不是当前主验收
+
 ## 本仓是什么
 
 本仓库是 **OpenMontage-BootStrap**（日常发布到 `gitee` + `bootstrap`），在上游 OpenMontage 之上叠了 **门面 MCP + BootStrap Skills**，让 Agent 用「安装 → 环境 → 简报 → 出片」闭环出片。上游完整 pipeline 规则仍在 `AGENT_GUIDE.md`，日常「做个视频」**优先走 BootStrap 七 Skill**，不要直接 improvise 调工具。
@@ -12,7 +20,7 @@
 
 1. [`AGENT_GUIDE.md`](AGENT_GUIDE.md)（总契约 + BootStrap 路由）
 2. 本地交接：`Agent-Docs/Phase/A_01-session-handoff/00-新对话请先读.md` → 同目录**日期最新**长篇交接（本机工作区，gitignore）
-3. 操作说明：[`Agent-ReadMe/00-INDEX.md`](Agent-ReadMe/00-INDEX.md)
+3. 人读操作：[`README/00-INDEX.md`](README/00-INDEX.md)；本机副本可选 [`Agent-ReadMe/00-INDEX.md`](Agent-ReadMe/00-INDEX.md)
 
 ## 本机工作区（name-to-workspace）
 
@@ -21,10 +29,11 @@
 | 目录 | 用途 | Git |
 |------|------|-----|
 | `Agent-Docs/` | 对话、要点、计划、阶段（套 **name-to-docs**：Goal/Plan/Phase/Platform…） | **默认不提交** |
-| `Agent-ReadMe/` | 中文人读说明（自 README + 新机导入三步副本） | **默认不提交** |
+| `Agent-ReadMe/` | 人读说明的**本机副本/草稿**；公开真源在仓内 `README/` | **默认不提交** |
 | `Agent-Temp/` | `mats/` 素材 · `results/` 产物 · `other/` 暂存 | **默认不提交** |
 
-- **之后读写以 Agent-\* 为主**；仓内 `docs/`、`README/` 为遗留人读快照。历史报告与样例目录已迁 `archive/`（G6.1），不进运行包 core。
+- 仓内 `README/` 为人读操作真源；`docs/` 为遗留快照。历史报告与演示已迁 `archive/`（G6.1）。
+- 仓根宿主文件（`CLAUDE.md` / `CURSOR.md` / `CODEX.md` / `COPILOT.md` / `PROJECT_CONTEXT.md` 等）**保留不搬**。
 - 未获用户明确要求时，禁止对 Agent-\* 做 `add` / `commit` / `push`。
 
 ## 七个 BootStrap Skill（路由摘要）
@@ -55,11 +64,11 @@
 
 ## 版本身份（v0.6.0）
 
-- 逻辑分层（不搬家）：[`PRODUCT_MAP.md`](PRODUCT_MAP.md)
+- 逻辑分层（不大搬家）：[`PRODUCT_MAP.md`](PRODUCT_MAP.md)（暂留仓根；拟归 `README/agent/`，见 Plan/34）
 - Python 包：`src/openmontage/`（`python -m openmontage.mcp.bootstrap` 不变；仓根 `openmontage/` 是加载器 shim）
 - 内核：`src/openmontage/lib/`（`from lib.…` 不变；仓根 `lib/` 是转发 shim）
 - 发布清单：[`distribution/manifests/release-manifest.json`](distribution/manifests/release-manifest.json)
-- **下一阶段 G6.1（本机 Goal，gitignore）：** 仓根精简 + **git 克隆 / Agent 协同** — `Agent-Docs/Goal/03-G6.1仓根精简与克隆优先交付-v1.0.md`；计划 `Agent-Docs/Plan/33-G6.1仓根精简与克隆优先交付-v1.0.md`。G4 pack 样品保留；**运行包装机/最小出片改远期**，不是当前主验收。
+- **G6.1：** 仓根精简 + 克隆/Agent — `Agent-Docs/Goal/03-G6.1…` · `Plan/33`；文档二分见 `Plan/34`
 - **本机状态文件：** 仓根 `.openmontage/install-state.json`（gitignore，**不提交、不写密钥**）
  - 字段：`verify_ready`、`repo_root`、`projects_dir`、`latest_project_id`、`existing_project_count`、`video_key_present`、`stock_key_present`（及非空变量名）
  - MCP：`read_install_state` / `scan_video_keys` / `snapshot_install_state` / `ensure_env_file`；`verify_ready` 通过后会写入

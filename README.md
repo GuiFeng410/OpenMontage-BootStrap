@@ -1,6 +1,16 @@
 # OpenMontage BootStrap
 
-Open-source **agentic video production**. Prerequisite: **OpenClaw already installed**. Clone this repo → facade MCP + Skills → free or paid produce paths.
+Open-source **agentic video production**. Prerequisite: **OpenClaw already installed**.
+
+## How to use (G6.1)
+
+**Primary path: `git clone` this repo + an Agent host** (Cursor / Claude / …). Register facade MCP + BootStrap Skills, then produce.
+
+- Human ops docs: [`README/00-INDEX.md`](README/00-INDEX.md)
+- Agent entry: [`AGENTS.md`](AGENTS.md) → full contract [`AGENT_GUIDE.md`](AGENT_GUIDE.md)
+- Downloadable runtime `pack` / empty-dir install: **sample / later** — not the current main deliverable
+
+Chinese landing: [`README_zh-CN.md`](README_zh-CN.md)
 
 ## Mirrors
 
@@ -20,12 +30,11 @@ Open-source **agentic video production**. Prerequisite: **OpenClaw already insta
 | [说明/03 字幕与配乐](README/说明/03-字幕与配乐.md) | Captions + BGM |
 | [配置/字段清单](README/配置/00-字段清单.md) | Templates + env names |
 
-Chinese landing: [`README_zh-CN.md`](README_zh-CN.md)
-
 ## Agent entry (repo root)
 
-- [`AGENT_GUIDE.md`](AGENT_GUIDE.md)  
-- [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md)  
+- [`AGENTS.md`](AGENTS.md) — short agent door  
+- [`AGENT_GUIDE.md`](AGENT_GUIDE.md) — full contract  
+- [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) — stays at root (host/dev context)
 
 ## Archived full upstream README
 
