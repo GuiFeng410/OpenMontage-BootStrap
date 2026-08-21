@@ -121,9 +121,10 @@ def test_snapshot_keeps_project_id_when_rescan(tmp_path, monkeypatch) -> None:
 def test_repo_env_example_excludes_oss_and_includes_aliases() -> None:
     from pathlib import Path
 
+    from openmontage.mcp.bootstrap.install_state import resolve_env_example_path
     from openmontage.mcp.bootstrap.tools import REPO_ROOT
 
-    text = (Path(REPO_ROOT) / ".env-example.md").read_text(encoding="utf-8")
+    text = resolve_env_example_path(Path(REPO_ROOT)).read_text(encoding="utf-8")
     names = video_channel_names_from_example(text)
     assert "AGNES_API_KEY" in names
     assert "AGNES_AI_API_KEY" in names

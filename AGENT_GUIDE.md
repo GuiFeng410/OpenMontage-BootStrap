@@ -2,7 +2,7 @@
 
 Start here. This is the complete operating guide and agent contract for **OpenMontage-BootStrap** (this fork) and the underlying OpenMontage pipeline system.
 
-For architecture, key files, and conventions see [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md).  
+For architecture, key files, and conventions see [`README/agent/PROJECT_CONTEXT.md`](README/agent/PROJECT_CONTEXT.md).  
 For day-to-day ops (install / free vs paid / captions) see [`Agent-ReadMe/00-INDEX.md`](Agent-ReadMe/00-INDEX.md) (local primary; shipped mirror: `README/00-INDEX.md`).
 
 ---

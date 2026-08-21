@@ -33,7 +33,7 @@
 | `Agent-Temp/` | `mats/` 素材 · `results/` 产物 · `other/` 暂存 | **默认不提交** |
 
 - 仓内 `README/` 为人读操作真源；`docs/` 为遗留快照。历史报告与演示已迁 `archive/`（G6.1）。
-- 仓根宿主文件（`CLAUDE.md` / `CURSOR.md` / `CODEX.md` / `COPILOT.md` / `PROJECT_CONTEXT.md` 等）**保留不搬**。
+- 仓根宿主 stub（`CLAUDE.md` / `CURSOR.md` / `CODEX.md` / `COPILOT.md`）**保留不搬**；架构正文在 `README/agent/PROJECT_CONTEXT.md`（仓根仅跳转 stub）。
 - 未获用户明确要求时，禁止对 Agent-\* 做 `add` / `commit` / `push`。
 
 ## 七个 BootStrap Skill（路由摘要）
@@ -64,7 +64,7 @@
 
 ## 版本身份（v0.6.0）
 
-- 逻辑分层（不大搬家）：[`PRODUCT_MAP.md`](PRODUCT_MAP.md)（暂留仓根；拟归 `README/agent/`，见 Plan/34）
+- 逻辑分层地图：[`README/agent/PRODUCT_MAP.md`](README/agent/PRODUCT_MAP.md)（仓根 `PRODUCT_MAP.md` 为跳转 stub）
 - Python 包：`src/openmontage/`（`python -m openmontage.mcp.bootstrap` 不变；仓根 `openmontage/` 是加载器 shim）
 - 内核：`src/openmontage/lib/`（`from lib.…` 不变；仓根 `lib/` 是转发 shim）
 - 发布清单：[`distribution/manifests/release-manifest.json`](distribution/manifests/release-manifest.json)

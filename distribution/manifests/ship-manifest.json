@@ -17,7 +17,6 @@
       "PROJECT_CONTEXT.md",
       "LICENSE",
       "README.md",
-      "README_zh-CN.md",
       "setup.py",
       "requirements.txt",
       "config.yaml",
@@ -34,12 +33,13 @@
       "tools",
       "skills",
       "runtimes/remotion",
-      "distribution/manifests"
+      "distribution/manifests",
+      "README"
     ]
   },
   "optional": {
     "files": ["requirements-gpu.txt"],
-    "dirs": ["ink-theater", "docs", "README"]
+    "dirs": ["ink-theater", "docs"]
   },
   "forbidden": [
     ".env",

@@ -15,6 +15,11 @@ STATE_RELATIVE = Path(".openmontage") / "install-state.json"
 STATE_VERSION = 1
 VIDEO_SECTION_MARK = "## 【二、视频生成专项服务】"
 STOCK_KEY_NAMES = ("PEXELS_API_KEY", "PIXABAY_API_KEY")
+# Preferred path after G6.1; root fallback for tests / old checkouts.
+ENV_EXAMPLE_REL_CANDIDATES = (
+    Path("README") / "human" / "配置" / ".env-example.md",
+    Path(".env-example.md"),
+)
 ENV_ASSIGN_RE = re.compile(r"^(?:export\s+)?([A-Z][A-Z0-9_]+)\s*=")
 KEYISH_RE = re.compile(r"(?:KEY|TOKEN|SECRET)$")
 EXCLUDE_NAME_MARKERS = ("OSS_", "ALIYUN_")
@@ -173,9 +178,19 @@ def _scan_named_keys(
     return from_file, from_proc, present, meta
 
 
+def resolve_env_example_path(repo_root: Path) -> Path:
+    """Locate Key 白话说明; prefer README/human/配置, else仓根兼容路径."""
+    root = Path(repo_root).resolve()
+    for rel in ENV_EXAMPLE_REL_CANDIDATES:
+        candidate = root / rel
+        if candidate.is_file():
+            return candidate
+    return root / ENV_EXAMPLE_REL_CANDIDATES[0]
+
+
 def scan_video_keys(*, repo_root: Path, environ: dict[str, str] | None = None) -> dict[str, Any]:
     root = Path(repo_root).resolve()
-    example_path = root / ".env-example.md"
+    example_path = resolve_env_example_path(root)
     example_text = example_path.read_text(encoding="utf-8") if example_path.is_file() else ""
     names = video_channel_names_from_example(example_text)
     from_file, from_proc, present, meta = _scan_named_keys(

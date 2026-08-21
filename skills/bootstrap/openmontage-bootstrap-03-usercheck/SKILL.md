@@ -94,7 +94,7 @@ metadata:
 **0. 开口前先读状态文件再扫 Key（强制）**  
 先 `read_install_state`。若 `verify_ready` 已为真：**禁止**再走 01 安装话术，**必须**继续给看板网址（用户也可在库页点「开始创建项目」）。若文件不存在：先看 `projects/` 或返回里的 `existing_project_count`——有项目就视为已下载使用过，禁止再 `clone_repo`，刷新快照后若 `verify_ready` 仍假则走 02。无文件且无项目才交接 01。
 
-然后调用 `scan_video_keys`（只读，**不返回 Key 值**），再 `snapshot_install_state`。以返回的 `video_key_present` 为准。可对照 `read_install_state`，仍以当场扫描为准。只认 `.env-example.md`「视频生成专项」里的 KEY/TOKEN/SECRET 变量名，检查仓根 `.env` 与当前 MCP 进程环境。空 Key 禁止付费 generate。
+然后调用 `scan_video_keys`（只读，**不返回 Key 值**），再 `snapshot_install_state`。以返回的 `video_key_present` 为准。可对照 `read_install_state`，仍以当场扫描为准。只认 `README/human/配置/.env-example.md`「视频生成专项」里的 KEY/TOKEN/SECRET 变量名，检查仓根 `.env` 与当前 MCP 进程环境。空 Key 禁止付费 generate。
 
 - **有可用视频 Key**（`video_key_present=true`）→ 第一次即可走电商宣传片（渠模仍须用户确认后才 generate）。
 - **无可用视频 Key** → 先告知「当前没有可用视频模型 Key」，再二选一：去填 Key（交接 `06-providers`），或这次走免费轻度（才读 `references/first-run-demo.md`）。
@@ -456,7 +456,7 @@ v2 仍遵守既有硬门：浏览器不调付费 API、聊天一次只问一个�
 **闸门：**
 
 - 已填至少一个 `PEXELS_API_KEY` / `PIXABAY_API_KEY` → 两行都可选。  
-- **未填 Stock Key** → 仍出示本表，但「Pixabay 和 Pexels」行标为**不可用**；用户只能选「自带图片和视频」。可脚注指引去 `.env-example.md` / `06-providers` 补 Key。  
+- **未填 Stock Key** → 仍出示本表，但「Pixabay 和 Pexels」行标为**不可用**；用户只能选「自带图片和视频」。可脚注指引去 `README/human/配置/.env-example.md` / `06-providers` 补 Key。  
 - 未写入真实 Key 前：**禁止**调用 Stock 下载。
 
 写入字段建议：`medium_source` = `stock` | `user_assets`；附文案提示原文。
@@ -473,7 +473,7 @@ v2 仍遵守既有硬门：浏览器不调付费 API、聊天一次只问一个�
 
 - 只列出已填 Key 且可出片的渠道/模型；无 Key 的标灰不可选。  
 - 固定顺序：Agnes → TokenHub·混元 → TokenHub·Pixverse。默认取清单里**第一个已填 Key** 的项（不再按「两家都有则必须 Agnes」单独分支，效果上 Agnes 仍排第一）。  
-- **无任何可用视频 Key** → **不**出示「假可用」表；提示：先补 Key（`06-providers` / `.env-example`），或**改档**到轻度/中度。禁止假装能烧重度。  
+- **无任何可用视频 Key** → **不**出示「假可用」表；提示：先补 Key（`06-providers` / `README/human/配置/.env-example.md`），或**改档**到轻度/中度。禁止假装能烧重度。  
 - 看板已锁定 `video_model` 时，聊天退路不得重出本表，除非用户明确要求改选。  
 - 能力说明只给一行、可折叠；片长由模型能力决定，超长自动拼接。不在本表让用户选手动秒数。OSS 不进本表，需要时在素材步再问。
 

@@ -163,7 +163,7 @@ def verify_ready(deep: bool = False) -> dict[str, Any]:
 
 @mcp.tool()
 def scan_video_keys() -> dict[str, Any]:
-    """Read-only scan of video-channel env names from .env-example.md, .env, and process env.
+    """Read-only scan of video-channel env names from README/human/配置/.env-example.md (or root fallback), .env, and process env.
 
     Returns names that are non-empty only. Never returns Key values.
     """

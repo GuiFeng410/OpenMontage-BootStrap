@@ -1,11 +1,12 @@
 # README/agent/
 
-机读长文与地图的预留目录（G6.1 / Plan 34）。
+机读地图与架构（G6.1 / Plan 34）。
 
-当前：
+| 文档 | 说明 |
+|------|------|
+| [`PRODUCT_MAP.md`](./PRODUCT_MAP.md) | 逻辑分层 / 目录阅读地图 |
+| [`PROJECT_CONTEXT.md`](./PROJECT_CONTEXT.md) | 架构、关键文件、约定 |
 
-- Agent 短门：仓根 [`AGENTS.md`](../../AGENTS.md)
-- 长合同：仓根 [`AGENT_GUIDE.md`](../../AGENT_GUIDE.md)
-- 逻辑地图：仓根 [`PRODUCT_MAP.md`](../../PRODUCT_MAP.md)（日后可迁入本目录）
+仓根同名文件仅为跳转 stub。Agent 短门 / 长合同仍在仓根：[`AGENTS.md`](../../AGENTS.md)、[`AGENT_GUIDE.md`](../../AGENT_GUIDE.md)。
 
 人读操作说明在 [`../human/`](../human/)。

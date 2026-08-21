@@ -4,7 +4,7 @@ description: >-
   BootStrap installer/updater: after user confirms each step, the agent may
   execute (clone/pull, path checks). Default: register 5 MCPs together
   (facade+tts+image+video+stock) and enable 6 Skills (incl. 03-usercheck);
-  Keys optional via .env-example.md. Closed-loop checklist before setup/produce.
+  Keys optional via README/human/配置/.env-example.md. Closed-loop checklist before setup/produce.
   Host-agnostic (any agent that can load Skills + MCP).
 metadata:
   os:
@@ -42,7 +42,7 @@ metadata:
 2. 拉仓优先 GitHub，失败再用 Gitee；**已有仓库走更新分支（U）**，禁止重复 clone 覆盖。  
 3. 安装/更新默认目标：**5 个 MCP 一并注册可启动** + **6 个 Skill 一并启用** + 闭环检查通过。  
 4. **付费 Key / Stock Key 安装时不必填。** 已注册即可；没 Key 则后续**不调用**对应能力（轻度零 Key 仍可出片）。  
-5. Key 引导：请用户先看 `<TARGET>/.env-example.md` 分类填写，再写入真实配置（仓库 `.env` 和/或各 MCP 的 `env`）。**中度**用 Stock 时再填 Pexels/Pixabay；**重度**出片前再填视频渠 Key；付费 TTS/生图按需。  
+5. Key 引导：请用户先看 `<TARGET>/README/human/配置/.env-example.md` 分类填写，再写入真实配置（仓库 `.env` 和/或各 MCP 的 `env`）。**中度**用 Stock 时再填 Pexels/Pixabay；**重度**出片前再填视频渠 Key；付费 TTS/生图按需。  
 6. 口述与代操作时用真实路径替换 `<TARGET>`、`<PROJECTS_DIR>`；MCP 模板优先从 `<TARGET>/README/human/配置/templates/` 复制。  
 7. 仓内 Skill 靠 extraDirs 三条（`skills/bootstrap` · `skills/providers` · `skills/production`）加载；**若 installer 使用了外置单独拷贝，更新后须再提醒同步。**
 
@@ -174,7 +174,7 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 ```
 
 也可用 MCP：`ensure_env_file(dry_run=false, confirm_execute=true)`。  
-填写 Key 对照 `<TARGET>\.env-example.md`，填完再重启 MCP。
+填写 Key 对照 `<TARGET>\README\human\配置\.env-example.md`，填完再重启 MCP。
 
 **验收口令：**「.env 已存在（可为空 Key）」
 
@@ -290,11 +290,11 @@ if (-not (Test-Path .env)) { Copy-Item .env.example .env }
 
 ### Key 引导（需要质量再填）
 
-1. 打开 `<TARGET>/.env-example.md`，按分类填写（含 Pexels/Pixabay、视频渠、付费 TTS/图等）。  
-2. 写入真实配置：若尚无 `.env`，先 `Copy-Item .env.example .env`（或 `ensure_env_file`），再按 `.env-example.md` 填写，并同步到对应 MCP 的 `env`。  
+1. 打开 `<TARGET>/README/human/配置/.env-example.md`，按分类填写（含 Pexels/Pixabay、视频渠、付费 TTS/图等）。  
+2. 写入真实配置：若尚无 `.env`，先 `Copy-Item .env.example .env`（或 `ensure_env_file`），再按 `README/human/配置/.env-example.md` 填写，并同步到对应 MCP 的 `env`。  
 3. 重启相关 MCP；中度 Stock / 重度视频 / 付费生成前再启用 E.3 执行 Skill。  
 4. **未填 Key：禁止调用** Stock 下载与付费 generate。
 
 操作索引：`<TARGET>/README/00-INDEX.md`  
 模板：`<TARGET>/README/human/配置/templates/`  
-Key 白话说明：`<TARGET>/.env-example.md`
+Key 白话说明：`<TARGET>/README/human/配置/.env-example.md`
