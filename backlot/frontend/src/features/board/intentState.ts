@@ -70,6 +70,34 @@ export function decisionRevision({
   );
 }
 
+export function decisionFingerprint(decision?: CommercialDecision | null) {
+  /** Stable subset only — full decision JSON churns on each poll and freezes the panel. */
+  const gap = decision?.gap_plan;
+  return {
+    title_zh: decision?.title_zh || "",
+    prompt_zh: decision?.prompt_zh || "",
+    options: (Array.isArray(decision?.options) ? decision!.options : []).map((item) =>
+      String(item.id ?? item.option_id ?? ""),
+    ),
+    gap: gap
+      ? {
+          enough: Boolean(gap.enough),
+          locked: Boolean(gap.locked),
+          image_key_present: Boolean(gap.image_key_present),
+          default_image_model: gap.default_image_model || "",
+          covered: (Array.isArray(gap.covered) ? gap.covered : []).map((item) =>
+            String(item.beat_id || ""),
+          ),
+          gaps: (Array.isArray(gap.gaps) ? gap.gaps : []).map((item) => String(item.beat_id || "")),
+          reuse_paths: Array.isArray(gap.reuse_paths) ? [...gap.reuse_paths].sort() : [],
+          image_models: (Array.isArray(gap.image_models) ? gap.image_models : []).map((item) =>
+            String(item.id || ""),
+          ),
+        }
+      : null,
+  };
+}
+
 export function revisionForDecision({
   projectId,
   stage,
@@ -79,12 +107,10 @@ export function revisionForDecision({
   stage: string;
   decision?: CommercialDecision | null;
 }) {
-  const { timestamp, ...payload } = decision || {};
   return decisionRevision({
     projectId,
     stage,
-    timestamp,
-    decision: payload,
+    decision: decisionFingerprint(decision),
   });
 }
 
@@ -184,17 +210,17 @@ export function saveDraft(storage: DraftStorage, draft: IntentDraft) {
   }
 }
 
-export function inspectStoredDraft(
+export function readStoredDraft(
   storage: DraftStorage,
-  { projectId, stage, revision }: { projectId: string; stage: string; revision: string },
-) {
+  { projectId, stage }: { projectId: string; stage: string },
+): IntentDraft | null {
   let raw: string | null;
   try {
     raw = storage.getItem(storageKey(projectId, stage));
   } catch {
-    return { status: "missing" as const, draft: null };
+    return null;
   }
-  if (raw === null) return { status: "missing" as const, draft: null };
+  if (raw === null) return null;
   try {
     const draft = JSON.parse(raw) as IntentDraft;
     if (
@@ -202,15 +228,41 @@ export function inspectStoredDraft(
       typeof draft !== "object" ||
       draft.version !== DRAFT_VERSION ||
       draft.project_id !== projectId ||
-      draft.stage !== stage ||
-      draft.revision !== revision
+      draft.stage !== stage
     ) {
-      return { status: "stale" as const, draft: null };
+      return null;
     }
-    return { status: "current" as const, draft };
+    return draft;
   } catch {
+    return null;
+  }
+}
+
+export function adoptDraftRevision(draft: IntentDraft, revision: string): IntentDraft {
+  if (draft.revision === revision) return draft;
+  return { ...draft, revision, updated_at: updatedAt() };
+}
+
+export function inspectStoredDraft(
+  storage: DraftStorage,
+  { projectId, stage, revision }: { projectId: string; stage: string; revision: string },
+) {
+  const draft = readStoredDraft(storage, { projectId, stage });
+  if (!draft) {
+    let raw: string | null = null;
+    try {
+      raw = storage.getItem(storageKey(projectId, stage));
+    } catch {
+      return { status: "missing" as const, draft: null };
+    }
+    if (raw === null) return { status: "missing" as const, draft: null };
     return { status: "corrupt" as const, draft: null };
   }
+  if (draft.revision !== revision) {
+    // Same stage card with a newer fingerprint — keep selections, retarget revision.
+    return { status: "adopted" as const, draft: adoptDraftRevision(draft, revision) };
+  }
+  return { status: "current" as const, draft };
 }
 
 export function clearDraft(storage: DraftStorage, { projectId, stage }: { projectId: string; stage: string }) {

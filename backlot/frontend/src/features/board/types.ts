@@ -182,6 +182,7 @@ export type CommercialState = {
     friendly_zh?: string;
     current_question?: string;
     runner_alive?: boolean;
+    retry_exhausted?: boolean;
   };
   runner_bind?: { bound?: boolean };
   board_stop?: {
@@ -286,6 +287,8 @@ export type GapPlan = {
   image_models?: { id: string; label_zh?: string; available?: boolean }[];
   image_key_present?: boolean;
   default_image_model?: string;
+  enough?: boolean;
+  locked?: boolean;
 };
 
 export type CommercialDecision = {

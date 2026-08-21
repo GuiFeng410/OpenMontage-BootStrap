@@ -989,7 +989,7 @@ def build_commercial_board(
         elif (assignment_matrix.get("assigned") or {}).get(beat_id):
             assignment_status = "user_asset"
         else:
-            plan_status = str(plan.get("assignment_status") or "")
+            plan_status = str(plan.get("assignment_status") or "").strip().lower()
             plan_ref = str(plan.get("ref_image") or plan.get("ref") or "")
             plan_ref_resolved = (
                 _resolve_commercial_image(project_dir, plan_ref) if plan_ref else None
@@ -1000,6 +1000,23 @@ def build_commercial_board(
                 and plan_ref_resolved
             ):
                 assignment_status = "user_asset"
+            elif plan_status in {"generating", "in_progress"}:
+                assignment_status = "generating"
+            elif plan_status in {"i2i_review_pending", "review_pending"}:
+                assignment_status = "review_pending"
+            elif plan_status in {"i2i_planned", "planned"} or (
+                plan_gap == "i2i" and plan_status in {"", "missing"}
+            ):
+                assignment_status = "i2i_planned"
+            elif plan_gap == "i2i" and plan_status in {
+                "assigned",
+                "approved",
+                "ready",
+                "generated",
+            }:
+                assignment_status = "approved" if plan_ref_resolved else "review_pending"
+            elif plan_status in {"failed", "rejected"}:
+                assignment_status = "failed"
             else:
                 assignment_status = "missing"
         reuse_status = (
@@ -1047,6 +1064,33 @@ def build_commercial_board(
                     "provider": item.get("provider"),
                     "model": item.get("model"),
                 })
+        if not candidate_previews and assignment_status in {
+            "review_pending",
+            "generating",
+            "i2i_planned",
+            "approved",
+            "failed",
+        }:
+            plan_candidates = plan.get("candidate_paths") or []
+            if not isinstance(plan_candidates, list):
+                plan_candidates = []
+            planned_out = str(plan.get("planned_output_path") or "").strip()
+            if planned_out and planned_out not in plan_candidates:
+                plan_candidates = [planned_out, *plan_candidates]
+            for raw_path in plan_candidates:
+                resolved = _resolve_commercial_image(project_dir, str(raw_path or ""))
+                if not resolved:
+                    continue
+                candidate_previews.append({
+                    "path": resolved,
+                    "file": Path(resolved).name,
+                    "label_zh": "生成图候选",
+                    "status": assignment_status,
+                    "review_status": plan.get("review_status"),
+                    "provider": plan.get("provider"),
+                    "model": plan.get("model"),
+                })
+                break
         assignment_reason = assignment_reasons[assignment_status]
         if (
             assignment_status == "user_asset"
@@ -1055,6 +1099,20 @@ def build_commercial_board(
         ):
             assignment_reason = (
                 "方案已锁定用户图；点「进入下一步」后写入账本并闭环。"
+            )
+        asset_plan_zh = first_present(row.get("asset_plan_zh"), plan.get("asset_plan_zh"))
+        if assignment_status == "review_pending":
+            asset_plan_zh = (
+                f"图生图（{first_present(plan.get('provider'), plan.get('model')) or 'AI'}）"
+                "，候选已生成，待审"
+            )
+        elif assignment_status == "generating":
+            asset_plan_zh = "图生图生成中"
+        elif assignment_status == "i2i_planned":
+            asset_plan_zh = first_present(
+                asset_plan_zh,
+                f"图生图（{first_present(plan.get('provider'), plan.get('model')) or 'AI'}），"
+                "本步只锁定计划、不生成",
             )
         beats.append({
             "beat": beat_id,
@@ -1078,7 +1136,7 @@ def build_commercial_board(
             "asset_missing_path": asset if asset and not resolved_asset else None,
             "asset_alt_path": resolved_asset_alt,
             "asset_alt_missing_path": asset_alt if asset_alt and not resolved_asset_alt else None,
-            "asset_plan_zh": first_present(row.get("asset_plan_zh"), plan.get("asset_plan_zh")),
+            "asset_plan_zh": asset_plan_zh,
             "copy_plan_zh": first_present(row.get("copy_plan_zh"), plan.get("copy_plan_zh")),
             "shot_plan_zh": first_present(row.get("shot_plan_zh"), plan.get("shot_plan_zh")),
             "gap_status": first_present(row.get("gap_status"), plan.get("gap_status")),

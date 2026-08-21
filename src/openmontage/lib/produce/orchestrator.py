@@ -576,6 +576,7 @@ def _run_paid_sample(
     dest.parent.mkdir(parents=True, exist_ok=True)
     still_abs = str((project / str(row["still"])).resolve())
     extras = _video_extras(provider, still_abs, float(row["span"]), aspect)
+    extras["project_id"] = project_id
     if model:
         extras["model"] = model
     friendly = f"正在生成试片。{wait_copy}"
@@ -710,6 +711,7 @@ def _run_paid_pipeline(
         dest.parent.mkdir(parents=True, exist_ok=True)
         still_abs = str((project / str(row["still"])).resolve())
         extras = _video_extras(provider, still_abs, float(row["span"]), aspect)
+        extras["project_id"] = project_id
         if model:
             extras["model"] = model
         friendly = f"第 {index}/{total} 段正在生成。{wait_copy}"

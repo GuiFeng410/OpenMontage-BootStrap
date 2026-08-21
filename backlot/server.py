@@ -359,6 +359,41 @@ def create_app() -> FastAPI:
         hub.publish(project_id)
         return JSONResponse(content=result)
 
+    @app.post("/api/project/{project_id}/retry-produce")
+    async def retry_produce_endpoint(project_id: str) -> JSONResponse:
+        """Clear retry-exhausted freeze and rebind runner; same channel/model only."""
+        from lib.produce.job_store import (
+            ProduceJobError,
+            clear_retry_exhausted_for_manual_retry,
+        )
+
+        _safe_project_dir(project_id)
+        try:
+            result = await asyncio.to_thread(
+                clear_retry_exhausted_for_manual_retry,
+                project_id,
+            )
+        except ProduceJobError as exc:
+            status = 400 if exc.code in {"retry_not_needed", "bad_project"} else 409
+            raise HTTPException(
+                status_code=status,
+                detail={"code": exc.code, "friendly_zh": exc.safe_message},
+            ) from exc
+        spawn = _start_runner_for_project(project_id)
+        if spawn.get("runner_started") is False and spawn.get("code") == "runner_busy":
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "code": spawn.get("code"),
+                    "friendly_zh": spawn.get("friendly_zh"),
+                    "active_project_id": spawn.get("active_project_id"),
+                },
+            )
+        result = {**result, **spawn}
+        _invalidate_summary(project_id)
+        hub.publish(project_id)
+        return JSONResponse(content=result)
+
     # Library create is a local write: it calls produce_init_project after
     # install-state.verify_ready, and never calls paid generate APIs.
     @app.post("/api/library/create-project")

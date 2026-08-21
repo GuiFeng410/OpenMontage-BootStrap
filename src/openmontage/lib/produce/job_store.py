@@ -274,3 +274,82 @@ def _fail_job(
         }
     _refresh_overlay(project_id, friendly_zh, projects_dir=projects_dir, paused=True)
     return {"action": "produce_failed", "status": STATUS_FAILED, "job": job}
+
+
+def clear_retry_exhausted_for_manual_retry(
+    project_id: str,
+    *,
+    projects_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Archive a frozen failed job so the same channel/model can be retried from the board.
+
+    Does not switch providers. Caller should rebind the unique runner afterward.
+    """
+    pid = str(project_id or "").strip()
+    if not pid:
+        raise ProduceJobError("缺少 project_id", code="bad_project")
+    project = _project_dir(pid, projects_dir)
+    job_path = production_run.produce_job_path(project)
+    raw = _read_json(job_path) if job_path.is_file() else {}
+    existing = read_job(pid, projects_dir=projects_dir) or {}
+    # Prefer raw disk fields: a corrupt/normalized paused projection must not
+    # block clearing an on-disk retry_exhausted freeze.
+    status = str(raw.get("status") or existing.get("status") or "")
+    exhausted = bool(raw.get("retry_exhausted") or existing.get("retry_exhausted"))
+    if status != STATUS_FAILED and not exhausted:
+        raise ProduceJobError(
+            "当前没有「重试耗尽」的失败任务，无需再重试。",
+            code="retry_not_needed",
+        )
+    if not isinstance(existing, dict) or not existing.get("provider"):
+        existing = {**existing, **raw}
+    history = project / "history"
+    history.mkdir(parents=True, exist_ok=True)
+    stamp = _now().replace(":", "").replace("+", "Z")
+    archived = ""
+    if job_path.is_file():
+        dest = history / f"produce_job_failed_{stamp}.json"
+        dest.write_text(job_path.read_text(encoding="utf-8"), encoding="utf-8")
+        job_path.unlink()
+        archived = str(dest.relative_to(project)).replace("\\", "/")
+    marker_path = project / "project.json"
+    marker = _read_json(marker_path)
+    profile = dict(marker.get("production_profile") or {})
+    profile["production_start_requested_at"] = _now()
+    profile["runner_start_pending"] = True
+    marker["production_profile"] = profile
+    wait_zh = (
+        "已清除上次冻结，将按同一渠道同一模型再试。"
+        "请留在本页；不会自动换渠道。"
+    )
+    marker["board_stop"] = {
+        "stage": str((marker.get("board_stop") or {}).get("stage") or "delivery_signoff"),
+        "needs_user_decision": False,
+        "producing_wait": True,
+        "paused": False,
+        "decision_title_zh": "制作中",
+        "decision_prompt_zh": wait_zh,
+        "decision_options": [],
+    }
+    _write_json(marker_path, marker)
+    from lib.project_export import write_runner_status
+
+    write_runner_status(
+        pid,
+        {
+            "phase": "producing",
+            "runner_alive": False,
+            "retry_exhausted": False,
+            "stop_runner": False,
+            "friendly_zh": wait_zh,
+        },
+    )
+    return {
+        "ok": True,
+        "project_id": pid,
+        "archived_job": archived,
+        "provider": existing.get("provider"),
+        "model": existing.get("model"),
+        "friendly_zh": wait_zh,
+        "spawn_runner": True,
+    }

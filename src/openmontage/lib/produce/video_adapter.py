@@ -166,8 +166,10 @@ def _board_tokenhub_generate(
         output_path=dest,
         duration=duration,
         aspect_ratio=str(extras.get("aspect_ratio") or "16:9"),
-        project_id=str(output_path).replace("\\", "/").split("/")[0],
-        user_authorized_upload=False,
+        project_id=str(extras.get("project_id") or "").strip()
+        or str(output_path).replace("\\", "/").split("/")[0],
+        # 看板「开始出片」即用户对本项目本地图临时上传的明确授权；禁止静默换渠。
+        user_authorized_upload=True,
     )
     return {
         "success": True,

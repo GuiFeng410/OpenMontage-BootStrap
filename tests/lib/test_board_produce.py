@@ -1078,3 +1078,62 @@ def test_generate_stops_after_five_failures() -> None:
     assert calls["n"] == 5
     assert caught.value.extra["retry_exhausted"] is True
     assert caught.value.extra["generate_attempts"] == 5
+
+
+def test_clear_retry_exhausted_archives_failed_job(tmp_path: Path, monkeypatch) -> None:
+    project_id = "retry-demo"
+    project = tmp_path / project_id
+    (project / "artifacts").mkdir(parents=True)
+    job = {
+        "version": "2.0",
+        "project_id": project_id,
+        "run_revision": "1",
+        "stage": "segment_build",
+        "kind": "segment",
+        "artifact_revision": "sha256:abc",
+        "authorization_revision": "auth1",
+        "attempt": 1,
+        "provider": "agnes",
+        "model": "agnes-video-v2.0",
+        "batch_id": "B01",
+        "beat_ids": ["B01"],
+        "expected_outputs": ["assets/video/seg_B01.mp4"],
+        "cost_snapshot": {},
+        "created_at": "2026-08-21T00:00:00+00:00",
+        "updated_at": "2026-08-21T00:00:00+00:00",
+        "status": "failed",
+        "retry_exhausted": True,
+        "friendly_zh": "已冻结",
+        "job_key": "job_placeholder",
+        "job_id": "jid",
+    }
+    # Minimal production_run so write_runner_status / marker edits stay local.
+    (project / "project.json").write_text(
+        json.dumps(
+            {
+                "project_id": project_id,
+                "production_profile": {"video_channel": "agnes", "video_model": "agnes-video-v2.0"},
+                "board_stop": {"stage": "delivery_signoff", "paused": True},
+            },
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(board_produce, "PROJECTS_DIR", tmp_path)
+    monkeypatch.setenv("OPENMONTAGE_PROJECTS_DIR", str(tmp_path))
+    # Bypass production_run validation by writing raw job then calling clearer
+    # after patching read_job/write paths via PROJECTS_DIR.
+    from lib.produce import job_store as js
+
+    monkeypatch.setattr(js, "_projects_root", lambda projects_dir=None: Path(projects_dir or tmp_path))
+    (project / "artifacts" / "produce_job.json").write_text(
+        json.dumps(job, ensure_ascii=False), encoding="utf-8"
+    )
+
+    result = js.clear_retry_exhausted_for_manual_retry(project_id, projects_dir=tmp_path)
+    assert result["ok"] is True
+    assert not (project / "artifacts" / "produce_job.json").is_file()
+    assert list((project / "history").glob("produce_job_failed_*.json"))
+    marker = json.loads((project / "project.json").read_text(encoding="utf-8"))
+    assert marker["board_stop"]["paused"] is False
+    assert marker["production_profile"]["runner_start_pending"] is True

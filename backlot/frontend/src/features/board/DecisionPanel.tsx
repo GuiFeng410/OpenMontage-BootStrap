@@ -39,6 +39,8 @@ const GAP_ACTIONS: DecisionOption[] = [
   { id: "skip", label_zh: "不补", description_zh: "本段不补图，改为概念表达。" },
 ];
 
+type DraftUpdater = IntentDraft | ((prev: IntentDraft) => IntentDraft);
+
 type Props = {
   projectId: string;
   projectTitle?: string;
@@ -63,17 +65,28 @@ export function DecisionPanel({
     [projectId, stage, decision],
   );
   const identity = { projectId, stage, revision };
-  const inspection = inspectStoredDraft(storage, identity);
-  const [draft, setDraft] = useState<IntentDraft>(
-    () => inspection.draft || createDraft(identity),
-  );
+  const [draft, setDraft] = useState<IntentDraft>(() => {
+    const next = inspectStoredDraft(storage, identity);
+    if (next.draft) {
+      if (next.status === "adopted") saveDraft(storage, next.draft);
+      return next.draft;
+    }
+    return createDraft(identity);
+  });
   useEffect(() => {
     const next = inspectStoredDraft(storage, identity);
-    setDraft(next.draft || createDraft(identity));
+    if (next.status === "corrupt") {
+      clearDraft(storage, { projectId, stage });
+      setDraft(createDraft(identity));
+      return;
+    }
+    if (next.draft) {
+      if (next.status === "adopted") saveDraft(storage, next.draft);
+      setDraft(next.draft);
+      return;
+    }
+    setDraft(createDraft(identity));
   }, [projectId, stage, revision, storage]);
-  const stale = ["stale", "corrupt"].includes(
-    inspectStoredDraft(storage, identity).status,
-  );
   const submissionKey = `${projectId}:${stage}`;
   const activeIntent = interactionIntents.find(
     (entry) =>
@@ -95,9 +108,14 @@ export function DecisionPanel({
   const gapPlan = stage === "brief_locked" ? decision.gap_plan : undefined;
   const ready = gapPlanReady(draft, gapPlan);
   const submitLabel = primarySubmitLabel(stage, draft, options);
-  const applyDraft = (next: IntentDraft) => {
-    setDraft(next);
-    saveDraft(storage, next);
+  const applyDraft = (updater: DraftUpdater) => {
+    setDraft((prev) => {
+      const next = typeof updater === "function" ? updater(prev) : updater;
+      // Keep revision aligned with the live card fingerprint.
+      const aligned = next.revision === revision ? next : { ...next, revision };
+      saveDraft(storage, aligned);
+      return aligned;
+    });
   };
   const [noteTick, setNoteTick] = useState(0);
   useEffect(() => {
@@ -107,11 +125,7 @@ export function DecisionPanel({
       if (!optionId || submissionLocked) return;
       const option = options.find((item) => String(item.id ?? item.option_id ?? "") === optionId);
       if (!option) return;
-      setDraft((current) => {
-        const next = selectOption(current, itemKey, option);
-        saveDraft(storage, next);
-        return next;
-      });
+      applyDraft((current) => selectOption(current, itemKey, option));
     };
     window.addEventListener(ASSET_NOTES_EVENT, onNotes);
     window.addEventListener(PREFER_OPTION_EVENT, onPrefer);
@@ -119,7 +133,7 @@ export function DecisionPanel({
       window.removeEventListener(ASSET_NOTES_EVENT, onNotes);
       window.removeEventListener(PREFER_OPTION_EVENT, onPrefer);
     };
-  }, [itemKey, options, submissionLocked, storage]);
+  }, [itemKey, options, submissionLocked, storage, revision]);
   const assetNoteBlock = composeAssetNotes(loadAssetNotes(storage, projectId, stage));
   void noteTick;
   const mergedNote = mergeIntentNote(draft.note, assetNoteBlock);
@@ -140,14 +154,13 @@ export function DecisionPanel({
         <GapPlanBlock
           gapPlan={gapPlan}
           draft={draft}
-          stale={stale}
           locked={submissionLocked}
           onChange={applyDraft}
         />
         <div className="commercial-decision-options">
           {options.map((option) => {
             const optionId = String(option.id ?? option.option_id ?? "");
-            const selected = !stale && draft.selections.some(
+            const selected = draft.selections.some(
               (selection) => selection.decision_key === itemKey && selection.option_id === optionId,
             );
             return (
@@ -157,10 +170,10 @@ export function DecisionPanel({
                 className={`commercial-decision-option${selected ? " selected" : ""}`}
                 data-option-id={optionId}
                 aria-pressed={selected}
-                disabled={stale || submissionLocked}
+                disabled={submissionLocked}
                 onClick={() => {
                   if (submissionLocked) return;
-                  applyDraft(selectOption(draft, itemKey, option));
+                  applyDraft((current) => selectOption(current, itemKey, option));
                 }}
               >
                 <span className="commercial-decision-option-head">
@@ -179,115 +192,103 @@ export function DecisionPanel({
         {decision.examples_zh ? (
           <div className="commercial-decision-example">{`回复示例：${decision.examples_zh}`}</div>
         ) : null}
-        {stale ? (
-          <div className="intent-basket-stale">
-            <b>待确认内容已更新</b>
-            <div>
-              {inspection.status === "corrupt"
-                ? "之前保存的选择无法读取，旧草稿未应用。"
-                : "之前保存的选择与当前版本不一致，旧草稿未应用。"}
-            </div>
-            <button type="button" className="commercial-intent-submit" disabled>
-              {submitLabel}
+        <div className="commercial-intent-basket">
+          <div className="commercial-intent-basket-head">
+            <b>本步确认</b>
+            <span>{projectTitle || projectId}</span>
+          </div>
+          <textarea
+            className="commercial-intent-summary"
+            readOnly
+            rows={8}
+            aria-label="待确认摘要（退路）"
+            value={summary}
+          />
+          <textarea
+            className="commercial-intent-note"
+            rows={3}
+            placeholder={`选填意见。不填也可以直接${submitLabel}。`}
+            aria-label="选填意见"
+            disabled={submissionLocked}
+            value={draft.note}
+            onChange={(event) => {
+              const note = event.currentTarget.value;
+              applyDraft((current) => setDraftNote(current, note));
+            }}
+          />
+          <div className="commercial-intent-actions">
+            <button
+              type="button"
+              className="commercial-intent-submit"
+              disabled={!ready || submissionLocked}
+              onClick={async (event) => {
+                const button = event.currentTarget;
+                if (!gapPlanReady(draft, gapPlan)) {
+                  setFeedback("请先选择本步处理方式；如有素材缺口，还要逐项选择补齐方式。");
+                  return;
+                }
+                button.disabled = true;
+                try {
+                  if (!runnerBound) {
+                    setFeedback(RUNNER_GONE_ZH);
+                    return;
+                  }
+                  const intent = await buildDecisionIntent({
+                    projectId,
+                    stage,
+                    draft: summaryDraft,
+                    summary,
+                  });
+                  const result = await submitDecisionIntent({ intent });
+                  if (result.ok) {
+                    const successCopy = submittedFeedback(stage, draft, options);
+                    locallySubmitted.set(submissionKey, successCopy);
+                    setFeedback(successCopy);
+                    button.textContent = "已提交，等待处理";
+                  } else {
+                    setFeedback("提交失败，请留在本页重试。");
+                  }
+                } catch {
+                  setFeedback("提交失败，请留在本页重试。");
+                } finally {
+                  button.disabled = locallySubmitted.has(submissionKey);
+                }
+              }}
+            >
+              {submissionLocked ? "已提交，等待处理" : ready ? submitLabel : "请先完成本步选择"}
+            </button>
+            <button
+              type="button"
+              className="commercial-intent-copy"
+              onClick={async () => {
+                try {
+                  if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
+                  await navigator.clipboard.writeText(summary);
+                  setFeedback("摘要已复制。请留在本页。");
+                } catch {
+                  setFeedback("复制失败，请手动选择上方摘要。");
+                }
+              }}
+            >
+              复制聊天摘要
             </button>
             <button
               type="button"
               onClick={() => {
                 clearDraft(storage, { projectId, stage });
                 setDraft(createDraft(identity));
+                setFeedback("已清空本步选择，请重新点选。");
               }}
             >
               清空并重选
             </button>
           </div>
-        ) : (
-          <div className="commercial-intent-basket">
-            <div className="commercial-intent-basket-head">
-              <b>本步确认</b>
-              <span>{projectTitle || projectId}</span>
-            </div>
-            <textarea
-              className="commercial-intent-summary"
-              readOnly
-              rows={8}
-              aria-label="待确认摘要（退路）"
-              value={summary}
-            />
-            <textarea
-              className="commercial-intent-note"
-              rows={3}
-              placeholder={`选填意见。不填也可以直接${submitLabel}。`}
-              aria-label="选填意见"
-              disabled={submissionLocked}
-              value={draft.note}
-              onChange={(event) => applyDraft(setDraftNote(draft, event.currentTarget.value))}
-            />
-            <div className="commercial-intent-actions">
-              <button
-                type="button"
-                className="commercial-intent-submit"
-                disabled={!ready || submissionLocked}
-                onClick={async (event) => {
-                  const button = event.currentTarget;
-                  if (!gapPlanReady(draft, gapPlan)) {
-                    setFeedback("请先选择本步处理方式；如有素材缺口，还要逐项选择补齐方式。");
-                    return;
-                  }
-                  button.disabled = true;
-                  try {
-                    if (!runnerBound) {
-                      setFeedback(RUNNER_GONE_ZH);
-                      return;
-                    }
-                    const intent = await buildDecisionIntent({
-                      projectId,
-                      stage,
-                      draft: summaryDraft,
-                      summary,
-                    });
-                    const result = await submitDecisionIntent({ intent });
-                    if (result.ok) {
-                      const successCopy = submittedFeedback(stage, draft, options);
-                      locallySubmitted.set(submissionKey, successCopy);
-                      setFeedback(successCopy);
-                      button.textContent = "已提交，等待处理";
-                    } else {
-                      setFeedback("提交失败，请留在本页重试。");
-                    }
-                  } catch {
-                    setFeedback("提交失败，请留在本页重试。");
-                  } finally {
-                    button.disabled = locallySubmitted.has(submissionKey);
-                  }
-                }}
-              >
-                {submissionLocked ? "已提交，等待处理" : ready ? submitLabel : "请先完成本步选择"}
-              </button>
-              <button
-                type="button"
-                className="commercial-intent-copy"
-                onClick={async () => {
-                  try {
-                    if (!navigator.clipboard?.writeText) throw new Error("clipboard unavailable");
-                    await navigator.clipboard.writeText(summary);
-                    setFeedback("摘要已复制。请留在本页。");
-                  } catch {
-                    setFeedback("复制失败，请手动选择上方摘要。");
-                  }
-                }}
-              >
-                复制聊天摘要
-              </button>
-            </div>
-            <div className="commercial-intent-feedback" role="status" aria-live="polite">
-              {feedback}
-            </div>
+          <div className="commercial-intent-feedback" role="status" aria-live="polite">
+            {feedback}
           </div>
-        )}
+        </div>
         <div className="commercial-chat-only">
-          {stale
-            ? "选择已过期，请先清空并重选。"
-            : `点「${submitLabel}」后请留在本页。意见可不填。`}
+          {`点「${submitLabel}」后请留在本页。意见可不填。选中项会出现绿色边。`}
         </div>
       </div>
     </div>
@@ -297,15 +298,13 @@ export function DecisionPanel({
 function GapPlanBlock({
   gapPlan,
   draft,
-  stale,
   locked,
   onChange,
 }: {
   gapPlan?: GapPlan;
   draft: IntentDraft;
-  stale: boolean;
   locked: boolean;
-  onChange: (draft: IntentDraft) => void;
+  onChange: (updater: DraftUpdater) => void;
 }) {
   if (!gapPlan || typeof gapPlan !== "object") return null;
   const covered = Array.isArray(gapPlan.covered) ? gapPlan.covered : [];
@@ -337,7 +336,6 @@ function GapPlanBlock({
             <ChoiceRow
               draft={draft}
               decisionKey={`gap::${beatId}`}
-              stale={stale}
               locked={locked}
               options={GAP_ACTIONS.map((action) => ({
                 ...action,
@@ -359,7 +357,6 @@ function GapPlanBlock({
                 <ChoiceRow
                   draft={draft}
                   decisionKey={`gap_reuse::${beatId}`}
-                  stale={stale}
                   locked={locked}
                   options={reusePaths.map((path) => ({ id: path, label_zh: path }))}
                   onChange={onChange}
@@ -375,7 +372,6 @@ function GapPlanBlock({
           <ChoiceRow
             draft={draft}
             decisionKey="image_model::project"
-            stale={stale}
             locked={locked}
             options={models.map((item) => ({
               id: item.id,
@@ -395,22 +391,20 @@ function ChoiceRow({
   draft,
   decisionKey,
   options,
-  stale,
   locked,
   onChange,
 }: {
   draft: IntentDraft;
   decisionKey: string;
   options: DecisionOption[];
-  stale: boolean;
   locked: boolean;
-  onChange: (draft: IntentDraft) => void;
+  onChange: (updater: DraftUpdater) => void;
 }) {
   return (
     <div className="gap-choice-row">
       {options.map((option) => {
         const optionId = String(option.id ?? option.option_id ?? "");
-        const selected = !stale && selectedOptionId(draft, decisionKey) === optionId;
+        const selected = selectedOptionId(draft, decisionKey) === optionId;
         return (
           <button
             key={optionId}
@@ -424,10 +418,10 @@ function ChoiceRow({
               .join(" ")}
             data-option-id={optionId}
             aria-pressed={selected}
-            disabled={stale || locked || option.disabled}
+            disabled={locked || option.disabled}
             onClick={() => {
-              if (stale || locked || option.disabled) return;
-              onChange(selectOption(draft, decisionKey, option));
+              if (locked || option.disabled) return;
+              onChange((current) => selectOption(current, decisionKey, option));
             }}
           >
             <span className="commercial-decision-option-head">

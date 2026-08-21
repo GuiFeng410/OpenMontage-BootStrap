@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { DecisionPanel } from "./DecisionPanel";
 import {
   RUNNER_GONE_ZH,
@@ -41,9 +42,14 @@ export function BoardNotices({ state, sseStatus, onRefresh }: Props) {
 
 function RunnerStatus({ state }: { state: BoardState }) {
   const status = state.commercial?.runner_status;
+  const [retryBusy, setRetryBusy] = useState(false);
+  const [retryCopy, setRetryCopy] = useState("");
   if (!status || typeof status !== "object") return null;
   const bound = runnerBoundToProject(state);
   const phase = status.phase || "idle";
+  const canRetry =
+    Boolean(status.retry_exhausted) ||
+    (phase === "paused" && /重试 5 次|已冻结|ConnectionReset|Connection aborted/i.test(status.friendly_zh || ""));
   return (
     <div className="notice commercial-runner-status">
       <div className="commercial-runner-phase">{bound ? RUNNER_LABEL[phase] || phase : "已冻结"}</div>
@@ -52,6 +58,45 @@ function RunnerStatus({ state }: { state: BoardState }) {
       {status.current_question ? (
         <div className="commercial-pause-question">{status.current_question}</div>
       ) : null}
+      {canRetry ? (
+        <div className="commercial-intent-actions" style={{ marginTop: "0.75rem" }}>
+          <button
+            type="button"
+            className="commercial-intent-submit"
+            disabled={retryBusy}
+            onClick={async () => {
+              setRetryBusy(true);
+              setRetryCopy("");
+              try {
+                const response = await fetch(
+                  `/api/project/${encodeURIComponent(state.project_id)}/retry-produce`,
+                  { method: "POST" },
+                );
+                const payload = (await response.json().catch(() => ({}))) as {
+                  friendly_zh?: string;
+                  detail?: { friendly_zh?: string };
+                };
+                if (!response.ok) {
+                  setRetryCopy(
+                    payload.detail?.friendly_zh ||
+                      payload.friendly_zh ||
+                      "再重试失败。请回库页继续这个项目。",
+                  );
+                  return;
+                }
+                setRetryCopy(payload.friendly_zh || "已再重试，请留在本页。");
+              } catch {
+                setRetryCopy("再重试失败。请回库页继续这个项目。");
+              } finally {
+                setRetryBusy(false);
+              }
+            }}
+          >
+            {retryBusy ? "正在再重试…" : "再重试同一模型"}
+          </button>
+        </div>
+      ) : null}
+      {retryCopy ? <div className="commercial-runner-copy">{retryCopy}</div> : null}
     </div>
   );
 }
