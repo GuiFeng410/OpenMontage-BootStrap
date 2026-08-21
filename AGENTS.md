@@ -1,4 +1,4 @@
-# OpenMontage BootStrap — Agent 入口
+﻿# OpenMontage BootStrap — Agent 入口
 
 **MANDATORY: 回复任意用户消息前，先读 [`AGENT_GUIDE.md`](AGENT_GUIDE.md)。**
 
@@ -24,7 +24,7 @@
 | `Agent-ReadMe/` | 中文人读说明（自 README + 新机导入三步副本） | **默认不提交** |
 | `Agent-Temp/` | `mats/` 素材 · `results/` 产物 · `other/` 暂存 | **默认不提交** |
 
-- **之后读写以 Agent-\* 为主**；仓内 `docs/`、`README/`、`reports/` 为遗留快照（可继续跟踪/发布），不删。
+- **之后读写以 Agent-\* 为主**；仓内 `docs/`、`README/` 为遗留人读快照。历史报告与样例目录已迁 `archive/`（G6.1），不进运行包 core。
 - 未获用户明确要求时，禁止对 Agent-\* 做 `add` / `commit` / `push`。
 
 ## 七个 BootStrap Skill（路由摘要）
@@ -59,9 +59,10 @@
 - Python 包：`src/openmontage/`（`python -m openmontage.mcp.bootstrap` 不变；仓根 `openmontage/` 是加载器 shim）
 - 内核：`src/openmontage/lib/`（`from lib.…` 不变；仓根 `lib/` 是转发 shim）
 - 发布清单：[`distribution/manifests/release-manifest.json`](distribution/manifests/release-manifest.json)
+- **下一阶段 G6.1（本机 Goal，gitignore）：** 仓根精简 + **git 克隆 / Agent 协同** — `Agent-Docs/Goal/03-G6.1仓根精简与克隆优先交付-v1.0.md`；计划 `Agent-Docs/Plan/33-G6.1仓根精简与克隆优先交付-v1.0.md`。G4 pack 样品保留；**运行包装机/最小出片改远期**，不是当前主验收。
 - **本机状态文件：** 仓根 `.openmontage/install-state.json`（gitignore，**不提交、不写密钥**）
-  - 字段：`verify_ready`、`repo_root`、`projects_dir`、`latest_project_id`、`existing_project_count`、`video_key_present`、`stock_key_present`（及非空变量名）
-  - MCP：`read_install_state` / `scan_video_keys` / `snapshot_install_state` / `ensure_env_file`；`verify_ready` 通过后会写入
-  - **不会随 git clone / pull 出现**（gitignore）。会在：02 `verify_ready`、库页成功创建、Backlot `serve` 启动时写入或刷新
-  - **开口 / 网页创建前先读此文件。** `verify_ready` 为真 → 禁止再走安装话术，必须给看板网址；文件不存在但 `projects/` 已有 `project.json` → 已用过本仓，禁止再 clone，仍按 `verify_ready` 决定是否走 02；文件不存在且无项目 → 01/02
-  - 看板：`python -m backlot open` 只开网页服务看库；创建或库页「继续这个项目」才起唯一 runner（消费面板 intent 与结束导出；不调付费 API）
+ - 字段：`verify_ready`、`repo_root`、`projects_dir`、`latest_project_id`、`existing_project_count`、`video_key_present`、`stock_key_present`（及非空变量名）
+ - MCP：`read_install_state` / `scan_video_keys` / `snapshot_install_state` / `ensure_env_file`；`verify_ready` 通过后会写入
+ - **不会随 git clone / pull 出现**（gitignore）。会在：02 `verify_ready`、库页成功创建、Backlot `serve` 启动时写入或刷新
+ - **开口 / 网页创建前先读此文件。** `verify_ready` 为真 → 禁止再走安装话术，必须给看板网址；文件不存在但 `projects/` 已有 `project.json` → 已用过本仓，禁止再 clone，仍按 `verify_ready` 决定是否走 02；文件不存在且无项目 → 01/02
+ - 看板：`python -m backlot open` 只开网页服务看库；创建或库页「继续这个项目」才起唯一 runner（消费面板 intent 与结束导出；用户授权后可调已锁付费 API；浏览器不调）
