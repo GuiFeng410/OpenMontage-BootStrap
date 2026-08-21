@@ -5,6 +5,8 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+# G6.1: setuptools metadata at repo root (covered by *.egg-info/; keep explicit)
+/openmontage.egg-info/
 
 # Local model downloads (e.g. Piper TTS voices, fetched at runtime — not source)
 *.onnx
